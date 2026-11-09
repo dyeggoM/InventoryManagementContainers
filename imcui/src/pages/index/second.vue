@@ -1,15 +1,21 @@
 <template>
   <q-page>
+    <q-linear-progress v-if="loading" indeterminate color="primary" />
+
     <q-splitter v-model="splitterModel" v-if="$q.screen.gt.sm">
       <template v-slot:before>
         <div class="q-pa-md">
+          <div v-if="!loading && tree.length <= 1" class="text-grey-7 q-mb-md">
+            No constants yet — use the "Add New" node to create the first one.
+          </div>
           <q-tree
+            :key="treeVersion"
             :nodes="tree"
             node-key="id"
             selected-color="primary"
             v-model:selected="selected"
             @update:selected="(target) => selectData(target)"
-            default-expand-all
+            v-model:expanded="expanded"
           >
             <template v-slot:default-header="prop">
               <div class="row items-center">
@@ -77,14 +83,18 @@
     </q-splitter>
 
     <div v-else class="q-pa-md">
+      <div v-if="!loading && tree.length <= 1" class="text-grey-7 q-mb-md">
+        No constants yet — use the "Add New" node to create the first one.
+      </div>
       <q-tree
+        :key="treeVersion"
         :nodes="tree"
         node-key="id"
         selected-color="primary"
         v-model:selected="selected"
         @update:selected="(target) => selectData(target)"
         class="text-h5 text-weight-light"
-        default-expand-all
+        v-model:expanded="expanded"
       >
         <template v-slot:default-header="prop">
           <div class="row items-center">
@@ -151,12 +161,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useQuasar } from 'quasar';
 import { constantsService } from '@services/constants';
-import { itemsService } from '@services/items';
 import type { Constants } from '@services/constants';
 import { useFeedback } from '../../composables/useFeedback';
 
 const feedback = useFeedback();
+const $q = useQuasar();
 
 const labelRule = (value: string) => (value && value.trim().length > 0) || 'Label is required';
 
@@ -186,99 +197,25 @@ const treeItem = ref<Constants>({
 
 const splitterModel = ref(30);
 const selected = ref(0);
-const tree = ref<Constants[]>([
-  {
-    label: 'Relax Hotel',
-    id: 0,
-    icon: '',
-    sortOrder: 0,
-    children: [
-      {
-        label: 'Food',
-        id: 1,
-        icon: 'restaurant_menu',
-        sortOrder: 0,
-        children: [
-          {
-            label: 'Test',
-            id: 2,
-            icon: '',
-            sortOrder: 0,
-            children: [],
-          },
-          {
-            label: 'Test 2',
-            id: 3,
-            icon: '',
-            sortOrder: 0,
-            children: [],
-          },
-        ],
-      },
-      {
-        label: 'Room service',
-        id: 4,
-        icon: 'room_service',
-        sortOrder: 0,
-        children: [],
-      },
-      {
-        label: 'Room view',
-        id: 5,
-        icon: 'photo',
-        sortOrder: 0,
-        children: [],
-      },
-    ],
-  },
-]);
-const panels = ref<Constants[]>([
-  {
-    label: 'Relax Hotel',
-    id: 0,
-    icon: '',
-    sortOrder: 0,
-    children: [],
-  },
-  {
-    label: 'Food',
-    id: 1,
-    icon: 'restaurant_menu',
-    sortOrder: 0,
-    children: [],
-  },
-  {
-    label: 'Test',
-    id: 2,
-    icon: '',
-    sortOrder: 0,
-    children: [],
-  },
-  {
-    label: 'Test 2',
-    id: 3,
-    icon: '',
-    sortOrder: 0,
-    children: [],
-  },
-  {
-    label: 'Room service',
-    id: 4,
-    icon: 'room_service',
-    sortOrder: 0,
-    children: [],
-  },
-  {
-    label: 'Room view',
-    id: 5,
-    icon: 'photo',
-    sortOrder: 0,
-    children: [],
-  },
-]);
+const tree = ref<Constants[]>([]);
+const panels = ref<Constants[]>([]);
 
 const loading = ref(false);
 const saving = ref(false);
+const treeVersion = ref(0);
+
+const expanded = ref<number[]>([]);
+
+function collectExpandable(nodes: { id: number; children?: unknown[] }[], acc: number[] = []): number[] {
+  for (const node of nodes) {
+    const kids = (node.children ?? []) as { id: number; children?: unknown[] }[];
+    if (kids.length > 0) {
+      acc.push(node.id);
+      collectExpandable(kids, acc);
+    }
+  }
+  return acc;
+}
 
 const showMobileDialog = ref(false);
 
@@ -286,10 +223,7 @@ async function loadData() {
   loading.value = true;
 
   try {
-    const [constants, items] = await Promise.all([
-      constantsService.getAll(),
-      itemsService.getAll(),
-    ]);
+    const constants = await constantsService.getAll();
 
     if (constants != null && constants != undefined) {
       if (constants.tree != null && constants.tree != undefined) {
@@ -301,11 +235,13 @@ async function loadData() {
         panels.value.unshift(createItem);
       }
     }
-    console.log(items);
   } catch (error) {
     feedback.error(error, 'Could not load the constants');
   } finally {
     loading.value = false;
+    expanded.value = collectExpandable(tree.value);
+    // Re-create the tree with data present so expansion and node state start consistent.
+    treeVersion.value += 1;
   }
 }
 
@@ -327,7 +263,7 @@ function selectData(target: number) {
     treeItem.value.parent = data.parent;
   }
 
-  if (window.innerWidth < 768) {
+  if ($q.screen.lt.md) {
     showMobileDialog.value = true;
   }
 }
@@ -419,7 +355,6 @@ function createSelectOptions(constants: Constants[], id: number) {
       displayLabel: `${'  '.repeat(item.depth)}${item.label}`,
       depth: item.depth,
     }));
-  console.log(mappedFlattened);
   return mappedFlattened;
 }
 </script>
