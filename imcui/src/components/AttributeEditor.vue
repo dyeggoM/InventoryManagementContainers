@@ -92,7 +92,7 @@
           placeholder="Pick an attribute"
           :model-value="row.label"
           :options="labelOptions(index)"
-          :display-value="pretty(row.label)"
+          :display-value="prettyLabel(row.label)"
           emit-value
           map-options
           @update:model-value="(value: string) => setLabel(index, value)"
@@ -144,6 +144,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { Attributes } from '@services/items';
+import { prettyLabel } from '../services/utilities';
 
 /**
  * The attribute rows of an item form. The labels and their allowed values come from the
@@ -190,16 +191,13 @@ function isCustom(row: Attributes): boolean {
 function labelOptions(index: number): { label: string; value: string; disable?: boolean }[] {
   const own = rows.value[index]?.label;
   return props.labels.map((label) => ({
-    label: pretty(label),
+    label: prettyLabel(label),
     value: label,
     disable: label !== own && rows.value.some((row) => row.label === label),
   }));
 }
 
-/** `BuyPrice` is a key in the data, but a person reads "Buy Price". */
-function pretty(label: string): string {
-  return label.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
-}
+
 
 function listFor(label: string): string[] {
   return props.lists[label] ?? [];
