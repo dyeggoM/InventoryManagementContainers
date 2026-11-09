@@ -2,39 +2,36 @@
   <q-layout view="lHh Lpr lFf">
     <q-header elevated>
       <q-toolbar>
-        <q-btn flat dense round icon="menu" aria-label="Menu" @click="toggleLeftDrawer" />
+        <q-btn
+          flat
+          dense
+          round
+          icon="menu"
+          aria-label="Toggle navigation"
+          @click="toggleLeftDrawer"
+        />
 
-        <q-toolbar-title> IMCUI </q-toolbar-title>
-
-        <div>Quasar v{{ $q.version }}</div>
+        <q-toolbar-title>IMC · {{ currentSection.label }}</q-toolbar-title>
       </q-toolbar>
     </q-header>
 
-    <q-drawer v-model="leftDrawerOpen" bordered>
-      <q-list>
-        <q-item-label header> Links </q-item-label>
-
-        <q-item>
-          <q-item-section>
-            <q-btn class="q-mt-md" color="primary" to="/" label="Go to Index Page" no-caps />
+    <q-drawer v-model="leftDrawerOpen" bordered show-if-above :width="220">
+      <q-list padding>
+        <q-item-label header>Inventory Management</q-item-label>
+        <q-item
+          v-for="section in sections"
+          :key="section.to"
+          clickable
+          v-ripple
+          :to="section.to"
+          active-class="text-primary"
+        >
+          <q-item-section avatar>
+            <q-icon :name="section.icon" />
           </q-item-section>
-        </q-item>
-        <q-item>
-          <q-item-section>
-            <q-btn class="q-mt-md" color="primary" to="/second" label="Go to Second Page" no-caps />
-          </q-item-section>
-        </q-item>
-        <q-item>
-          <q-item-section>
-            <q-btn class="q-mt-md" color="primary" to="/third" label="Go to Third Page" no-caps />
-          </q-item-section>
+          <q-item-section>{{ section.label }}</q-item-section>
         </q-item>
       </q-list>
-      <!-- <q-list>
-        <q-item-label header> Essential Links </q-item-label>
-
-        <EssentialLink v-for="link in linksList" :key="link.label" v-bind="link" />
-      </q-list> -->
     </q-drawer>
 
     <q-page-container>
@@ -44,19 +41,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-// import EssentialLink, { type EssentialLinkProps } from '@/components/EssentialLink.vue';
+import { computed, ref } from 'vue';
+import { useRoute } from 'vue-router';
 
-// const linksList: EssentialLinkProps[] = [
-//   {
-//     label: 'Second',
-//     caption: 'second page',
-//     icon: 'school',
-//     link: '',
-//   },
-// ];
+interface Section {
+  to: string;
+  label: string;
+  icon: string;
+}
+
+const sections: Section[] = [
+  { to: '/inventory', label: 'Inventory', icon: 'inventory_2' },
+  { to: '/configuration', label: 'Configuration', icon: 'tune' },
+];
+
+const fallback: Section = { to: '/inventory', label: 'Inventory', icon: 'inventory_2' };
 
 const leftDrawerOpen = ref(false);
+const route = useRoute();
+const currentSection = computed(
+  () => sections.find((section) => route.path.startsWith(section.to)) ?? fallback,
+);
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value;

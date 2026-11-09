@@ -1,18 +1,13 @@
 <template>
   <q-page class="flex flex-center">
-    <div class="column items-center">
-      <img
-        alt="Quasar logo"
-        src="~@/assets/quasar-logo-vertical.svg"
-        style="width: 200px; height: 200px"
-      />
-
-      <q-btn class="q-mt-md" color="primary" to="/second" label="Go to Second Page" no-caps />
-      <q-btn class="q-mt-md" color="primary" to="/third" label="Go to Third Page" no-caps />
-    </div>
+    <q-spinner color="primary" size="2em" />
   </q-page>
 </template>
 
 <script setup lang="ts">
-//
+import { useRouter } from 'vue-router';
+
+// The landing route only forwards to the inventory; there is nothing to show at "/".
+const router = useRouter();
+void router.replace('/inventory');
 </script>

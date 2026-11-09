@@ -37,8 +37,8 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       Record<never, never>,
       | '//(index)'
-      | '//second'
-      | '//third'
+      | '//configuration'
+      | '//inventory'
     >,
     '//(index)': RouteRecordInfo<
       '//(index)',
@@ -47,16 +47,16 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
-    '//second': RouteRecordInfo<
-      '//second',
-      '/second',
+    '//configuration': RouteRecordInfo<
+      '//configuration',
+      '/configuration',
       Record<never, never>,
       Record<never, never>,
       | never
     >,
-    '//third': RouteRecordInfo<
-      '//third',
-      '/third',
+    '//inventory': RouteRecordInfo<
+      '//inventory',
+      '/inventory',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -85,8 +85,8 @@ declare module 'vue-router/auto-routes' {
       routes:
         | '/'
         | '//(index)'
-        | '//second'
-        | '//third'
+        | '//configuration'
+        | '//inventory'
       views:
         | 'default'
       pathParamNames:
@@ -100,17 +100,17 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
-    'src/pages/index/second.vue': {
+    'src/pages/index/configuration.vue': {
       routes:
-        | '//second'
+        | '//configuration'
       views:
         | never
       pathParamNames:
         | never
     }
-    'src/pages/index/third.vue': {
+    'src/pages/index/inventory.vue': {
       routes:
-        | '//third'
+        | '//inventory'
       views:
         | never
       pathParamNames:
