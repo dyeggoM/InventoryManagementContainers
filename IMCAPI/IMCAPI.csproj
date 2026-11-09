@@ -28,4 +28,9 @@
     <Folder Include="Migrations\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The seed script is read at startup to build a fresh database. -->
+    <Content Include="DB\Seed\seed.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
