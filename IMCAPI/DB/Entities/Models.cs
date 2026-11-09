@@ -17,6 +17,9 @@ namespace IMCAPI.DB.Entities
 
     public class Item : Base
     {
+        /// <summary>Shown in the tree, so an empty one is refused by model validation.</summary>
+        [Required(AllowEmptyStrings = false, ErrorMessage = "A record needs a name")]
+        [MaxLength(1000)]
         public string Label{ get; set; }
         public string Icon { get; set; }
         public int? ParentId { get; set; }

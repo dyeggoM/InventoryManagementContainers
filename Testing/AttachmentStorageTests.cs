@@ -1,6 +1,7 @@
 using IMCAPI.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Configuration;
 using SkiaSharp;
 
 namespace Testing
@@ -82,7 +83,7 @@ namespace Testing
         public async Task SavingWritesTheOriginalAndDeleteRemovesIt()
         {
             using var environment = new TempEnvironment();
-            var storage = new AttachmentStorage(environment);
+            var storage = new AttachmentStorage(environment, new ConfigurationBuilder().Build());
 
             var stored = await storage.SaveAsync(7, "Snare top.png", Photo(64, 48));
 
@@ -104,7 +105,7 @@ namespace Testing
         public async Task UploadIsMovedToDiskAndLeavesOnlyThePreviewInTheRow()
         {
             using var environment = new TempEnvironment();
-            var storage = new AttachmentStorage(environment);
+            var storage = new AttachmentStorage(environment, new ConfigurationBuilder().Build());
             var attachment = new IMCAPI.DB.Entities.Attachment
             {
                 ItemId = 3,
@@ -126,7 +127,7 @@ namespace Testing
         public async Task AnInvalidPayloadIsRejectedWithoutWritingAnything()
         {
             using var environment = new TempEnvironment();
-            var storage = new AttachmentStorage(environment);
+            var storage = new AttachmentStorage(environment, new ConfigurationBuilder().Build());
             var attachment = new IMCAPI.DB.Entities.Attachment { ItemId = 1, UploadBase64 = "%%%not-base64%%%" };
 
             var error = await storage.ApplyUploadAsync(attachment);

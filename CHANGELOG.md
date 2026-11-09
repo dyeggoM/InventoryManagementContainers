@@ -6,6 +6,26 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/tests` (stacked on `feat/pwa`)
+
+The suite stops lying, and grows teeth.
+
+- **The two failing tests were a real bug.** `BaseRepository.GetById` used `AsNoTracking`, so EF's
+  relationship fix-up never filled a record's children — the list endpoint got them only because it
+  loads the whole table. `GetById` now tracks and loads the entity's collections; all six cases of
+  `GetById_ReturnsChildEntities` pass, and `GET /api/item/{id}` returns a record with its children.
+- **API integration tests** (`Testing/ApiTests.cs`, `WebApplicationFactory`): a throwaway SQLite
+  database and media folder per run, migrations and seeding included. Nine tests over the real HTTP
+  surface — tree and panels, create/read/update/delete, children on the detail endpoint, attachment
+  upload → served bytes compared by SHA-256 → delete removes row and file, `attachmentCount` on the
+  tree, the seeded catalogue's data types, and a record without a name being refused (which needed
+  `[Required]` on `Item.Label`).
+- **UI unit tests** (Vitest + jsdom, `npm test`): the tree editor's state machine (dirty tracking,
+  child and duplicate forms, parent options, validation, confirmed delete) and the attribute editor's
+  typed rows (money keypad, prose textarea, date picker, text kept verbatim, custom keys, filter).
+- `AttachmentStorage` takes an optional `Media:Root` so tests (and a deployment) can keep files out
+  of the project folder.
+
 ## Pending — `feat/pwa` (stacked on `feat/search-values`)
 
 Installable on a phone's home screen.

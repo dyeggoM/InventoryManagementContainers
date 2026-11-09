@@ -103,7 +103,18 @@ namespace IMCAPI.DB.Repositories
         /// <returns></returns>
         public virtual async Task<T?> GetById(int id)
         {
-            var result = await _entities.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+            // Tracked, not AsNoTracking: EF's relationship fix-up is what fills a record's children
+            // when the whole table is loaded, and a single row gets none of it. Loading the
+            // collection explicitly keeps GetById consistent with GetAll.
+            var result = await _entities.FirstOrDefaultAsync(x => x.Id == id);
+            if (result is null) return null;
+
+            var entry = _context.Entry(result);
+            foreach (var collection in entry.Collections)
+            {
+                await collection.LoadAsync();
+            }
+
             return result;
         }
         /// <summary>
