@@ -11,14 +11,35 @@ export class ApiError extends Error {
     public status: number,
     public statusText: string,
     public data?: unknown,
+    message?: string,
   ) {
-    super(`API Error ${status}: ${statusText}`);
+    super(message ?? `API Error ${status}: ${statusText}`);
     this.name = 'ApiError';
   }
 }
 
+/** Pulls the human-readable part out of an ASP.NET problem-details style payload. */
+function serverMessage(data: unknown): string | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const record = data as Record<string, unknown>;
+  for (const key of ['detail', 'message', 'title', 'error']) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (Array.isArray(value) && value.length) return value.map(String).join('; ');
+  }
+  return undefined;
+}
+
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -30,16 +51,20 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       ...options.headers,
     },
   });
+  } catch {
+    // fetch only rejects on network/CORS failures, which are otherwise invisible in the UI.
+    throw new ApiError(0, 'Network error', undefined, `Cannot reach the API at ${API_BASE_URL}`);
+  }
 
   if (!response.ok) {
     let data: unknown;
     try {
       data = await response.json();
     } catch {
-      data = response;
+      data = undefined;
     }
 
-    throw new ApiError(response.status, response.statusText, data);
+    throw new ApiError(response.status, response.statusText, data, serverMessage(data));
   }
 
   if (response.status === 204) {

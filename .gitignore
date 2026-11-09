@@ -32,6 +32,8 @@ Testing/TestResults/
 
 # Logs and test results
 *.log
+*.db-shm
+*.db-wal
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
 coverage/

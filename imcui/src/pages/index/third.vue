@@ -343,6 +343,9 @@ import { fileToBase64 } from '@services/utilities';
 import type { Item, Attributes } from '@services/items';
 import type { Attachment } from '@services/attachment';
 import type { Constants } from '@services/constants';
+import { useFeedback } from '../../composables/useFeedback';
+
+const feedback = useFeedback();
 
 const createItem = {
   id: 0,
@@ -466,7 +469,7 @@ async function loadData() {
     }
     console.log(constants);
   } catch (error) {
-    console.error(error);
+    feedback.error(error, 'Could not load the items');
   } finally {
     loading.value = false;
   }
@@ -492,7 +495,7 @@ async function loadAttachments(id: number) {
       attachments.value = [];
     }
   } catch (error) {
-    console.error(error);
+    feedback.error(error, 'Could not load the attachments');
   } finally {
     loading.value = false;
   }

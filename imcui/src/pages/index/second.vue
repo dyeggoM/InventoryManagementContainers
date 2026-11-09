@@ -138,6 +138,9 @@ import { ref, onMounted } from 'vue';
 import { constantsService } from '@services/constants';
 import { itemsService } from '@services/items';
 import type { Constants } from '@services/constants';
+import { useFeedback } from '../../composables/useFeedback';
+
+const feedback = useFeedback();
 
 const createItem = {
   id: 0,
@@ -281,7 +284,7 @@ async function loadData() {
     }
     console.log(items);
   } catch (error) {
-    console.error(error);
+    feedback.error(error, 'Could not load the constants');
   } finally {
     loading.value = false;
   }
