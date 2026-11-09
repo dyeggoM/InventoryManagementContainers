@@ -132,8 +132,8 @@ const {
         itemId: row.itemId,
         type: row.type ?? null,
         fileName: row.fileName ?? null,
-        filePath: row.filePath ?? null,
-        fileBase64: row.fileBase64 ?? null,
+        // The API writes these bytes to disk and returns a compressed preview.
+        uploadBase64: row.uploadBase64 ?? null,
         attributes: row.attributes ?? null,
       }));
   },
@@ -203,8 +203,7 @@ function addAttachment() {
     itemId: treeItem.value.id,
     type: null,
     fileName: null,
-    filePath: null,
-    fileBase64: null,
+    uploadBase64: null,
     attributes: null,
   });
 }

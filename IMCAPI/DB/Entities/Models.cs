@@ -40,8 +40,16 @@ namespace IMCAPI.DB.Entities
         public int ItemId { get; set; }
         public string? Type { get; set; }
         public string? FileName { get; set; }
+        /// <summary>Path of the original file on disk, relative to the content root.</summary>
         public string? FilePath { get; set; }
-        public string? FileBase64 { get; set; }
+
+        /// <summary>Small compressed preview as a data URL; the original lives on disk.</summary>
+        public string? ThumbnailBase64 { get; set; }
+
+        /// <summary>The uploaded original as a data URL. Input only: it is written to disk and
+        /// replaced by <see cref="FilePath"/> plus <see cref="ThumbnailBase64"/>.</summary>
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public string? UploadBase64 { get; set; }
         public string? Attributes { get; set; }
 
         public Item? Item{ get; set; }

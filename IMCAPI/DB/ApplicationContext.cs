@@ -86,7 +86,7 @@ namespace IMCAPI.DB
                 entity.Property(e => e.FilePath)
                       .HasMaxLength(2000);
 
-                entity.Property(e => e.FileBase64);
+                entity.Property(e => e.ThumbnailBase64);
                 //                      .HasColumnType("varbinary(max)");
 
                 entity.Property(e => e.Attributes);

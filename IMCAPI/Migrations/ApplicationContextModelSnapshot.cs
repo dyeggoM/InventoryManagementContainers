@@ -26,9 +26,6 @@ namespace IMCAPI.Migrations
                     b.Property<string>("Attributes")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("FileBase64")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -46,6 +43,9 @@ namespace IMCAPI.Migrations
 
                     b.Property<int?>("ItemId1")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ThumbnailBase64")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Type")
                         .IsRequired()

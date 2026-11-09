@@ -60,7 +60,7 @@ namespace IMCAPI.DB.Entities
         public string? Type { get; set; }
         public string? FileName { get; set; }
         public string? FilePath { get; set; }
-        public string? FileBase64 { get; set; }
+        public string? ThumbnailBase64 { get; set; }
         public string? Attributes { get; set; }
         public AttachmentDTO()
         {
@@ -72,7 +72,7 @@ namespace IMCAPI.DB.Entities
             Type = data.Type;
             FileName = data.FileName;
             FilePath = data.FilePath;
-            FileBase64 = data.FileBase64;
+            ThumbnailBase64 = data.ThumbnailBase64;
             Attributes = data.Attributes;
         }
     }
