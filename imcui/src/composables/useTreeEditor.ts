@@ -42,6 +42,8 @@ export interface TreeEditorOptions<T extends TreeEntry> {
   onReset?: () => void;
   /** Runs before a save, for payload shaping the service cannot know about. */
   beforeSave?: (entry: T) => void;
+  /** Returns a message to stop the save and show it, or null when the form is valid. */
+  validate?: (entry: T) => string | null;
 }
 
 /**
@@ -119,6 +121,11 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
 
   async function sendTreeItem(): Promise<boolean> {
     const id = treeItem.value.id;
+    const problem = options.validate?.(treeItem.value) ?? null;
+    if (problem) {
+      feedback.error(problem);
+      return false;
+    }
     saving.value = true;
     try {
       options.beforeSave?.(treeItem.value);

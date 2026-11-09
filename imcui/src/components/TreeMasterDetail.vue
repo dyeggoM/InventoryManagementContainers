@@ -13,7 +13,7 @@
             :nodes="tree"
             node-key="id"
             selected-color="primary"
-            v-model:selected="selected"
+            :selected="selected"
             v-model:expanded="expanded"
             @update:selected="onSelect"
           >
@@ -70,7 +70,7 @@
         node-key="id"
         selected-color="primary"
         class="text-h5 text-weight-light"
-        v-model:selected="selected"
+        :selected="selected"
         v-model:expanded="expanded"
         @update:selected="onSelect"
       >
@@ -144,7 +144,11 @@ const expanded = defineModel<number[]>('expanded', { required: true });
 const splitter = defineModel<number>('splitter', { default: 40 });
 const dialog = defineModel<boolean>('dialog', { default: false });
 
+// q-tree emits null when the selection is cleared (clicking the selected node again). Turning
+// that into a null model hides every tab panel, so the last selection is kept instead.
 function onSelect(id: number | null) {
-  if (typeof id === 'number') emit('select', id);
+  if (typeof id !== 'number') return;
+  selected.value = id;
+  emit('select', id);
 }
 </script>
