@@ -25,115 +25,35 @@
       emit-value
     />
 
-    <q-btn label="Add Attribute" type="button" color="secondary" @click="addAttribute" />
-    <div
-      class="row q-gutter-sm"
-      v-for="(attribute, index) in attributes"
-      :key="`attribute-${index}`"
-    >
-      <q-input
-        class="col-5"
-        label="label"
-        v-model="attribute.label"
-        :rules="[validateAttributeValue]"
-      />
+    <attribute-editor v-model="attributes" :labels="attributeLabels" :lists="attributeLists" />
 
-      <q-input
-        v-if="
-          !checkAttributeHasList(attribute.label) &&
-          attribute.label != 'Description' &&
-          attribute.label != 'Notes'
-        "
-        class="col-5"
-        label="value"
-        v-model="attribute.value"
-        :rules="[validateAttributeValue]"
-      />
-      <q-input
-        v-else-if="
-          !checkAttributeHasList(attribute.label) &&
-          (attribute.label == 'Description' || attribute.label == 'Notes')
-        "
-        class="col-5"
-        label="value"
-        v-model="attribute.value"
-        type="textarea"
-        :rules="[validateAttributeValue]"
-      />
-      <q-select
-        v-else-if="checkAttributeHasList(attribute.label)"
-        label="value"
-        class="col-5"
-        v-model="attribute.value"
-        :options="getAttributeList(attribute.label)"
-      />
-      <q-btn
-        label="-"
-        type="button"
-        color="negative"
-        class="col-1"
-        @click="deleteAttribute(index)"
-      />
-    </div>
-
-    <q-btn
-      label="Add Attachment"
-      type="button"
-      color="secondary"
-      @click="addAttachment(treeItem.id)"
+    <attachment-editor
+      v-model="attachments"
+      :types="attachmentTypes"
+      @add="addAttachment"
+      @remove="removeAttachment"
     />
-    <div v-for="(attachmentData, index) in attachments" :key="attachmentData.id">
-      <div>
-        <q-btn
-          :label="'Delete Attachment' + (attachmentData.id > 0 ? ` ${attachmentData.id}` : '')"
-          type="button"
-          color="negative"
-          @click="deleteAttachment(index)"
-        /><br />
-        <div v-if="attachmentData.id == 0">
-          <q-file
-            v-model="file"
-            label="Select a file"
-            @update:model-value="(selected) => onFileSelected(selected, index)"
-          >
-            <template v-slot:prepend>
-              <q-icon name="attach_file" />
-            </template>
-          </q-file>
-          <q-select label="Type" v-model="attachmentData.type" :options="attachmentTypes" />
-        </div>
-        <br />
-        <span>Id: {{ attachmentData.id }}</span
-        ><br />
-        <span>Type: {{ attachmentData.type }}</span
-        ><br />
-        <div v-if="attachmentData.type == 'Photo' && attachmentData.fileBase64 != null">
-          <q-img :src="attachmentData.fileBase64" height="75px" fit="contain" />
-        </div>
-      </div>
-    </div>
   </tree-master-detail>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import TreeMasterDetail from '../../components/TreeMasterDetail.vue';
+import AttributeEditor from '../../components/AttributeEditor.vue';
+import AttachmentEditor, { type AttachmentRow } from '../../components/AttachmentEditor.vue';
 import { useTreeEditor } from '../../composables/useTreeEditor';
 import { useFeedback } from '../../composables/useFeedback';
 import { itemsService, type Item, type Attributes } from '@services/items';
-import { attachmentsService, type Attachment } from '@services/attachment';
-import { constantsService, type Constants } from '@services/constants';
-import { fileToBase64 } from '@services/utilities';
+import { attachmentsService } from '@services/attachment';
+import { constantsService } from '@services/constants';
 
 const feedback = useFeedback();
 
 const attributes = ref<Attributes[]>([]);
-const attachments = ref<Attachment[]>([]);
-const attachmentTypes = ref<string[]>([]);
 const attributeLabels = ref<string[]>([]);
-const constantsData = ref<Constants[]>([]);
-const fileBase64 = ref('');
-const file = ref<File>();
+const attributeLists = ref<Record<string, string[]>>({});
+const attachmentTypes = ref<string[]>([]);
+const attachments = ref<AttachmentRow[]>([]);
 
 const blank = (): Item => ({
   id: 0,
@@ -144,16 +64,6 @@ const blank = (): Item => ({
   attributes: '{}',
   attachments: [],
   parent: undefined,
-});
-
-const newAttachment = (id: number): Attachment => ({
-  id: 0,
-  itemId: id,
-  type: null,
-  fileName: null,
-  filePath: null,
-  fileBase64: null,
-  attributes: null,
 });
 
 function blankAttributes(): Attributes[] {
@@ -204,12 +114,27 @@ const {
   onReset: () => {
     attributes.value = blankAttributes();
     attachments.value = [];
-    fileBase64.value = '';
-    file.value = undefined;
+  },
+  validate: () => {
+    for (const attachment of attachments.value.filter((row) => row.id === 0)) {
+      if (!attachment.fileName) return 'Every new attachment needs a file';
+      if (!attachment.type) return 'Every new attachment needs a type';
+    }
+    return null;
   },
   beforeSave: (entry) => {
     // Only attachments created in this form are sent; existing ones live in their own table.
-    entry.attachments = attachments.value.filter((attachment) => attachment.id == 0);
+    entry.attachments = attachments.value
+      .filter((row) => row.id === 0)
+      .map((row) => ({
+        id: 0,
+        itemId: row.itemId,
+        type: row.type ?? null,
+        fileName: row.fileName ?? null,
+        filePath: row.filePath ?? null,
+        fileBase64: row.fileBase64 ?? null,
+        attributes: row.attributes ?? null,
+      }));
   },
 });
 
@@ -220,9 +145,25 @@ async function loadConstants() {
       constantsService.getByGroup('Attribute'),
       constantsService.getAll(),
     ]);
+
     attachmentTypes.value = (attachmentTypeRows ?? []).map((row) => row.label);
-    attributeLabels.value = (attributeRows ?? []).map((row) => row.label);
-    constantsData.value = all?.panels ?? [];
+    attributeLabels.value = (attributeRows ?? [])
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((row) => row.label);
+
+    // A label with children in the constants tree is a choice list; anything else is free text.
+    const lists: Record<string, string[]> = {};
+    for (const constant of all?.panels ?? []) {
+      if (!constant.group || constant.parentId == null) continue;
+      const bucket = lists[constant.group] ?? [];
+      bucket.push(constant.label);
+      lists[constant.group] = bucket;
+    }
+    for (const group of Object.keys(lists)) {
+      lists[group] = (lists[group] ?? []).sort((a, b) => a.localeCompare(b));
+    }
+    attributeLists.value = lists;
     attributes.value = blankAttributes();
   } catch (error) {
     feedback.error(error, 'Could not load the constants');
@@ -237,8 +178,7 @@ onMounted(async () => {
 
 async function loadAttachments(id: number) {
   try {
-    const rows = await attachmentsService.getAllByItemId(id);
-    attachments.value = rows ?? [];
+    attachments.value = (await attachmentsService.getAllByItemId(id)) ?? [];
   } catch (error) {
     feedback.error(error, 'Could not load the attachments');
   }
@@ -256,55 +196,35 @@ function parseAttributes(raw: string | null | undefined): Record<string, string>
   }
 }
 
-function addAttribute() {
-  attributes.value.push({ label: '', value: '' });
+function addAttachment() {
+  attachments.value.push({
+    id: 0,
+    itemId: treeItem.value.id,
+    type: null,
+    fileName: null,
+    filePath: null,
+    fileBase64: null,
+    attributes: null,
+  });
 }
 
-function deleteAttribute(index: number) {
-  attributes.value.splice(index, 1);
-}
-
-function addAttachment(id: number) {
-  attachments.value.push(newAttachment(id));
-}
-
-async function deleteAttachment(index: number) {
-  const attachmentData = attachments.value[index];
-  if (!attachmentData) return;
-  if (attachmentData.id > 0) {
-    const confirmed = await feedback.confirmDelete(
-      `Delete attachment "${attachmentData.fileName || attachmentData.id}"?`,
-    );
-    if (!confirmed) return;
-    try {
-      await attachmentsService.delete(attachmentData.id);
-      feedback.success('Attachment deleted');
-      await loadAttachments(attachmentData.itemId);
-    } catch (error) {
-      feedback.error(error, 'Could not delete the attachment');
-    }
+async function removeAttachment(index: number) {
+  const row = attachments.value[index];
+  if (!row) return;
+  if (row.id === 0) {
+    attachments.value.splice(index, 1);
     return;
   }
-  attachments.value.splice(index, 1);
-}
-
-async function onFileSelected(selected: File | null, index: number) {
-  const target = attachments.value[index];
-  if (!selected) {
-    if (target) {
-      target.fileName = '';
-      target.fileBase64 = '';
-    }
-    return;
-  }
+  const confirmed = await feedback.confirmDelete(
+    `Delete attachment "${row.fileName || row.id}"? This cannot be undone.`,
+  );
+  if (!confirmed) return;
   try {
-    fileBase64.value = await fileToBase64(selected);
-    if (target) {
-      target.fileName = selected.name;
-      target.fileBase64 = fileBase64.value;
-    }
+    await attachmentsService.delete(row.id);
+    feedback.success('Attachment deleted');
+    await loadAttachments(row.itemId);
   } catch (error) {
-    feedback.error(error, 'Could not read the selected file');
+    feedback.error(error, 'Could not delete the attachment');
   }
 }
 
@@ -321,28 +241,4 @@ watch(
   },
   { deep: true },
 );
-
-function checkAttributeHasList(attribute: string): boolean {
-  return constantsData.value
-    .filter((constant) => constant.parentId == null)
-    .map((constant) => constant.group)
-    .includes(attribute);
-}
-
-function getAttributeList(attribute: string): string[] {
-  const matching = constantsData.value.filter(
-    (constant) => constant.parentId != null && constant.group == attribute,
-  );
-  if (matching.every((constant) => constant.sortOrder == 0)) {
-    return matching.map((constant) => constant.label).sort((a, b) => a.localeCompare(b));
-  }
-  return matching
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((constant) => constant.label);
-}
-
-function validateAttributeValue(value: string): boolean | string {
-  return (value ?? '').length <= 500 || 'Max 500 characters';
-}
 </script>
