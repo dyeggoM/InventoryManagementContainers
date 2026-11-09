@@ -131,6 +131,14 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     }
   }
 
+  /** Opens a blank form already parented to the record on screen, so a child is one tap away. */
+  function createChildEntry() {
+    const parentId = treeItem.value.id;
+    if (parentId <= 0) return;
+    createEntry();
+    treeItem.value.parentId = parentId;
+  }
+
   async function sendTreeItem(): Promise<boolean> {
     const id = treeItem.value.id;
     const problem = options.validate?.(treeItem.value) ?? null;
@@ -216,6 +224,7 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     selectData,
     resetTreeItem,
     createEntry,
+    createChildEntry,
     sendTreeItem,
     submitDialog,
     deleteTreeItem,

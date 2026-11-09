@@ -20,7 +20,19 @@
     @delete="deleteTreeItem"
   >
     <div class="imc-section">
-      <div class="imc-section__title">Details</div>
+      <div class="row items-center justify-between q-mb-xs">
+        <div class="imc-section__title q-mb-none">Details</div>
+        <q-btn
+          v-if="treeItem.id > 0"
+          flat
+          no-caps
+          icon="add"
+          label="Add child constant"
+          color="primary"
+          class="q-mb-xs"
+          @click="createChildEntry"
+        />
+      </div>
       <q-input label="Name" v-model="treeItem.label" :rules="[labelRule]" />
       <q-select
         label="Parent"
@@ -84,6 +96,7 @@ const {
   selectData,
   resetTreeItem,
   createEntry,
+  createChildEntry,
   submitDialog,
   deleteTreeItem,
   parentOptions,
