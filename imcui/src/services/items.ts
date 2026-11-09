@@ -10,6 +10,8 @@ export interface Item {
   attributes?: string | undefined;
   parent?: Item | undefined;
   attachments?: Attachment[] | undefined;
+  /** Filled by the tree response so the list can mark records that carry files. */
+  attachmentCount?: number | undefined;
 }
 
 export interface ItemReponse {

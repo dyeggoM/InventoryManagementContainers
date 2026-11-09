@@ -13,6 +13,8 @@ namespace IMCAPI.DB.Entities
         public string Icon { get; set; }
         public int? ParentId { get; set; }
         public string? Attributes { get; set; }
+        /// <summary>How many files the record carries; the list only needs to know it has some.</summary>
+        public int AttachmentCount { get; set; }
 
         public ItemDTO? Parent { get; set; }
         public List<ItemDTO> Children { get; set; } = new();
