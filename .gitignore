@@ -103,6 +103,16 @@ Thumbs.db
 Desktop.ini
 
 ############################################
+# CODE INVENTORY (generated, local only)
+############################################
+
+.code-inventory/
+AI_INVENTORY.md
+ai_inventory.json
+INVENTORY.md
+inventory/
+
+############################################
 # TEMPORARY FILES
 ############################################
 
