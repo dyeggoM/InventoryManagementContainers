@@ -280,25 +280,25 @@ Indexed: **321 symbols** across **40 files** (189 C#, 0 Python, 132 JS/TS/Vue) �
 - `L30` **function** `useFeedback.confirmDelete`(message) — Resolves true only when the user explicitly confirms. · → 3 (useFeedback.confirmDelete.done)
 - `L33` **local_function** `useFeedback.confirmDelete.done`(value) · ← 3
 
-### `imcui/src/composables/useTreeEditor.ts` — 226 lines, 17 symbols
+### `imcui/src/composables/useTreeEditor.ts` — 228 lines, 17 symbols
 
-- `L6` **interface** `TreeEntry` — fields: `id:number, label:string, icon:string, children:TreeEntry[], parentId:number|null|undefined` — The shape every node of a tree editor needs: what it is called and where it sits.
-- `L14` **interface** `FlatEntry` — fields: `id:number, label:string, hierarchicalLabel:string, depth:number`
-- `L22` **interface** `TreeService` — The slice of a service a tree editor needs; the pages pass their own.
-- `L29` **interface** `TreeEditorOptions` — fields: `service:TreeService<T>, addNew:()=>T, blank:()=>T, flatten:(nodes:T[])=>FlatEntry[], entity:string, emptyMessage:string, deleteHint:string, splitter:number, onSelect:(entry:T)=>void|Promise<void>, onReset:()=>void, beforeSave:(entry:T)=>void, validate:(entry:T)=>string|null`
-- `L54` **function** `useTreeEditor`(options) — line-for-line with only the service and the form fields differing. panels, select a node into the form, save it, delete it. Two pages duplicated all of this The state and the four operations every master-detail tree page performs: load a tr · → 1 (useFeedback) · ← 7
-- `L69` **function** `useTreeEditor.collectExpandable`(nodes, acc = ...) · → 1 (useTreeEditor.collectExpandable) · ← 2
-- `L80` **function** `useTreeEditor.findById`(nodes, id) · → 1 (useTreeEditor.findById) · ← 2
-- `L89` **function** `useTreeEditor.loadData`() · → 1 (useTreeEditor.collectExpandable) · ← 2
-- `L107` **function** `useTreeEditor.selectData`(id) · → 1 (useTreeEditor.findById)
-- `L118` **function** `useTreeEditor.resetTreeItem`() · ← 3
-- `L125` **function** `useTreeEditor.createEntry`() — Opens a blank form: the panel on a desktop, the sheet on a phone. · → 1 (useTreeEditor.resetTreeItem)
-- `L132` **function** `useTreeEditor.sendTreeItem`() · → 4 (cap, useTreeEditor.loadData, useTreeEditor.resetTreeItem) · ← 1
-- `L160` **function** `useTreeEditor.submitDialog`() · → 1 (useTreeEditor.sendTreeItem)
-- `L168` **function** `useTreeEditor.deleteTreeItem`() · → 3 (cap, useTreeEditor.loadData, useTreeEditor.resetTreeItem)
-- `L185` **function** `useTreeEditor.parentOptions`()
-- `L198` **local_function** `useTreeEditor.labelRule`(value)
-- `L224` **function** `cap`(value) · ← 3
+- `L8` **interface** `TreeEntry` — fields: `id:number, label:string, icon:string, children:TreeEntry[], parentId:number|null|undefined` — The shape every node of a tree editor needs: what it is called and where it sits.
+- `L16` **interface** `FlatEntry` — fields: `id:number, label:string, hierarchicalLabel:string, depth:number`
+- `L24` **interface** `TreeService` — The slice of a service a tree editor needs; the pages pass their own.
+- `L31` **interface** `TreeEditorOptions` — fields: `service:TreeService<T>, addNew:()=>T, blank:()=>T, flatten:(nodes:T[])=>FlatEntry[], entity:string, emptyMessage:string, deleteHint:string, splitter:number, onSelect:(entry:T)=>void|Promise<void>, onReset:()=>void, beforeSave:(entry:T)=>void, validate:(entry:T)=>string|null`
+- `L56` **function** `useTreeEditor`(options) — line-for-line with only the service and the form fields differing. panels, select a node into the form, save it, delete it. Two pages duplicated all of this The state and the four operations every master-detail tree page performs: load a tr · → 1 (useFeedback) · ← 7
+- `L71` **function** `useTreeEditor.collectExpandable`(nodes, acc = ...) · → 1 (useTreeEditor.collectExpandable) · ← 2
+- `L82` **function** `useTreeEditor.findById`(nodes, id) · → 1 (useTreeEditor.findById) · ← 2
+- `L91` **function** `useTreeEditor.loadData`() · → 1 (useTreeEditor.collectExpandable) · ← 2
+- `L109` **function** `useTreeEditor.selectData`(id) · → 1 (useTreeEditor.findById)
+- `L120` **function** `useTreeEditor.resetTreeItem`() · ← 3
+- `L127` **function** `useTreeEditor.createEntry`() — Opens a blank form: the panel on a desktop, the sheet on a phone. · → 1 (useTreeEditor.resetTreeItem)
+- `L134` **function** `useTreeEditor.sendTreeItem`() · → 4 (cap, useTreeEditor.loadData, useTreeEditor.resetTreeItem) · ← 1
+- `L162` **function** `useTreeEditor.submitDialog`() · → 1 (useTreeEditor.sendTreeItem)
+- `L170` **function** `useTreeEditor.deleteTreeItem`() · → 3 (cap, useTreeEditor.loadData, useTreeEditor.resetTreeItem)
+- `L187` **function** `useTreeEditor.parentOptions`()
+- `L200` **local_function** `useTreeEditor.labelRule`(value)
+- `L226` **function** `cap`(value) · ← 3
 
 ### `imcui/src/pages/[...path].vue` — 19 lines, 1 symbol
 
@@ -456,15 +456,15 @@ Indexed: **321 symbols** across **40 files** (189 C#, 0 Python, 132 JS/TS/Vue) �
 - `TreeMasterDetail.countMatches(nodes)` (imcui/src/components/TreeMasterDetail.vue:318) → TreeMasterDetail.countMatches(nodes)`(L319)`
 - `useFeedback.error(err, fallback)` (imcui/src/composables/useFeedback.ts:15) → getErrorMessage(error)`(L16)`
 - `useFeedback.confirmDelete(message)` (imcui/src/composables/useFeedback.ts:30) → useFeedback.confirmDelete.done(value)`(L46)`
-- `useTreeEditor(options)` (imcui/src/composables/useTreeEditor.ts:54) → useFeedback()`(L55)`
-- `useTreeEditor.collectExpandable(nodes, acc)` (imcui/src/composables/useTreeEditor.ts:69) → useTreeEditor.collectExpandable(nodes, acc)`(L74)`
-- `useTreeEditor.findById(nodes, id)` (imcui/src/composables/useTreeEditor.ts:80) → useTreeEditor.findById(nodes, id)`(L83)`
-- `useTreeEditor.loadData()` (imcui/src/composables/useTreeEditor.ts:89) → useTreeEditor.collectExpandable(nodes, acc)`(L101)`
-- `useTreeEditor.selectData(id)` (imcui/src/composables/useTreeEditor.ts:107) → useTreeEditor.findById(nodes, id)`(L108)`
-- `useTreeEditor.createEntry()` (imcui/src/composables/useTreeEditor.ts:125) → useTreeEditor.resetTreeItem()`(L126)`
-- `useTreeEditor.sendTreeItem()` (imcui/src/composables/useTreeEditor.ts:132) → cap(value)`(L144)`, useTreeEditor.resetTreeItem()`(L149)`, useTreeEditor.loadData()`(L150)`
-- `useTreeEditor.submitDialog()` (imcui/src/composables/useTreeEditor.ts:160) → useTreeEditor.sendTreeItem()`(L161)`
-- `useTreeEditor.deleteTreeItem()` (imcui/src/composables/useTreeEditor.ts:168) → cap(value)`(L177)`, useTreeEditor.resetTreeItem()`(L178)`, useTreeEditor.loadData()`(L179)`
+- `useTreeEditor(options)` (imcui/src/composables/useTreeEditor.ts:56) → useFeedback()`(L57)`
+- `useTreeEditor.collectExpandable(nodes, acc)` (imcui/src/composables/useTreeEditor.ts:71) → useTreeEditor.collectExpandable(nodes, acc)`(L76)`
+- `useTreeEditor.findById(nodes, id)` (imcui/src/composables/useTreeEditor.ts:82) → useTreeEditor.findById(nodes, id)`(L85)`
+- `useTreeEditor.loadData()` (imcui/src/composables/useTreeEditor.ts:91) → useTreeEditor.collectExpandable(nodes, acc)`(L103)`
+- `useTreeEditor.selectData(id)` (imcui/src/composables/useTreeEditor.ts:109) → useTreeEditor.findById(nodes, id)`(L110)`
+- `useTreeEditor.createEntry()` (imcui/src/composables/useTreeEditor.ts:127) → useTreeEditor.resetTreeItem()`(L128)`
+- `useTreeEditor.sendTreeItem()` (imcui/src/composables/useTreeEditor.ts:134) → cap(value)`(L146)`, useTreeEditor.resetTreeItem()`(L151)`, useTreeEditor.loadData()`(L152)`
+- `useTreeEditor.submitDialog()` (imcui/src/composables/useTreeEditor.ts:162) → useTreeEditor.sendTreeItem()`(L163)`
+- `useTreeEditor.deleteTreeItem()` (imcui/src/composables/useTreeEditor.ts:170) → cap(value)`(L179)`, useTreeEditor.resetTreeItem()`(L180)`, useTreeEditor.loadData()`(L181)`
 - `<module>` (imcui/src/pages/index/configuration.vue) → useTreeEditor(options)`(L70)`, useFeedback()`(L169)`
 - `configuration.addNew()` (imcui/src/pages/index/configuration.vue:92) → configuration.blank()`(L92)`
 - `configuration.flatten(nodes)` (imcui/src/pages/index/configuration.vue:94) → constantsService.flattenConstants(constants, parentPath, depth)`(L94)`
@@ -514,8 +514,8 @@ Changing a symbol means checking every symbol on its right-hand side.
 - `Services.AttachmentStorage.SaveAsync(int itemId, string? fileName, byte[] content, CancellationToken cancellationToken)` ← DB.DatabaseSeeder.BackfillAttachmentsAsync(ApplicationContext context, AttachmentStorage storage, CancellationToken cancellationToken)`(IMCAPI/DB/DatabaseSeeder.cs:54)`, Services.AttachmentStorage.ApplyUploadAsync(Attachment attachment, CancellationToken cancellationToken)`(IMCAPI/Services/AttachmentStorage.cs:50)`, AttachmentStorageTests.SavingWritesTheOriginalAndDeleteRemovesIt()`(Testing/AttachmentStorageTests.cs:87)`
 - `Services.AttachmentStorage.CreateThumbnail(byte[] content)` ← Services.AttachmentStorage.SaveAsync(int itemId, string? fileName, byte[] content, CancellationToken cancellationToken)`(IMCAPI/Services/AttachmentStorage.cs:75)`, AttachmentStorageTests.ThumbnailIsAJpegDataUrlNoLargerThanTheEdge()`(Testing/AttachmentStorageTests.cs:47)`, AttachmentStorageTests.AFileThatIsNotAnImageGetsNoThumbnail()`(Testing/AttachmentStorageTests.cs:66)`
 - `AttachmentStorageTests.Photo(int width, int height)` ← AttachmentStorageTests.ThumbnailIsAJpegDataUrlNoLargerThanTheEdge()`(Testing/AttachmentStorageTests.cs:47)`, AttachmentStorageTests.SavingWritesTheOriginalAndDeleteRemovesIt()`(Testing/AttachmentStorageTests.cs:87)`, AttachmentStorageTests.UploadIsMovedToDiskAndLeavesOnlyThePreviewInTheRow()`(Testing/AttachmentStorageTests.cs:113)`
-- `useFeedback()` ← useTreeEditor(options)`(imcui/src/composables/useTreeEditor.ts:55)`, <module>`(imcui/src/pages/index/configuration.vue:169)`, <module>`(imcui/src/pages/index/inventory.vue:50)`
-- `useTreeEditor.resetTreeItem()` ← useTreeEditor.createEntry()`(imcui/src/composables/useTreeEditor.ts:126)`, useTreeEditor.sendTreeItem()`(imcui/src/composables/useTreeEditor.ts:149)`, useTreeEditor.deleteTreeItem()`(imcui/src/composables/useTreeEditor.ts:178)`
+- `useFeedback()` ← useTreeEditor(options)`(imcui/src/composables/useTreeEditor.ts:57)`, <module>`(imcui/src/pages/index/configuration.vue:169)`, <module>`(imcui/src/pages/index/inventory.vue:50)`
+- `useTreeEditor.resetTreeItem()` ← useTreeEditor.createEntry()`(imcui/src/composables/useTreeEditor.ts:128)`, useTreeEditor.sendTreeItem()`(imcui/src/composables/useTreeEditor.ts:151)`, useTreeEditor.deleteTreeItem()`(imcui/src/composables/useTreeEditor.ts:180)`
 - `inventory.blankAttributes()` ← inventory.onSelect(entry)`(imcui/src/pages/index/inventory.vue:125)`, inventory.onReset()`(imcui/src/pages/index/inventory.vue:130)`, inventory.loadConstants()`(imcui/src/pages/index/inventory.vue:182)`
 - `api.post(endpoint, body, options)` ← attachmentsService.create(attachment)`(imcui/src/services/attachment.ts:30)`, constantsService.create(constant)`(imcui/src/services/constants.ts:42)`, itemsService.create(item)`(imcui/src/services/items.ts:43)`
 - `api.delete(endpoint, options)` ← attachmentsService.delete(id)`(imcui/src/services/attachment.ts:38)`, constantsService.delete(id)`(imcui/src/services/constants.ts:50)`, itemsService.delete(id)`(imcui/src/services/items.ts:51)`
@@ -527,10 +527,10 @@ Changing a symbol means checking every symbol on its right-hand side.
 - `TreeMasterDetail.filterTree(nodes, needle)` ← <module>`(imcui/src/components/TreeMasterDetail.vue:217)`, TreeMasterDetail.filterTree(nodes, needle)`(imcui/src/components/TreeMasterDetail.vue:305)`
 - `TreeMasterDetail.countMatches(nodes)` ← TreeMasterDetail.countMatches(nodes)`(imcui/src/components/TreeMasterDetail.vue:319)`, <module>`(imcui/src/components/TreeMasterDetail.vue:322)`
 - `useTreeEditor(options)` ← <module>`(imcui/src/pages/index/configuration.vue:70)`, <module>`(imcui/src/pages/index/inventory.vue:92)`
-- `useTreeEditor.collectExpandable(nodes, acc)` ← useTreeEditor.collectExpandable(nodes, acc)`(imcui/src/composables/useTreeEditor.ts:74)`, useTreeEditor.loadData()`(imcui/src/composables/useTreeEditor.ts:101)`
-- `useTreeEditor.findById(nodes, id)` ← useTreeEditor.findById(nodes, id)`(imcui/src/composables/useTreeEditor.ts:83)`, useTreeEditor.selectData(id)`(imcui/src/composables/useTreeEditor.ts:108)`
-- `useTreeEditor.loadData()` ← useTreeEditor.sendTreeItem()`(imcui/src/composables/useTreeEditor.ts:150)`, useTreeEditor.deleteTreeItem()`(imcui/src/composables/useTreeEditor.ts:179)`
-- `cap(value)` ← useTreeEditor.sendTreeItem()`(imcui/src/composables/useTreeEditor.ts:144)`, useTreeEditor.deleteTreeItem()`(imcui/src/composables/useTreeEditor.ts:177)`
+- `useTreeEditor.collectExpandable(nodes, acc)` ← useTreeEditor.collectExpandable(nodes, acc)`(imcui/src/composables/useTreeEditor.ts:76)`, useTreeEditor.loadData()`(imcui/src/composables/useTreeEditor.ts:103)`
+- `useTreeEditor.findById(nodes, id)` ← useTreeEditor.findById(nodes, id)`(imcui/src/composables/useTreeEditor.ts:85)`, useTreeEditor.selectData(id)`(imcui/src/composables/useTreeEditor.ts:110)`
+- `useTreeEditor.loadData()` ← useTreeEditor.sendTreeItem()`(imcui/src/composables/useTreeEditor.ts:152)`, useTreeEditor.deleteTreeItem()`(imcui/src/composables/useTreeEditor.ts:181)`
+- `cap(value)` ← useTreeEditor.sendTreeItem()`(imcui/src/composables/useTreeEditor.ts:146)`, useTreeEditor.deleteTreeItem()`(imcui/src/composables/useTreeEditor.ts:179)`
 - `inventory.loadAttachments(id)` ← inventory.onSelect(entry)`(imcui/src/pages/index/inventory.vue:123)`, inventory.removeAttachment(index)`(imcui/src/pages/index/inventory.vue:240)`
 - `api.put(endpoint, body, options)` ← constantsService.update(id, constant)`(imcui/src/services/constants.ts:46)`, itemsService.update(id, item)`(imcui/src/services/items.ts:47)`
 - `constantsService.flattenConstants(constants, parentPath, depth)` ← configuration.flatten(nodes)`(imcui/src/pages/index/configuration.vue:94)`, constantsService.flattenConstants(constants, parentPath, depth)`(imcui/src/services/constants.ts:76)`
@@ -556,7 +556,7 @@ Changing a symbol means checking every symbol on its right-hand side.
 - `AttributeEditor.pretty(label)` ← AttributeEditor.labelOptions(index)`(imcui/src/components/AttributeEditor.vue:125)`
 - `AttributeEditor.listFor(label)` ← AttributeEditor.setLabel(index, label)`(imcui/src/components/AttributeEditor.vue:145)`
 - `useFeedback.confirmDelete.done(value)` ← useFeedback.confirmDelete(message)`(imcui/src/composables/useFeedback.ts:46)`
-- `useTreeEditor.sendTreeItem()` ← useTreeEditor.submitDialog()`(imcui/src/composables/useTreeEditor.ts:161)`
+- `useTreeEditor.sendTreeItem()` ← useTreeEditor.submitDialog()`(imcui/src/composables/useTreeEditor.ts:163)`
 - `configuration.blank()` ← configuration.addNew()`(imcui/src/pages/index/configuration.vue:92)`
 - `inventory.blank()` ← inventory.addNew()`(imcui/src/pages/index/inventory.vue:109)`
 - `inventory.loadConstants()` ← <module>`(imcui/src/pages/index/inventory.vue:175)`

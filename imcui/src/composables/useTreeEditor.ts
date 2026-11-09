@@ -1,3 +1,5 @@
+// Shared state machine for both master-detail pages: the tree, the form, and the four operations
+// (load, select, save, delete). Pages supply the service, the blank entry and the hooks.
 import { ref, type Ref } from 'vue';
 import { useQuasar } from 'quasar';
 import { useFeedback } from './useFeedback';
