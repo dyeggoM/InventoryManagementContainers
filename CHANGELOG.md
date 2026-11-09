@@ -6,6 +6,21 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/pwa` (stacked on `feat/search-values`)
+
+Installable on a phone's home screen.
+
+- **PWA mode on** (`quasar mode add pwa`): manifest, service worker and the Workbox runtime generated
+  by the build; `src-pwa/register-sw.ts` replaces the scaffold comment block and reports an upgrade
+  through a window event, which `src/boot/pwa.ts` turns into a notification with a Reload action
+  instead of reloading under someone's edits.
+- **Its own icon set**: 128/192/256/384/512 plus maskable 192/512, Apple touch icons and a pinned-tab
+  mark, all generated from one gradient-and-monogram design on `#0f4c81`; the manifest names the app
+  `IMC — Inventory Management`, `short_name` `IMC`, `display: standalone`, `start_url: /`.
+- Verified on the built bundle (`quasar build -m pwa`, served from `dist/pwa`): manifest linked and
+  parsed (7 icons), service worker registered at scope `/`, the app renders the six records, and with
+  the network off the shell still loads and reports `Cannot reach the API`.
+
 ## Pending — `feat/search-values`
 
 Search now looks inside the records, not only at their names.

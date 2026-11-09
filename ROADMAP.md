@@ -13,6 +13,8 @@ What is deliberately not built yet, in the order it is worth doing.
   attribute; null means Text so old rows keep working.
 - **Duplicate a record.** Kits repeat: the overflow menu copies parent, icon and attributes into a
   new record named `<name> (copy)`. Files are not copied.
+- **Installable on the home screen.** PWA mode, manifest, icons and a service worker that serves the
+  shell offline.
 - **Search by attribute value.** `SN-0042` finds the record that carries it and shows the pair under
   the name; the count only counts rows that matched themselves.
 
@@ -22,19 +24,14 @@ Attachments are posted as a data URL inside JSON, which is ~33 % overhead and ho
 in memory on the phone. A multipart endpoint (and `capture="environment"` straight on the input)
 would stream the file and let the server thumbnail it as it lands.
 
-## 2. Install as an app
-
-The UI is phone-first but still a browser tab. A manifest plus a service worker makes it installable
-on the home screen and gives a cached read of the last inventory when the phone is offline.
-
-## 3. Tests
+## 2. Tests
 
 The API has `Testing/` (repository, attachment storage, thumbnail rules). The UI has none:
 `useTreeEditor`, the attribute editor (typed rows, custom keys) and the attachment editor deserve
 Vitest tests before the next refactor, and the controllers need integration tests over the real
 endpoints.
 
-## 4. Bulk entry
+## 3. Bulk entry
 
 Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case;
 the next step is adding several children to a parent in one pass (a small queue in the sheet), then

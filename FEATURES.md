@@ -55,6 +55,15 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   open, and the client derives the API host from the page it was served from — so the same build
   works from `localhost` and from the LAN address.
 
+## Installable
+
+- The app is a PWA: add it to the home screen from the browser and it opens without the address bar
+  (`display: standalone`), with its own icon (gradient monogram, maskable variants for Android).
+- A service worker caches the shell, so opening it without a network shows the interface and an
+  honest `Cannot reach the API` instead of a blank page.
+- When a new version is deployed, a notification offers **Reload** rather than reloading under an
+  open form.
+
 ## Data
 
 - SQLite through EF Core; migrations run at startup, so a clone builds its own schema.
