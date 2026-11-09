@@ -69,6 +69,31 @@ namespace IMCAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// Deleting a record deletes its files: the UI says so, and orphaned images in the media
+        /// folder are impossible to find again once the row that named them is gone.
+        /// </summary>
+        [HttpDelete("{id:int}")]
+        public override async Task<IActionResult> Delete(int id)
+        {
+            var attachments = await _context.Attachments
+                .Where(attachment => attachment.ItemId == id)
+                .ToListAsync();
+
+            foreach (var attachment in attachments)
+            {
+                _attachments.Delete(attachment.FilePath);
+            }
+
+            if (attachments.Count > 0)
+            {
+                _context.Attachments.RemoveRange(attachments);
+                await _context.SaveChangesAsync();
+            }
+
+            return await base.Delete(id);
+        }
+
         public override async Task<IActionResult> Get()
         {
             try
