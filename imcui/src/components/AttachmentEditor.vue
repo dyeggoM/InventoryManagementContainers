@@ -34,7 +34,21 @@
         </q-file>
         <div v-else class="attachment-file">
           <div class="text-body2 ellipsis">{{ row.fileName || 'Unnamed file' }}</div>
-          <div class="text-caption text-grey-7">Saved attachment #{{ row.id }}</div>
+          <div class="text-caption text-grey-7 row items-center q-gutter-xs">
+            <span>Saved attachment #{{ row.id }}</span>
+            <q-btn
+              v-if="row.filePath"
+              flat
+              dense
+              size="sm"
+              label="Open original"
+              :href="fileUrl(row.id)"
+              target="_blank"
+              rel="noopener"
+              icon="open_in_new"
+              class="q-px-xs"
+            />
+          </div>
         </div>
 
         <q-btn
@@ -49,8 +63,8 @@
       </div>
 
       <q-img
-        v-if="row.type === 'Photo' && row.fileBase64"
-        :src="row.fileBase64"
+        v-if="row.type === 'Photo' && (row.thumbnailBase64 || row.uploadBase64)"
+        :src="row.thumbnailBase64 || row.uploadBase64 || ''"
         height="90px"
         fit="contain"
         class="q-mt-sm"
@@ -63,6 +77,7 @@
 </template>
 
 <script setup lang="ts">
+import { attachmentsService } from '@services/attachment';
 import { fileToBase64 } from '@services/utilities';
 
 /** An attachment row that may still carry the file the user picked in this form. */
@@ -72,7 +87,10 @@ export interface AttachmentRow {
   type?: string | null;
   fileName?: string | null;
   filePath?: string | null;
-  fileBase64?: string | null;
+  /** Compressed preview returned by the API. */
+  thumbnailBase64?: string | null;
+  /** The picked file as a data URL; the API writes it to disk on save. */
+  uploadBase64?: string | null;
   attributes?: string | null;
   file?: File | null;
 }
@@ -89,15 +107,20 @@ const emit = defineEmits<{
   remove: [index: number];
 }>();
 
+function fileUrl(id: number): string {
+  return attachmentsService.fileUrl(id);
+}
+
 async function onFile(row: AttachmentRow, file: File | null) {
   row.file = file;
   if (!file) {
     row.fileName = '';
-    row.fileBase64 = '';
+    row.uploadBase64 = '';
     return;
   }
   row.fileName = file.name;
-  row.fileBase64 = await fileToBase64(file);
+  // The API compresses this into a thumbnail and writes the original to disk.
+  row.uploadBase64 = await fileToBase64(file);
 }
 </script>
 

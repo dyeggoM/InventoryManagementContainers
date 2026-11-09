@@ -59,6 +59,9 @@ IMCAPI/imc.db
 IMCAPI/imc.db-shm
 IMCAPI/imc.db-wal
 
+# Uploaded attachment originals (the rows keep a thumbnail and a relative path)
+IMCAPI/media/
+
 # Certificates and private keys
 *.pfx
 *.p12

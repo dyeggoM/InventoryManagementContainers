@@ -81,6 +81,8 @@ namespace IMCAPI
 
             #region Services
             builder.Services.AddTransient(typeof(IRepository<>),typeof(BaseRepository<>));
+            // Attachment bytes live on disk; only a compressed preview stays in the row.
+            builder.Services.AddSingleton<AttachmentStorage>();
             #endregion
 
             var app = builder.Build();
@@ -95,6 +97,10 @@ namespace IMCAPI
                 if (context is not null)
                 {
                     DatabaseSeeder.SeedConfiguration(context, app.Environment.ContentRootPath);
+
+                    // Older rows carry the whole image; move it to disk once.
+                    var storage = serviceScope.ServiceProvider.GetRequiredService<AttachmentStorage>();
+                    DatabaseSeeder.BackfillAttachmentsAsync(context, storage).GetAwaiter().GetResult();
                 }
             }
             #endregion

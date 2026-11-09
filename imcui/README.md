@@ -27,6 +27,11 @@ table is empty, `IMCAPI/DB/Seed/seed.sql` fills the configuration tree (attribut
 types, categories, brands…). The database is git-ignored — inventory items are user data and are
 never seeded. To start over, stop the API and delete the file.
 
+Attachments keep the uploaded file on disk under `IMCAPI/media/items/{itemId}/`; the row stores the
+relative path plus a compressed preview (JPEG, longest side 320px) in `ThumbnailBase64`, so lists
+stay small. `GET /api/attachment/{id}/file` serves the original. Rows written before this change
+carry the whole image inline; they are moved to disk on the next start.
+
 ## Install the dependencies
 
 ```bash

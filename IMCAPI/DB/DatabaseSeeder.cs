@@ -1,3 +1,4 @@
+using IMCAPI.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace IMCAPI.DB;
@@ -28,5 +29,38 @@ public static class DatabaseSeeder
 
         context.Database.ExecuteSqlRaw(File.ReadAllText(seedPath));
         return true;
+    }
+
+    /// <summary>
+    /// Rows written before attachments were stored on disk keep the whole image in the row.
+    /// Moves those bytes to disk and leaves a thumbnail behind, once.
+    /// </summary>
+    /// <returns>How many rows were converted.</returns>
+    public static async Task<int> BackfillAttachmentsAsync(ApplicationContext context,
+        AttachmentStorage storage, CancellationToken cancellationToken = default)
+    {
+        var legacy = await context.Attachments
+            .Where(attachment => attachment.FilePath == null && attachment.ThumbnailBase64 != null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var attachment in legacy)
+        {
+            var bytes = AttachmentStorage.DecodePayload(attachment.ThumbnailBase64);
+            if (bytes is null || bytes.Length == 0)
+            {
+                continue;
+            }
+
+            var stored = await storage.SaveAsync(attachment.ItemId, attachment.FileName, bytes, cancellationToken);
+            attachment.FilePath = stored.RelativePath;
+            attachment.ThumbnailBase64 = stored.ThumbnailBase64;
+        }
+
+        if (legacy.Count > 0)
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        return legacy.Count;
     }
 }
