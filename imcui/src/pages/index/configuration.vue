@@ -11,6 +11,7 @@
     :loading="loading"
     :saving="saving"
     :empty-message="emptyMessage"
+    :dirty="isDirty"
     entity-label="Constant"
     :entry-label="treeItem.label"
     @select="selectData"
@@ -90,6 +91,7 @@ const {
   saving,
   treeVersion,
   showMobileDialog,
+  isDirty,
   emptyMessage,
   labelRule,
   loadData,
@@ -109,6 +111,8 @@ const {
   emptyMessage: 'No constants yet',
   deleteHint: 'Its children are deleted with it.',
   splitter: 30,
+  // Only the entry: a constant is a name, an icon and a parent.
+  dirtySnapshot: (entry) => JSON.stringify(entry),
 });
 
 onMounted(() => {

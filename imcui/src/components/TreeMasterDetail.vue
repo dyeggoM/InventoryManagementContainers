@@ -62,6 +62,13 @@
                   :class="{ 'text-weight-medium': prop.node.children?.length }"
                   >{{ prop.node.label }}</span
                 >
+                <q-icon
+                  v-if="prop.node.attachmentCount"
+                  name="attach_file"
+                  size="16px"
+                  class="imc-attach"
+                  aria-label="Has attachments"
+                />
                 <q-space />
                 <span
                   v-if="prop.node.children?.length && !expanded.includes(prop.node.id)"
@@ -94,8 +101,9 @@
                 <div class="text-h6">
                   {{ panel.id > 0 ? entryLabel || `${entityLabel} #${panel.id}` : `New ${entityLabel.toLowerCase()}` }}
                 </div>
-                <div v-if="panel.id > 0" class="text-caption text-grey-7">
-                  {{ entityLabel }} #{{ panel.id }}
+                <div v-if="panel.id > 0" class="text-caption">
+                  <span class="text-grey-7">{{ entityLabel }} #{{ panel.id }}</span>
+                  <span v-if="dirty" class="text-orange-8 q-ml-sm">· unsaved changes</span>
                 </div>
               </div>
               <q-btn v-if="panel.id > 0" flat round dense icon="more_vert" aria-label="More actions">
@@ -172,6 +180,13 @@
               :class="{ 'text-weight-medium': prop.node.children?.length }"
               >{{ prop.node.label }}</span
             >
+            <q-icon
+              v-if="prop.node.attachmentCount"
+              name="attach_file"
+              size="16px"
+              class="imc-attach"
+              aria-label="Has attachments"
+            />
             <q-space />
             <span
               v-if="prop.node.children?.length && !expanded.includes(prop.node.id)"
@@ -202,6 +217,7 @@
     <q-dialog
       v-model="dialog"
       :maximized="$q.screen.lt.md"
+      :persistent="dirty"
       transition-show="slide-up"
       transition-hide="slide-down"
     >
@@ -230,7 +246,7 @@
               </q-list>
             </q-menu>
           </q-btn>
-          <q-btn icon="close" flat round dense v-close-popup aria-label="Close" />
+          <q-btn icon="close" flat round dense aria-label="Close" @click="requestClose" />
         </q-toolbar>
 
         <q-form @submit="emit('submit')" @reset="emit('reset')" class="col column no-wrap">
@@ -238,9 +254,13 @@
             <slot />
           </q-card-section>
 
-          <div class="dialog-actions row items-center justify-end q-gutter-sm q-px-md q-py-sm">
-            <q-btn label="Reset" color="grey-9" flat type="reset" />
-            <q-btn label="Save" color="primary" type="submit" :loading="saving" class="q-px-lg" />
+          <div class="dialog-actions row items-center q-px-md q-py-sm">
+            <span v-if="dirty" class="text-caption imc-unsaved">Unsaved changes</span>
+            <q-space />
+            <div class="row items-center q-gutter-x-sm">
+              <q-btn label="Reset" color="grey-9" flat type="reset" />
+              <q-btn label="Save" color="primary" type="submit" :loading="saving" class="q-px-lg" />
+            </div>
           </div>
         </q-form>
       </q-card>
@@ -251,6 +271,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { TreeEntry } from '../composables/useTreeEditor';
+import { useFeedback } from '../composables/useFeedback';
+
+const feedback = useFeedback();
 
 /**
  * The master-detail shell shared by the inventory and the configuration pages: a tree on the left,
@@ -270,8 +293,10 @@ const props = withDefaults(
     entityLabel?: string;
     /** The record's own name, shown as the panel title when there is one. */
     entryLabel?: string;
+    /** The open form has edits that are not saved yet. */
+    dirty?: boolean;
   }>(),
-  { entityLabel: 'Item', entryLabel: '' },
+  { entityLabel: 'Item', entryLabel: '', dirty: false },
 );
 
 const emit = defineEmits<{
@@ -280,6 +305,7 @@ const emit = defineEmits<{
   submit: [];
   reset: [];
   delete: [];
+  close: [];
 }>();
 
 const selected = defineModel<number>('selected', { required: true });
@@ -328,10 +354,29 @@ watch(visibleTree, (nodes) => {
 
 // q-tree emits null when the selection is cleared (clicking the selected node again). Turning
 // that into a null model hides every tab panel, so the last selection is kept instead.
-function onSelect(id: number | null) {
+async function onSelect(id: number | null) {
   if (typeof id !== 'number') return;
+  if (id !== props.entryId && props.dirty) {
+    const discard = await feedback.confirmDiscard('This record has edits that are not saved.');
+    if (!discard) {
+      selected.value = props.entryId; // put the highlight back on the record that still holds them
+      return;
+    }
+    emit('reset'); // the page clears the fields, so the new selection cannot inherit them
+  }
   selected.value = id;
   emit('select', id);
+}
+
+/** The sheet is the only exit on a phone, so it asks before dropping edits. */
+async function requestClose() {
+  if (props.dirty) {
+    const discard = await feedback.confirmDiscard('This record has edits that are not saved.');
+    if (!discard) return;
+    emit('reset');
+  }
+  dialog.value = false;
+  emit('close');
 }
 </script>
 
@@ -363,6 +408,16 @@ function onSelect(id: number | null) {
 
 .imc-chevron {
   color: #9aa1ac;
+}
+
+.imc-attach {
+  color: #8a93a0;
+  margin-left: 6px;
+}
+
+.imc-unsaved {
+  color: #b26a00;
+  font-weight: 500;
 }
 
 /* Sibling rows get a hairline; a parent row is tinted so the groups read as blocks. */

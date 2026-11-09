@@ -11,6 +11,7 @@
     :loading="loading"
     :saving="saving"
     :empty-message="emptyMessage"
+    :dirty="isDirty"
     entity-label="Item"
     :entry-label="treeItem.label"
     @select="selectData"
@@ -107,6 +108,7 @@ const {
   saving,
   treeVersion,
   showMobileDialog,
+  isDirty,
   emptyMessage,
   labelRule,
   loadData,
@@ -126,6 +128,18 @@ const {
   emptyMessage: 'No items yet',
   deleteHint: 'Its attachments are deleted with it.',
   splitter: 34,
+  // The entry alone does not describe the form: the attributes and the attachment rows live here.
+  dirtySnapshot: (entry) =>
+    JSON.stringify({
+      entry,
+      attributes: attributes.value,
+      attachments: attachments.value.map((row) => [
+        row.id,
+        row.type ?? '',
+        row.fileName ?? '',
+        (row.uploadBase64 ?? '').length,
+      ]),
+    }),
   onSelect: async (entry) => {
     if (entry.id > 0) {
       const parsed = parseAttributes(entry.attributes);

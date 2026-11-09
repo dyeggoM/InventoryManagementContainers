@@ -49,5 +49,28 @@ export function useFeedback() {
     });
   }
 
-  return { success, error, info, confirmDelete };
+  /** Resolves true when the user chooses to throw unsaved edits away. */
+  function confirmDiscard(message = 'Your edits were not saved.'): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (value: boolean) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+      $q.dialog({
+        title: 'Discard changes?',
+        message,
+        cancel: { label: 'Keep editing', flat: true },
+        ok: { label: 'Discard', color: 'negative', unelevated: true },
+        persistent: true,
+      })
+        .onOk(() => done(true))
+        .onCancel(() => done(false))
+        .onDismiss(() => done(false));
+    });
+  }
+
+  return { success, error, info, confirmDelete, confirmDiscard };
 }
