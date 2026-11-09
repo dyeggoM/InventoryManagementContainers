@@ -424,7 +424,7 @@ Indexed: **351 symbols** across **42 files** (198 C#, 0 Python, 153 JS/TS/Vue) �
 - `L52` **method** `itemsService.delete`(id) · → 1 (api.delete)
 - `L56` **method** `itemsService.flattenItems`(items, parentPath = ..., depth = ...) · → 1 (itemsService.flattenItems) · ← 2
 
-### `imcui/src/services/utilities.ts` — 16 lines, 1 symbol
+### `imcui/src/services/utilities.ts` — 18 lines, 1 symbol
 
 - `L1` **function** `fileToBase64`(file) · ← 1
 

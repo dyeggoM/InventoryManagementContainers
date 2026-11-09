@@ -54,6 +54,21 @@ python3 "$CODE_INVENTORY_HOME/scripts/inventory.py" sync --root IMCAPI --lang cs
 python3 "$CODE_INVENTORY_HOME/scripts/ai_inventory.py" --root . --no-stamp
 ```
 
+## Branches
+
+Merged branches accumulate. `scripts/branches.sh` lists every branch — local and remote — whose work
+is already in `origin/main`, and removes them with a flag:
+
+```bash
+scripts/branches.sh                  # dry run: what is safe to delete
+scripts/branches.sh --delete         # asks once, then deletes locally and on the remote
+scripts/branches.sh --delete --yes   # no prompt, for scripts
+```
+
+GitHub can handle the remote half itself: **Settings → General → “Automatically delete head
+branches”**. It only applies to pull requests merged after it is switched on, so the script still
+covers everything older.
+
 ## Install the dependencies
 
 ```bash
