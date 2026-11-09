@@ -36,13 +36,13 @@
               <q-btn
                 v-if="item.id > 0"
                 label="Delete"
-                type="submit"
+                type="button"
                 color="negative"
                 @click="deleteTreeItem"
               />
             </div>
             <q-form @submit="sendTreeItem" @reset="resetTreeItem" class="q-gutter-md">
-              <q-input label="label" v-model="treeItem.label" />
+              <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
               <!-- <q-input label="icon" v-model="treeItem.icon" /> -->
               <q-select
                 label="parentId"
@@ -203,8 +203,8 @@
       <q-card :style="$q.screen.lt.md ? '' : 'min-width: 400px'">
         <q-card-section v-if="treeItem">
           <div class="text-h4 q-mb-md">Id: {{ treeItem.id }}</div>
-          <q-form @submit="sendTreeItem" @reset="resetTreeItem" class="q-gutter-md">
-            <q-input label="label" v-model="treeItem.label" />
+          <q-form @submit="submitDialog" @reset="resetTreeItem" class="q-gutter-md">
+            <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
             <!-- <q-input label="icon" v-model="treeItem.icon" /> -->
             <q-select
               label="parentId"
@@ -321,14 +321,21 @@
                 </div>
               </div>
             </div>
+            <q-card-actions align="between" class="q-px-none q-mt-md">
+              <q-btn flat label="Cancel" color="negative" type="button" v-close-popup />
+              <q-btn
+                v-if="treeItem.id > 0"
+                flat
+                label="Delete"
+                color="negative"
+                type="button"
+                @click="deleteTreeItem"
+              />
+              <q-btn label="Reset" color="secondary" flat type="reset" />
+              <q-btn label="Submit" color="primary" type="submit" :loading="saving" />
+            </q-card-actions>
           </q-form>
         </q-card-section>
-
-        <q-card-actions align="between">
-          <q-btn flat label="Cancel" color="negative" v-close-popup />
-          <q-btn flat label="Reset" color="secondary" @click="resetTreeItem" />
-          <q-btn flat label="Submit" color="primary" @click="sendTreeItem" v-close-popup />
-        </q-card-actions>
       </q-card>
     </q-dialog>
   </q-page>
@@ -346,6 +353,8 @@ import type { Constants } from '@services/constants';
 import { useFeedback } from '../../composables/useFeedback';
 
 const feedback = useFeedback();
+
+const labelRule = (value: string) => (value && value.trim().length > 0) || 'Label is required';
 
 const createItem = {
   id: 0,
@@ -426,6 +435,7 @@ const panels = ref<Item[]>([
 const fileBase64 = ref<string>('');
 const file = ref<File>();
 const loading = ref(false);
+const saving = ref(false);
 
 const attributes = ref<Attributes[]>([]);
 
@@ -550,27 +560,33 @@ function findItemById(item: Item[], id: number): Item | undefined {
   return undefined;
 }
 
-async function sendTreeItem() {
+async function sendTreeItem(): Promise<boolean> {
   const id = treeItem.value.id;
-  if (id > 0) {
-    //TODO: ADD ATTACHMENTS, ADD ONLY ATTACHMENTS WITH ID 0
-    treeItem.value.attachments = [];
-    const attachmentsData = attachments.value.filter((x) => x.id == 0);
-    treeItem.value.attachments = attachmentsData;
-    const [itemUpdate] = await Promise.all([itemsService.update(id, treeItem.value)]);
-    console.log(itemUpdate);
+  saving.value = true;
+  try {
+    // Only attachments created in this form are sent; existing ones live in their own table.
+    treeItem.value.attachments = attachments.value.filter((x) => x.id == 0);
+    if (id > 0) {
+      await itemsService.update(id, treeItem.value);
+      feedback.success('Item updated');
+    } else {
+      await itemsService.create(treeItem.value);
+      feedback.success('Item created');
+    }
     resetTreeItem();
-    await Promise.all([loadData()]);
-  } else if (id == 0) {
-    //TODO: ADD ATTACHMENTS, ADD ONLY ATTACHMENTS WITH ID 0
-    // treeItem.value.attachments=[]
-    treeItem.value.attachments = [];
-    const attachmentsData = attachments.value.filter((x) => x.id == 0);
-    treeItem.value.attachments = attachmentsData;
-    const [itemCreate] = await Promise.all([itemsService.create(treeItem.value)]);
-    console.log(itemCreate);
-    resetTreeItem();
-    await Promise.all([loadData()]);
+    await loadData();
+    return true;
+  } catch (error) {
+    feedback.error(error, 'Could not save the item');
+    return false;
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function submitDialog() {
+  if (await sendTreeItem()) {
+    showMobileDialog.value = false;
   }
 }
 
@@ -600,10 +616,18 @@ function resetTreeItem() {
 
 async function deleteTreeItem() {
   const id = treeItem.value.id;
-  if (id > 0) {
-    await Promise.all([itemsService.delete(id)]);
+  if (id <= 0) return;
+  const confirmed = await feedback.confirmDelete(
+    `Delete "${treeItem.value.label || id}"? Its attachments are deleted with it.`,
+  );
+  if (!confirmed) return;
+  try {
+    await itemsService.delete(id);
+    feedback.success('Item deleted');
     resetTreeItem();
-    await Promise.all([loadData()]);
+    await loadData();
+  } catch (error) {
+    feedback.error(error, 'Could not delete the item');
   }
 }
 
@@ -628,14 +652,21 @@ function addAttribute() {
 
 async function deleteAttachment(index: number) {
   const attachmentData = attachments.value[index];
-  if (attachmentData != null && attachmentData != undefined) {
-    if (attachmentData.id > 0) {
-      await Promise.all([attachmentsService.delete(attachmentData.id)]);
-
-      await Promise.all([loadAttachments(attachmentData.itemId)]);
-    } else {
-      attachments.value.splice(index, 1);
+  if (!attachmentData) return;
+  if (attachmentData.id > 0) {
+    const confirmed = await feedback.confirmDelete(
+      `Delete attachment "${attachmentData.fileName || attachmentData.id}"?`,
+    );
+    if (!confirmed) return;
+    try {
+      await attachmentsService.delete(attachmentData.id);
+      feedback.success('Attachment deleted');
+      await loadAttachments(attachmentData.itemId);
+    } catch (error) {
+      feedback.error(error, 'Could not delete the attachment');
     }
+  } else {
+    attachments.value.splice(index, 1);
   }
 }
 

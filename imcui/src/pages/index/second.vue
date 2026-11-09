@@ -33,7 +33,7 @@
           <q-tab-panel v-for="item in panels" :key="item.id" :name="item.id">
             <div class="text-h4 q-mb-md">Id: {{ item.id }}</div>
             <q-form @submit="sendTreeItem" @reset="resetTreeItem" class="q-gutter-md">
-              <q-input label="label" v-model="treeItem.label" />
+              <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
               <!-- <q-input label="icon" v-model="treeItem.icon" /> -->
               <q-select
                 label="parentId"
@@ -60,6 +60,15 @@
               <div>
                 <q-btn label="Submit" type="submit" color="primary" />
                 <q-btn label="Reset" type="reset" color="primary" flat class="q-ml-sm" />
+                <q-btn
+                  v-if="treeItem.id > 0"
+                  label="Delete"
+                  type="button"
+                  color="negative"
+                  flat
+                  class="q-ml-sm"
+                  @click="deleteTreeItem"
+                />
               </div>
             </q-form>
           </q-tab-panel>
@@ -97,8 +106,8 @@
       <q-card :style="$q.screen.lt.md ? '' : 'min-width: 400px'">
         <q-card-section v-if="treeItem">
           <div class="text-h4 q-mb-md">Id: {{ treeItem.id }}</div>
-          <q-form @submit="sendTreeItem" @reset="resetTreeItem" class="q-gutter-md">
-            <q-input label="label" v-model="treeItem.label" />
+          <q-form @submit="submitDialog" @reset="resetTreeItem" class="q-gutter-md">
+            <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
             <q-select
               label="parentId"
               class="col-5"
@@ -120,14 +129,21 @@
             <q-input label="group" v-model="treeItem.group" />
             <q-input label="description" v-model="treeItem.description" type="textarea" />
             <q-input label="sortOrder" v-model="treeItem.sortOrder" />
+            <q-card-actions align="between" class="q-px-none q-mt-md">
+              <q-btn flat label="Cancel" color="negative" type="button" v-close-popup />
+              <q-btn
+                v-if="treeItem.id > 0"
+                flat
+                label="Delete"
+                color="negative"
+                type="button"
+                @click="deleteTreeItem"
+              />
+              <q-btn label="Reset" color="secondary" flat type="reset" />
+              <q-btn label="Submit" color="primary" type="submit" :loading="saving" />
+            </q-card-actions>
           </q-form>
         </q-card-section>
-
-        <q-card-actions align="between">
-          <q-btn flat label="Cancel" color="negative" v-close-popup />
-          <q-btn flat label="Reset" color="secondary" @click="resetTreeItem" />
-          <q-btn flat label="Submit" color="primary" @click="sendTreeItem" v-close-popup />
-        </q-card-actions>
       </q-card>
     </q-dialog>
   </q-page>
@@ -141,6 +157,8 @@ import type { Constants } from '@services/constants';
 import { useFeedback } from '../../composables/useFeedback';
 
 const feedback = useFeedback();
+
+const labelRule = (value: string) => (value && value.trim().length > 0) || 'Label is required';
 
 const createItem = {
   id: 0,
@@ -260,6 +278,7 @@ const panels = ref<Constants[]>([
 ]);
 
 const loading = ref(false);
+const saving = ref(false);
 
 const showMobileDialog = ref(false);
 
@@ -329,28 +348,48 @@ function findConstantById(constants: Constants[], id: number): Constants | undef
   return undefined;
 }
 
-async function sendTreeItem() {
+async function sendTreeItem(): Promise<boolean> {
   const id = treeItem.value.id;
-  if (id > 0) {
-    const [constantsUpdate] = await Promise.all([constantsService.update(id, treeItem.value)]);
-    console.log(constantsUpdate);
+  saving.value = true;
+  try {
+    if (id > 0) {
+      await constantsService.update(id, treeItem.value);
+      feedback.success('Constant updated');
+    } else {
+      await constantsService.create(treeItem.value);
+      feedback.success('Constant created');
+    }
     resetTreeItem();
-    await Promise.all([loadData()]);
-    //TODO: Get constant from DB and assign the values to current Tree and Panels
-    // const [constantsGet] = await Promise.all([
-    //   constantsService.getById(id)
-    // ]);
-    // console.log(constantsGet)
-  } else if (id == 0) {
-    const [constantsCreate] = await Promise.all([constantsService.create(treeItem.value)]);
-    console.log(constantsCreate);
+    await loadData();
+    return true;
+  } catch (error) {
+    feedback.error(error, 'Could not save the constant');
+    return false;
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function submitDialog() {
+  if (await sendTreeItem()) {
+    showMobileDialog.value = false;
+  }
+}
+
+async function deleteTreeItem() {
+  const id = treeItem.value.id;
+  if (id <= 0) return;
+  const confirmed = await feedback.confirmDelete(
+    `Delete "${treeItem.value.label || id}"? Its children are deleted with it.`,
+  );
+  if (!confirmed) return;
+  try {
+    await constantsService.delete(id);
+    feedback.success('Constant deleted');
     resetTreeItem();
-    await Promise.all([loadData()]);
-    //TODO: Get constant from DB and assign the values to current Tree and Panels
-    // const [constantsGet] = await Promise.all([
-    //   constantsService.getById(id)
-    // ]);
-    // console.log(constantsGet)
+    await loadData();
+  } catch (error) {
+    feedback.error(error, 'Could not delete the constant');
   }
 }
 

@@ -46,9 +46,9 @@ export const constantsService = {
     return api.put<Constants>(`/constants/${id}`, constant);
   },
 
-  //   delete(id: number): Promise<void> {
-  //     return api.delete<void>(`/constants/${id}`);
-  //   },
+  delete(id: number): Promise<void> {
+    return api.delete<void>(`/constants/${id}`);
+  },
 
   flattenConstants(
     constants: Constants[],
