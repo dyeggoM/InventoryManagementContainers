@@ -9,7 +9,9 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - A tree of records with children nested under their parent; a record can hold any depth.
 - Create from the list (“New item”, a floating button on phones), **add a child straight from the
   open record**, or **duplicate** one (parent, icon and attributes carried over, named `<name> (copy)`).
-- Search the tree; the list reports `4 matches`, expands what it finds, and says when nothing matches.
+- Search matches the record's name **and its attribute values**: `SN-0042` finds the item that
+  carries it, `serial` finds the items that have that key, and a matched row shows the pair under the
+  name. The count reports rows that matched on their own, and the panel says when nothing matches.
 - Rows show a child count while collapsed and a paperclip when the record carries files.
 - Delete from an overflow menu that names what it deletes, with confirmation.
 - Empty states everywhere: no records yet, nothing matches, and “Select an item to edit it”.

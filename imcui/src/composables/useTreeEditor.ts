@@ -13,6 +13,12 @@ export interface TreeEntry {
   parentId?: number | null | undefined;
   /** Only the count matters here: the list marks records that carry files. */
   attachmentCount?: number | undefined;
+  /** The attribute rows as stored, so a search can look inside them. */
+  attributes?: string | null | undefined;
+  /** Set while searching: the pair that matched, shown under the label. */
+  match?: { label: string; value: string } | null;
+  /** Set while searching: this row matched on its own, so it counts as a result. */
+  hit?: boolean;
 }
 
 export interface FlatEntry {

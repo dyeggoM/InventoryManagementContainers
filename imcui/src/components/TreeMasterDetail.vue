@@ -34,16 +34,17 @@
             <q-icon name="inventory_2" />
             <div class="text-subtitle1 q-mt-sm">{{ emptyMessage }}</div>
           </div>
-          <div v-else-if="!visibleTree.length" class="text-grey-7 q-pa-sm">
-            Nothing matches “{{ query }}”.
-          </div>
-          <div v-else-if="query" class="text-caption text-grey-7 q-mb-sm">
-            {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
-          </div>
+          <template v-else>
+            <div v-if="!visibleTree.length" class="text-grey-7 q-pa-sm">
+              Nothing matches “{{ query }}”.
+            </div>
+            <template v-else>
+              <div v-if="query" class="text-caption text-grey-7 q-mb-sm">
+                {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
+              </div>
 
-          <q-tree
-            v-else
-            :key="treeVersion"
+              <q-tree
+                :key="treeVersion"
             :nodes="visibleTree"
             node-key="id"
             no-connectors
@@ -57,11 +58,16 @@
             <template v-slot:default-header="prop">
               <div class="row items-center no-wrap imc-tree__row">
                 <q-icon v-if="prop.node.icon" :name="prop.node.icon" size="18px" class="q-mr-xs" />
-                <span
-                  class="ellipsis imc-tree__label"
-                  :class="{ 'text-weight-medium': prop.node.children?.length }"
-                  >{{ prop.node.label }}</span
-                >
+                <div class="column imc-tree__text">
+                  <span
+                    class="ellipsis imc-tree__label"
+                    :class="{ 'text-weight-medium': prop.node.children?.length }"
+                    >{{ prop.node.label }}</span
+                  >
+                  <span v-if="prop.node.match" class="ellipsis imc-tree__match">
+                    {{ prettyLabel(prop.node.match.label) }} · {{ short(prop.node.match.value) }}
+                  </span>
+                </div>
                 <q-icon
                   v-if="prop.node.attachmentCount"
                   name="attach_file"
@@ -78,8 +84,10 @@
                 </span>
                 <q-icon v-else name="chevron_right" size="18px" class="imc-chevron" />
               </div>
+                </template>
+              </q-tree>
             </template>
-          </q-tree>
+          </template>
         </div>
       </template>
 
@@ -160,16 +168,17 @@
           @click="emit('create')"
         />
       </div>
-      <div v-else-if="!visibleTree.length" class="text-grey-7">
-        Nothing matches “{{ query }}”.
-      </div>
-      <div v-else-if="query" class="text-caption text-grey-7 q-mb-sm">
-        {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
-      </div>
+      <template v-else>
+        <div v-if="!visibleTree.length" class="text-grey-7">
+          Nothing matches “{{ query }}”.
+        </div>
+        <template v-else>
+          <div v-if="query" class="text-caption text-grey-7 q-mb-sm">
+            {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
+          </div>
 
-      <q-tree
-        v-else
-        :key="treeVersion"
+          <q-tree
+            :key="treeVersion"
         :nodes="visibleTree"
         node-key="id"
         no-connectors
@@ -182,11 +191,16 @@
       >
         <template v-slot:default-header="prop">
           <div class="row items-center no-wrap imc-tree__row">
-            <span
-              class="ellipsis imc-tree__label"
-              :class="{ 'text-weight-medium': prop.node.children?.length }"
-              >{{ prop.node.label }}</span
-            >
+            <div class="column imc-tree__text">
+              <span
+                class="ellipsis imc-tree__label"
+                :class="{ 'text-weight-medium': prop.node.children?.length }"
+                >{{ prop.node.label }}</span
+              >
+              <span v-if="prop.node.match" class="ellipsis imc-tree__match">
+                {{ prettyLabel(prop.node.match.label) }} · {{ short(prop.node.match.value) }}
+              </span>
+            </div>
             <q-icon
               v-if="prop.node.attachmentCount"
               name="attach_file"
@@ -203,8 +217,10 @@
             </span>
             <q-icon v-else name="chevron_right" size="18px" class="imc-chevron" />
           </div>
+            </template>
+          </q-tree>
         </template>
-      </q-tree>
+      </template>
 
       <q-page-sticky position="bottom-right" :offset="[16, 16]">
         <q-btn
@@ -286,6 +302,7 @@
 import { computed, ref, watch } from 'vue';
 import type { TreeEntry } from '../composables/useTreeEditor';
 import { useFeedback } from '../composables/useFeedback';
+import { prettyLabel } from '../services/utilities';
 
 const feedback = useFeedback();
 
@@ -330,6 +347,12 @@ const dialog = defineModel<boolean>('dialog', { default: false });
 
 const query = ref('');
 
+/** A long value would push the row wide; the label is what matters, the value is a hint. */
+function short(value: string): string {
+  const text = value.replace(/\s+/g, ' ').trim();
+  return text.length > 34 ? `${text.slice(0, 33)}…` : text;
+}
+
 function collectIds(nodes: TreeEntry[], acc: number[] = []): number[] {
   for (const node of nodes) {
     if ((node.children ?? []).length > 0) {
@@ -340,12 +363,44 @@ function collectIds(nodes: TreeEntry[], acc: number[] = []): number[] {
   return acc;
 }
 
+/** The first attribute whose key or value contains the needle; the list shows that pair. */
+function attributeMatch(node: TreeEntry, needle: string): { label: string; value: string } | null {
+  if (!node.attributes) return null;
+  try {
+    const parsed: unknown = JSON.parse(node.attributes);
+    if (!parsed || typeof parsed !== 'object') return null;
+    // Keys are matched with punctuation removed, so "buy price" finds BuyPrice and "serial" finds
+    // a key somebody typed by hand; values match as plain substrings.
+    const needleKey = needle.replace(/[^a-z0-9]/g, '');
+    for (const [key, raw] of Object.entries(parsed as Record<string, unknown>)) {
+      // Only scalars are searchable: an object would stringify to "[object Object]".
+      const value =
+        typeof raw === 'string'
+          ? raw
+          : typeof raw === 'number' || typeof raw === 'boolean'
+            ? String(raw)
+            : '';
+      const keyHit =
+        needleKey.length > 0 && key.toLowerCase().replace(/[^a-z0-9]/g, '').includes(needleKey);
+      if (keyHit || value.toLowerCase().includes(needle)) {
+        return { label: key, value };
+      }
+    }
+  } catch {
+    // A malformed row simply does not match by attribute; the label search still works.
+  }
+  return null;
+}
+
 function filterTree(nodes: TreeEntry[], needle: string): TreeEntry[] {
   const result: TreeEntry[] = [];
   for (const node of nodes) {
     const children = filterTree(node.children ?? [], needle);
-    if (node.label.toLowerCase().includes(needle) || children.length > 0) {
-      result.push({ ...node, children });
+    const byLabel = node.label.toLowerCase().includes(needle);
+    const match = byLabel ? null : attributeMatch(node, needle);
+    if (byLabel || children.length > 0 || match) {
+      // hit: this row matched by itself; a parent kept only for context does not count.
+      result.push({ ...node, children, match, hit: byLabel || match !== null });
     }
   }
   return result;
@@ -356,8 +411,12 @@ const visibleTree = computed(() => {
   return needle ? filterTree(props.tree, needle) : props.tree;
 });
 
+/** Only rows that matched themselves: a parent shown for context is not a result. */
 function countMatches(nodes: TreeEntry[]): number {
-  return nodes.reduce((total, node) => total + 1 + countMatches(node.children ?? []), 0);
+  return nodes.reduce(
+    (total, node) => total + (node.hit ? 1 : 0) + countMatches(node.children ?? []),
+    0,
+  );
 }
 
 const matchCount = computed(() => countMatches(visibleTree.value));
@@ -406,8 +465,18 @@ async function requestClose() {
   min-width: 0;
 }
 
+.imc-tree__text {
+  min-width: 0;
+}
+
 .imc-tree__label {
   font-size: 15px;
+}
+
+.imc-tree__match {
+  font-size: 12px;
+  line-height: 16px;
+  color: #6b7280;
 }
 
 .imc-count {

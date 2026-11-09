@@ -6,7 +6,19 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `feat/ui-polish` (9 commits, awaiting PR)
+## Pending — `feat/search-values`
+
+Search now looks inside the records, not only at their names.
+
+- **The list no longer disappears while searching.** The match counter had taken the tree's `v-else`
+  branch, so typing a query replaced the rows with a line of text — a regression from the polish
+  round. The counter and the tree now share one branch and the tree keeps rendering.
+- **Search matches attribute values.** `SN-0042` finds the record that carries it, `serial` finds the
+  records that have that key at all, and a matched row shows the pair under its name
+  (`Serial · SN-0042`) with the count reporting only rows that matched themselves, not the parents
+  kept for context.
+
+## Merged — `feat/ui-polish` (PR #8, 9 commits)
 
 Guarded form, typed values, attributes of your own, duplicate, a filter and the committed inventory.
 
