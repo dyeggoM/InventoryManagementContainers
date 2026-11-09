@@ -11,6 +11,7 @@
     :loading="loading"
     :saving="saving"
     :empty-message="emptyMessage"
+    :dirty="isDirty"
     entity-label="Item"
     :entry-label="treeItem.label"
     @select="selectData"
@@ -18,9 +19,22 @@
     @submit="submitDialog"
     @reset="resetTreeItem"
     @delete="deleteTreeItem"
+    @duplicate="duplicateEntry"
   >
     <div class="imc-section">
-      <div class="imc-section__title">Details</div>
+      <div class="row items-center justify-between q-mb-xs">
+        <div class="imc-section__title q-mb-none">Details</div>
+        <q-btn
+          v-if="treeItem.id > 0"
+          flat
+          no-caps
+          icon="add"
+          label="Add child item"
+          color="primary"
+          class="q-mb-xs"
+          @click="createChildEntry"
+        />
+      </div>
       <q-input label="Name" v-model="treeItem.label" :rules="[labelRule]" />
       <q-select
         label="Parent item"
@@ -35,7 +49,12 @@
 
     <div class="imc-section">
       <div class="imc-section__title">Attributes</div>
-      <attribute-editor v-model="attributes" :labels="attributeLabels" :lists="attributeLists" />
+      <attribute-editor
+        v-model="attributes"
+        :labels="attributeLabels"
+        :lists="attributeLists"
+        :types="attributeTypes"
+      />
     </div>
 
     <div class="imc-section">
@@ -65,6 +84,7 @@ const feedback = useFeedback();
 
 const attributes = ref<Attributes[]>([]);
 const attributeLabels = ref<string[]>([]);
+const attributeTypes = ref<Record<string, string>>({});
 const attributeLists = ref<Record<string, string[]>>({});
 const attachmentTypes = ref<string[]>([]);
 const attachments = ref<AttachmentRow[]>([]);
@@ -84,6 +104,17 @@ function blankAttributes(): Attributes[] {
   return attributeLabels.value.map((label) => ({ label, value: '' }));
 }
 
+/**
+ * The rows an entry produces: every catalogue attribute, plus any key the record carries that the
+ * catalogue does not define (a value typed on this item alone must survive a reload).
+ */
+function rowsFrom(raw: string | null | undefined): Attributes[] {
+  const parsed = parseAttributes(raw);
+  const rows = attributeLabels.value.map((label) => ({ label, value: parsed[label] ?? '' }));
+  const extra = Object.keys(parsed).filter((key) => !attributeLabels.value.includes(key));
+  return [...rows, ...extra.map((key) => ({ label: key, value: parsed[key] ?? '' }))];
+}
+
 const {
   tree,
   panels,
@@ -95,12 +126,15 @@ const {
   saving,
   treeVersion,
   showMobileDialog,
+  isDirty,
   emptyMessage,
   labelRule,
   loadData,
   selectData,
   resetTreeItem,
   createEntry,
+  createChildEntry,
+  duplicateEntry,
   submitDialog,
   deleteTreeItem,
   parentOptions,
@@ -113,24 +147,42 @@ const {
   emptyMessage: 'No items yet',
   deleteHint: 'Its attachments are deleted with it.',
   splitter: 34,
+  // The entry alone does not describe the form: the attributes and the attachment rows live here.
+  dirtySnapshot: (entry) =>
+    JSON.stringify({
+      entry,
+      attributes: attributes.value,
+      attachments: attachments.value.map((row) => [
+        row.id,
+        row.type ?? '',
+        row.fileName ?? '',
+        (row.uploadBase64 ?? '').length,
+      ]),
+    }),
   onSelect: async (entry) => {
     if (entry.id > 0) {
-      const parsed = parseAttributes(entry.attributes);
-      attributes.value = attributeLabels.value.map((label) => ({
-        label,
-        value: parsed[label] ?? '',
-      }));
+      attributes.value = rowsFrom(entry.attributes);
       await loadAttachments(entry.id);
     } else {
       attributes.value = blankAttributes();
       attachments.value = [];
     }
   },
+  onDuplicate: (source) => {
+    attributes.value = rowsFrom(source.attributes);
+    // Files are not copied: the new record points at nothing until it is given its own.
+    attachments.value = [];
+  },
   onReset: () => {
     attributes.value = blankAttributes();
     attachments.value = [];
   },
   validate: () => {
+    if (attributes.value.some((row) => !row.label.trim() && row.value.trim())) {
+      return 'Give every attribute a name';
+    }
+    const keys = attributes.value.map((row) => row.label.trim().toLowerCase()).filter(Boolean);
+    if (new Set(keys).size !== keys.length) return 'Two attributes have the same name';
     for (const attachment of attachments.value.filter((row) => row.id === 0)) {
       if (!attachment.fileName) return 'Every new attachment needs a file';
       if (!attachment.type) return 'Every new attachment needs a type';
@@ -166,6 +218,11 @@ async function loadConstants() {
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((row) => row.label);
+
+    // How each attribute is edited comes from its definition in Configuration.
+    const types: Record<string, string> = {};
+    for (const row of attributeRows ?? []) types[row.label] = row.dataType ?? 'Text';
+    attributeTypes.value = types;
 
     // A label with children in the constants tree is a choice list; anything else is free text.
     const lists: Record<string, string[]> = {};

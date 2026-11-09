@@ -9,6 +9,8 @@ export interface Constants {
   group?: string | undefined;
   parentId?: number | null | undefined;
   description?: string | undefined;
+  /** How an attribute value is edited: Text | Number | Money | Date | LongText. */
+  dataType?: string | null | undefined;
   parent?: Constants | undefined;
 }
 

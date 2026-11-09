@@ -113,11 +113,11 @@ Thumbs.db
 Desktop.ini
 
 ############################################
-# CODE INVENTORY (generated, local only)
+# CODE INVENTORY (generated)
 ############################################
 
+# The index database is local; AI_INVENTORY.md is committed so the diff shows what changed.
 .code-inventory/
-AI_INVENTORY.md
 ai_inventory.json
 INVENTORY.md
 inventory/

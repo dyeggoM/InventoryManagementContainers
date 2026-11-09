@@ -11,6 +11,7 @@
     :loading="loading"
     :saving="saving"
     :empty-message="emptyMessage"
+    :dirty="isDirty"
     entity-label="Constant"
     :entry-label="treeItem.label"
     @select="selectData"
@@ -18,9 +19,22 @@
     @submit="submitDialog"
     @reset="resetTreeItem"
     @delete="deleteTreeItem"
+    @duplicate="duplicateEntry"
   >
     <div class="imc-section">
-      <div class="imc-section__title">Details</div>
+      <div class="row items-center justify-between q-mb-xs">
+        <div class="imc-section__title q-mb-none">Details</div>
+        <q-btn
+          v-if="treeItem.id > 0"
+          flat
+          no-caps
+          icon="add"
+          label="Add child constant"
+          color="primary"
+          class="q-mb-xs"
+          @click="createChildEntry"
+        />
+      </div>
       <q-input label="Name" v-model="treeItem.label" :rules="[labelRule]" />
       <q-select
         label="Parent"
@@ -44,13 +58,22 @@
         autogrow
         class="q-mt-md"
       />
+      <q-select
+        v-if="isAttributeDefinition"
+        dense
+        label="Data type"
+        v-model="treeItem.dataType"
+        :options="dataTypes"
+        :hint="typeHint"
+        class="q-mt-md"
+      />
       <q-input label="Sort order" v-model="treeItem.sortOrder" class="q-mt-md" />
     </div>
   </tree-master-detail>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import TreeMasterDetail from '../../components/TreeMasterDetail.vue';
 import { useTreeEditor } from '../../composables/useTreeEditor';
 import { constantsService, type Constants } from '@services/constants';
@@ -67,6 +90,28 @@ const blank = (): Constants => ({
   parent: undefined,
 });
 
+const dataTypes = ['Text', 'Number', 'Money', 'Date', 'LongText'];
+
+/** Only a child of the Attribute group describes an item field, so only it has a data type. */
+const isAttributeDefinition = computed(
+  () => treeItem.value.group === 'Attribute' && (treeItem.value.parentId ?? 0) > 0,
+);
+
+const typeHint = computed(() => {
+  switch (treeItem.value.dataType) {
+    case 'Money':
+      return 'Whole numbers, shown with separators and a decimal keypad on phones.';
+    case 'Number':
+      return 'Digits and one decimal separator.';
+    case 'Date':
+      return 'Picked from the calendar instead of typed.';
+    case 'LongText':
+      return 'A paragraph, edited in a text box.';
+    default:
+      return 'Any text, exactly as typed.';
+  }
+});
+
 const {
   tree,
   panels,
@@ -78,12 +123,15 @@ const {
   saving,
   treeVersion,
   showMobileDialog,
+  isDirty,
   emptyMessage,
   labelRule,
   loadData,
   selectData,
   resetTreeItem,
   createEntry,
+  createChildEntry,
+  duplicateEntry,
   submitDialog,
   deleteTreeItem,
   parentOptions,
@@ -96,6 +144,8 @@ const {
   emptyMessage: 'No constants yet',
   deleteHint: 'Its children are deleted with it.',
   splitter: 30,
+  // Only the entry: a constant is a name, an icon and a parent.
+  dirtySnapshot: (entry) => JSON.stringify(entry),
 });
 
 onMounted(() => {

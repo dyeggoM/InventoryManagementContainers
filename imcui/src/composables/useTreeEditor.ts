@@ -1,4 +1,6 @@
-import { ref, type Ref } from 'vue';
+// Shared state machine for both master-detail pages: the tree, the form, and the four operations
+// (load, select, save, delete). Pages supply the service, the blank entry and the hooks.
+import { computed, nextTick, ref, type Ref } from 'vue';
 import { useQuasar } from 'quasar';
 import { useFeedback } from './useFeedback';
 
@@ -9,6 +11,8 @@ export interface TreeEntry {
   icon?: string;
   children: TreeEntry[];
   parentId?: number | null | undefined;
+  /** Only the count matters here: the list marks records that carry files. */
+  attachmentCount?: number | undefined;
 }
 
 export interface FlatEntry {
@@ -39,11 +43,20 @@ export interface TreeEditorOptions<T extends TreeEntry> {
   splitter?: number;
   /** Runs after a node is copied into the form (load attachments, parse attributes, ...). */
   onSelect?: (entry: T) => void | Promise<void>;
+  /** Runs after a record has been copied into a new, unsaved form. */
+  onDuplicate?: (source: T) => void;
   onReset?: () => void;
   /** Runs before a save, for payload shaping the service cannot know about. */
   beforeSave?: (entry: T) => void;
   /** Returns a message to stop the save and show it, or null when the form is valid. */
   validate?: (entry: T) => string | null;
+  /**
+   * Everything the form holds, as a string: the entry plus whatever the page keeps beside it
+   * (attributes, attachment rows). Compared against the last loaded/saved value to know whether
+   * closing the form would throw work away. The entry is passed in so the page never has to close
+   * over a ref declared by this very call.
+   */
+  dirtySnapshot?: (entry: T) => string;
 }
 
 /**
@@ -65,6 +78,26 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
   const saving = ref(false);
   const treeVersion = ref(0);
   const showMobileDialog = ref(false);
+
+  const currentSnapshot = computed(() =>
+    options.dirtySnapshot ? options.dirtySnapshot(treeItem.value) : JSON.stringify(treeItem.value),
+  );
+  // null until a record is loaded or saved: an editor nobody has touched is never dirty, and a
+  // phone that has not opened a form must not be asked to discard anything.
+  const cleanSnapshot = ref<string | null>(null);
+  const isDirty = computed(
+    () => cleanSnapshot.value !== null && currentSnapshot.value !== cleanSnapshot.value,
+  );
+
+  /** Remembers the form as it stands: called once the data is in, so typing is what makes it dirty. */
+  function markClean() {
+    cleanSnapshot.value = currentSnapshot.value;
+    // Pages mirror the form into the entry with watchers (attributes -> entry.attributes); take
+    // the snapshot again once those have run, or a freshly opened record looks edited.
+    void nextTick(() => {
+      cleanSnapshot.value = currentSnapshot.value;
+    });
+  }
 
   function collectExpandable(nodes: TreeEntry[], acc: number[] = []): number[] {
     for (const node of nodes) {
@@ -109,6 +142,7 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     if (node) {
       treeItem.value = Object.assign(options.blank(), node);
       await options.onSelect?.(treeItem.value);
+      markClean();
     }
     if ($q.screen.lt.md) {
       showMobileDialog.value = true;
@@ -119,6 +153,7 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     treeItem.value = options.blank();
     selected.value = 0;
     options.onReset?.();
+    markClean();
   }
 
   /** Opens a blank form: the panel on a desktop, the sheet on a phone. */
@@ -127,6 +162,29 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     if ($q.screen.lt.md) {
       showMobileDialog.value = true;
     }
+  }
+
+  /** Opens a blank form already parented to the record on screen, so a child is one tap away. */
+  function createChildEntry() {
+    const parentId = treeItem.value.id;
+    if (parentId <= 0) return;
+    createEntry();
+    treeItem.value.parentId = parentId;
+    markClean(); // a blank form with its parent pre-filled is still nothing the user typed
+  }
+
+  /**
+   * Opens a new form seeded from the record on screen: kits and sets repeat, and retyping ten
+   * attributes to add the next drum is the kind of work a phone should not ask for.
+   */
+  function duplicateEntry() {
+    const source = treeItem.value;
+    if (source.id <= 0) return;
+    createEntry();
+    treeItem.value.parentId = source.parentId ?? null;
+    treeItem.value.label = `${source.label} (copy)`;
+    treeItem.value.icon = source.icon ?? '';
+    options.onDuplicate?.(source);
   }
 
   async function sendTreeItem(): Promise<boolean> {
@@ -208,12 +266,16 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     saving,
     treeVersion,
     showMobileDialog,
+    isDirty,
+    markClean,
     emptyMessage: options.emptyMessage,
     labelRule,
     loadData,
     selectData,
     resetTreeItem,
     createEntry,
+    createChildEntry,
+    duplicateEntry,
     sendTreeItem,
     submitDialog,
     deleteTreeItem,

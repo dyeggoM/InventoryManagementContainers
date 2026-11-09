@@ -32,6 +32,43 @@ relative path plus a compressed preview (JPEG, longest side 320px) in `Thumbnail
 stay small. `GET /api/attachment/{id}/file` serves the original. Rows written before this change
 carry the whole image inline; they are moved to disk on the next start.
 
+## Code inventory
+
+`AI_INVENTORY.md` is committed: one line per symbol (`path:line`, purpose, callers) so an assistant
+can find what exists and what a change would affect without reading the whole repository.
+
+It is generated, never hand-edited. A pre-commit hook refreshes it from the staged code, so the
+document in a diff always matches the code in the same commit:
+
+```bash
+git config core.hooksPath .githooks    # once per clone
+```
+
+The hook needs the `code-inventory` skill (it looks in `~/.hermes/skills/software-development/`;
+override with `CODE_INVENTORY_HOME`). Without it the hook warns and lets the commit through.
+`git commit --no-verify` skips it for one commit. Regenerate by hand with:
+
+```bash
+python3 "$CODE_INVENTORY_HOME/scripts/inventory.py" sync --root . --lang js
+python3 "$CODE_INVENTORY_HOME/scripts/inventory.py" sync --root IMCAPI --lang cs
+python3 "$CODE_INVENTORY_HOME/scripts/ai_inventory.py" --root . --no-stamp
+```
+
+## Branches
+
+Merged branches accumulate. `scripts/branches.sh` lists every branch — local and remote — whose work
+is already in `origin/main`, and removes them with a flag:
+
+```bash
+scripts/branches.sh                  # dry run: what is safe to delete
+scripts/branches.sh --delete         # asks once, then deletes locally and on the remote
+scripts/branches.sh --delete --yes   # no prompt, for scripts
+```
+
+GitHub can handle the remote half itself: **Settings → General → “Automatically delete head
+branches”**. It only applies to pull requests merged after it is switched on, so the script still
+covers everything older.
+
 ## Install the dependencies
 
 ```bash

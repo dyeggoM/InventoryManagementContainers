@@ -101,6 +101,9 @@ namespace IMCAPI
                     // Older rows carry the whole image; move it to disk once.
                     var storage = serviceScope.ServiceProvider.GetRequiredService<AttachmentStorage>();
                     DatabaseSeeder.BackfillAttachmentsAsync(context, storage).GetAwaiter().GetResult();
+
+                    // Attribute definitions predate typed values; give them sensible types once.
+                    DatabaseSeeder.BackfillAttributeTypesAsync(context).GetAwaiter().GetResult();
                 }
             }
             #endregion

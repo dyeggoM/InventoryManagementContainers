@@ -10,14 +10,80 @@
       No attributes on this item yet.
     </div>
 
+    <!-- Adding a row must not require scrolling past the rows: the actions sit above the table. -->
+    <div class="row items-center q-gutter-x-sm q-mb-xs attribute-actions">
+      <q-btn
+        flat
+        no-caps
+        icon="add"
+        label="Add attribute"
+        color="primary"
+        type="button"
+        :disable="availableLabels.length === 0"
+        @click="add"
+      />
+      <q-btn
+        flat
+        no-caps
+        icon="playlist_add"
+        label="Add custom"
+        color="primary"
+        type="button"
+        @click="addCustom"
+      />
+      <span class="text-caption text-grey-7" v-if="availableLabels.length === 0 && labels.length > 0">
+        all listed
+      </span>
+    </div>
+
+    <!-- Ten rows of attributes scroll past the fold; a filter finds one without scrolling. -->
+    <div v-if="rows.length > 5" class="row items-center no-wrap q-mb-xs attribute-filter">
+      <q-input
+        v-model="filter"
+        dense
+        borderless
+        placeholder="Filter attributes"
+        class="col"
+        input-class="text-caption"
+        clearable
+      >
+        <template v-slot:prepend>
+          <q-icon name="search" size="18px" />
+        </template>
+      </q-input>
+      <span v-if="filter.trim()" class="text-caption text-grey-7 q-ml-sm">
+        {{ visibleRows.length }} of {{ rows.length }}
+      </span>
+    </div>
+
+    <div v-if="filter.trim() && visibleRows.length === 0" class="text-caption text-grey-7 q-mb-sm">
+      Nothing matches “{{ filter }}”.
+    </div>
+
     <div class="attribute-list">
       <div
-        v-for="(row, index) in rows"
+        v-for="{ row, index } in visibleRows"
         :key="`${row.label}-${index}`"
         class="attribute-row"
         :class="{ 'attribute-row--wide': isLongText(row) }"
       >
+        <q-input
+          v-if="isCustom(row)"
+          dense
+          borderless
+          hide-bottom-space
+          class="attribute-name attribute-name--custom"
+          placeholder="Attribute name"
+          :model-value="row.label"
+          :maxlength="40"
+          @update:model-value="(value: string | number | null) => setCustomLabel(index, value)"
+        >
+          <template v-slot:append>
+            <q-icon name="edit_note" size="16px" class="attribute-name__hint" />
+          </template>
+        </q-input>
         <q-select
+          v-else
           dense
           options-dense
           borderless
@@ -45,9 +111,9 @@
           v-else
           dense
           borderless
-          placeholder="—"
+          :placeholder="isDate(row) ? '' : '—'"
           :model-value="display(row, index)"
-          :type="isLongText(row) ? 'textarea' : 'text'"
+          :type="inputType(row)"
           :inputmode="isNumeric(row) ? 'decimal' : undefined"
           :autogrow="isLongText(row)"
           :maxlength="500"
@@ -72,25 +138,6 @@
       </div>
     </div>
 
-    <div class="row items-center q-gutter-sm q-mt-sm">
-      <q-btn
-        flat
-        no-caps
-        dense
-        icon="add"
-        label="Add attribute"
-        :color="availableLabels.length === 0 ? 'grey-6' : 'primary'"
-        type="button"
-        :disable="availableLabels.length === 0"
-        @click="add"
-      />
-      <span v-if="labels.length === 0" class="text-caption text-grey-7">
-        No attributes are defined in Configuration
-      </span>
-      <span v-else-if="availableLabels.length === 0" class="text-caption text-grey-7">
-        All attributes are on this item — remove one to swap it
-      </span>
-    </div>
   </div>
 </template>
 
@@ -108,6 +155,8 @@ const props = defineProps<{
   labels: string[];
   /** label -> allowed values, taken from the constants whose group is that label. */
   lists: Record<string, string[]>;
+  /** label -> data type (Text, Number, Money, Date, LongText), set in Configuration. */
+  types?: Record<string, string | null | undefined>;
 }>();
 
 const rows = defineModel<Attributes[]>({ required: true });
@@ -115,9 +164,28 @@ const rows = defineModel<Attributes[]>({ required: true });
 /** The row being edited: its value is shown raw so the caret never fights a formatter. */
 const focusedIndex = ref<number | null>(null);
 
+/** Finds one attribute among ten; matches the name or the value. */
+const filter = ref('');
+
+/** Pairs keep the original index, so editing a filtered row still targets the right entry. */
+const visibleRows = computed(() => {
+  const needle = filter.value.trim().toLowerCase();
+  const pairs = rows.value.map((row, index) => ({ row, index }));
+  if (!needle) return pairs;
+  return pairs.filter(
+    ({ row }) =>
+      row.label.toLowerCase().includes(needle) || (row.value ?? '').toLowerCase().includes(needle),
+  );
+});
+
 const availableLabels = computed(() =>
   props.labels.filter((label) => !rows.value.some((row) => row.label === label)),
 );
+
+/** A row the catalogue cannot name: typed by hand, stored on this item only. */
+function isCustom(row: Attributes): boolean {
+  return !props.labels.includes(row.label);
+}
 
 function labelOptions(index: number): { label: string; value: string; disable?: boolean }[] {
   const own = rows.value[index]?.label;
@@ -155,9 +223,10 @@ function display(row: Attributes, index: number): string {
 }
 
 function onValue(row: Attributes, index: number, value: string | number | null) {
+  void index;
   const text = value == null ? '' : String(value);
-  // Keep the stored value raw: digits, a decimal point/comma and a leading minus.
-  row.value = text.replace(/(?!^-)[^\d.,-]/g, '');
+  // Only a numeric field is scrubbed: a string like SN-0042 must survive as typed.
+  row.value = isNumeric(row) ? text.replace(/(?!^-)[^\d.,-]/g, '') : text;
 }
 
 function add() {
@@ -165,20 +234,50 @@ function add() {
   if (next) rows.value.push({ label: next, value: '' });
 }
 
+/** Starts a row with an empty key: the user types the name the catalogue does not have. */
+function addCustom() {
+  const row: Attributes = { label: '', value: '' };
+  rows.value.push(row);
+}
+
+/** Keys stay close to what a person typed: letters, digits, spaces, dash and underscore. */
+function setCustomLabel(index: number, value: string | number | null) {
+  const row = rows.value[index];
+  if (!row) return;
+  row.label = (value == null ? '' : String(value)).replace(/[^A-Za-z0-9 _-]/g, '');
+}
+
 function remove(index: number) {
   rows.value.splice(index, 1);
 }
 
-/** Prices and other numeric values get the decimal keypad instead of a full keyboard. */
-function isNumeric(row: Attributes): boolean {
-  const value = (row.value ?? '').trim();
-  return value.length > 0 && /^-?\d+([.,]\d+)?$/.test(value);
+/** The data type of a row: from Configuration for a listed attribute, Text for one typed by hand. */
+function typeOf(row: Attributes): string {
+  return props.types?.[row.label] ?? 'Text';
 }
 
-/** Long prose (a description, a note) gets a textarea; short values stay one line. */
+/** Money and Number get the decimal keypad, digits only and right alignment. */
+function isNumeric(row: Attributes): boolean {
+  const type = typeOf(row);
+  return type === 'Money' || type === 'Number';
+}
+
+/** Long prose gets a textarea spanning the full row. */
 function isLongText(row: Attributes): boolean {
-  if ((row.value ?? '').length > 60 || (row.value ?? '').includes('\n')) return true;
-  return /^(description|notes?)$/i.test(row.label);
+  if (typeOf(row) === 'LongText') return true;
+  // A hand-typed value that grew long is prose whatever its type says.
+  return isCustom(row) && ((row.value ?? '').length > 60 || (row.value ?? '').includes('\n'));
+}
+
+/** Dates open the calendar the device already has instead of a plain text box. */
+function isDate(row: Attributes): boolean {
+  return typeOf(row) === 'Date';
+}
+
+function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
+  if (isLongText(row)) return 'textarea';
+  if (isDate(row)) return 'date';
+  return 'text';
 }
 </script>
 
@@ -193,6 +292,7 @@ function isLongText(row: Attributes): boolean {
 }
 
 .attribute-head {
+  margin-top: 6px;
   margin-bottom: 2px;
   font-size: 11px;
   font-weight: 600;
@@ -219,6 +319,27 @@ function isLongText(row: Attributes): boolean {
 .attribute-name :deep(.q-field__native) {
   color: #4b5563;
   font-size: 14px;
+}
+
+.attribute-actions {
+  min-height: 40px;
+}
+
+.attribute-actions :deep(.q-btn) {
+  padding: 0 8px; /* a 40px row keeps the tap target without a dense 23px button */
+}
+
+.attribute-filter :deep(.q-field__native) {
+  font-size: 13px;
+}
+
+.attribute-name--custom :deep(.q-field__native) {
+  font-style: italic;
+  color: #334155;
+}
+
+.attribute-name__hint {
+  color: #b6bcc6;
 }
 
 .attribute-remove {

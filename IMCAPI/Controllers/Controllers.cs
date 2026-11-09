@@ -4,6 +4,7 @@ using IMCAPI.DB.Repositories;
 using IMCAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace IMCAPI.Controllers
 {
@@ -15,10 +16,12 @@ namespace IMCAPI.Controllers
     public class ItemController : BaseController<Item>
     {
         private readonly AttachmentStorage _attachments;
+        private readonly ApplicationContext _context;
 
-        public ItemController(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments) : base(repository, logger)
+        public ItemController(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments, ApplicationContext context) : base(repository, logger)
         {
             _attachments = attachments;
+            _context = context;
         }
 
         [HttpPost]
@@ -57,6 +60,15 @@ namespace IMCAPI.Controllers
             return await base.Put(id, data);
         }
 
+        private static void ApplyAttachmentCount(ItemDTO node, Dictionary<int, int> counts)
+        {
+            node.AttachmentCount = counts.TryGetValue(node.Id, out var count) ? count : 0;
+            foreach (var child in node.Children)
+            {
+                ApplyAttachmentCount(child, counts);
+            }
+        }
+
         public override async Task<IActionResult> Get()
         {
             try
@@ -64,7 +76,19 @@ namespace IMCAPI.Controllers
                 if (await base.Get() is OkObjectResult okResult)
                 {
                     var data = okResult.Value as List<Item>;
-                    var dto = data?.Select(x => new ItemDTO(x));
+                    var dto = data?.Select(x => new ItemDTO(x)).ToList();
+
+                    // The tree lists files as a count: shipping every thumbnail would put megabytes
+                    // in a response that only needs to say "this one has photos".
+                    var counts = await _context.Attachments
+                        .Where(x => x.IsActive)
+                        .GroupBy(x => x.ItemId)
+                        .Select(g => new { ItemId = g.Key, Count = g.Count() })
+                        .ToDictionaryAsync(x => x.ItemId, x => x.Count);
+                    foreach (var node in dto ?? new List<ItemDTO>())
+                    {
+                        ApplyAttachmentCount(node, counts);
+                    }
 
                     var tree = dto?.Where(x => x.ParentId == null)?.ToList();
                     var panels = data?.Select(x => new ItemDTO(x.Id,x.Label,x.Attributes,x.ParentId, x.Attachments));
@@ -191,7 +215,7 @@ namespace IMCAPI.Controllers
                     var dto = data?.Select(x => new ConstantsDTO(x));
 
                     var tree = dto?.Where(x => x.ParentId == null)?.ToList();
-                    var panels = data?.Select(x => new ConstantsDTO(x.Id, x.Group, x.Label, x.Description, x.SortOrder, x.ParentId, null, new()));
+                    var panels = data?.Select(x => new ConstantsDTO(x.Id, x.Group, x.Label, x.Description, x.SortOrder, x.ParentId, null, new(), x.DataType));
 
                     return Ok(new { tree,panels});
                 }
