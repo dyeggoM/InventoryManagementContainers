@@ -88,6 +88,8 @@ namespace IMCAPI.DB.Entities
         public string? Group { get; set; }
         public string? Description { get; set; } //TODO: Rename to Attributes
         public int SortOrder { get; set; }
+        /// <summary>How an attribute value is edited (Text, Number, Money, Date, LongText).</summary>
+        public string? DataType { get; set; }
 
         public int? ParentId { get; set; }
         public ConstantsDTO? Parent { get; set; }
@@ -99,7 +101,7 @@ namespace IMCAPI.DB.Entities
             Label = "";
         }
 
-        public ConstantsDTO(int id, string? group, string label, string? description, int sortOrder, int? parentId, ConstantsDTO? parent, List<ConstantsDTO> children)
+        public ConstantsDTO(int id, string? group, string label, string? description, int sortOrder, int? parentId, ConstantsDTO? parent, List<ConstantsDTO> children, string? dataType = null)
         {
             // CTOR for panels
             Id = id;
@@ -110,6 +112,7 @@ namespace IMCAPI.DB.Entities
             ParentId = parentId;
             Parent= parent;
             Children = children;
+            DataType = dataType;
             Icon = "";
         }
 
@@ -120,6 +123,7 @@ namespace IMCAPI.DB.Entities
             Group = data.Group;
             Label = data.Label;
             Description = data.Description;
+            DataType = data.DataType;
             SortOrder = data.SortOrder;
             ParentId = data.ParentId;
             Parent = data.Parent != null 

@@ -75,6 +75,9 @@ namespace IMCAPI.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("DataType")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Description")
                         .HasMaxLength(5000)
                         .HasColumnType("TEXT");

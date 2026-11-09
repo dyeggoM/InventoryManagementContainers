@@ -32,6 +32,37 @@ public static class DatabaseSeeder
     }
 
     /// <summary>
+    /// Attribute definitions written before typed values existed have no data type. Prices are
+    /// money, prose is long text, everything else is text — set once, then the user can change it
+    /// in Configuration.
+    /// </summary>
+    /// <returns>How many definitions were given a type.</returns>
+    public static async Task<int> BackfillAttributeTypesAsync(ApplicationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var pending = await context.Constants
+            .Where(c => c.Group == "Attribute" && c.ParentId != null && c.DataType == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var attribute in pending)
+        {
+            attribute.DataType = attribute.Label switch
+            {
+                "BuyPrice" or "RentPrice" => "Money",
+                "Description" or "Notes" => "LongText",
+                _ => "Text",
+            };
+        }
+
+        if (pending.Count > 0)
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        return pending.Count;
+    }
+
+    /// <summary>
     /// Rows written before attachments were stored on disk keep the whole image in the row.
     /// Moves those bytes to disk and leaves a thumbnail behind, once.
     /// </summary>

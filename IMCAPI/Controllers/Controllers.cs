@@ -215,7 +215,7 @@ namespace IMCAPI.Controllers
                     var dto = data?.Select(x => new ConstantsDTO(x));
 
                     var tree = dto?.Where(x => x.ParentId == null)?.ToList();
-                    var panels = data?.Select(x => new ConstantsDTO(x.Id, x.Group, x.Label, x.Description, x.SortOrder, x.ParentId, null, new()));
+                    var panels = data?.Select(x => new ConstantsDTO(x.Id, x.Group, x.Label, x.Description, x.SortOrder, x.ParentId, null, new(), x.DataType));
 
                     return Ok(new { tree,panels});
                 }

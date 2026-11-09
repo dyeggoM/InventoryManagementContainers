@@ -19,6 +19,7 @@
     @submit="submitDialog"
     @reset="resetTreeItem"
     @delete="deleteTreeItem"
+    @duplicate="duplicateEntry"
   >
     <div class="imc-section">
       <div class="row items-center justify-between q-mb-xs">
@@ -57,13 +58,22 @@
         autogrow
         class="q-mt-md"
       />
+      <q-select
+        v-if="isAttributeDefinition"
+        dense
+        label="Data type"
+        v-model="treeItem.dataType"
+        :options="dataTypes"
+        :hint="typeHint"
+        class="q-mt-md"
+      />
       <q-input label="Sort order" v-model="treeItem.sortOrder" class="q-mt-md" />
     </div>
   </tree-master-detail>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import TreeMasterDetail from '../../components/TreeMasterDetail.vue';
 import { useTreeEditor } from '../../composables/useTreeEditor';
 import { constantsService, type Constants } from '@services/constants';
@@ -78,6 +88,28 @@ const blank = (): Constants => ({
   parentId: null,
   description: '',
   parent: undefined,
+});
+
+const dataTypes = ['Text', 'Number', 'Money', 'Date', 'LongText'];
+
+/** Only a child of the Attribute group describes an item field, so only it has a data type. */
+const isAttributeDefinition = computed(
+  () => treeItem.value.group === 'Attribute' && (treeItem.value.parentId ?? 0) > 0,
+);
+
+const typeHint = computed(() => {
+  switch (treeItem.value.dataType) {
+    case 'Money':
+      return 'Whole numbers, shown with separators and a decimal keypad on phones.';
+    case 'Number':
+      return 'Digits and one decimal separator.';
+    case 'Date':
+      return 'Picked from the calendar instead of typed.';
+    case 'LongText':
+      return 'A paragraph, edited in a text box.';
+    default:
+      return 'Any text, exactly as typed.';
+  }
 });
 
 const {
@@ -99,6 +131,7 @@ const {
   resetTreeItem,
   createEntry,
   createChildEntry,
+  duplicateEntry,
   submitDialog,
   deleteTreeItem,
   parentOptions,

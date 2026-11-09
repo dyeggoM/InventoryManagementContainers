@@ -68,6 +68,12 @@ namespace IMCAPI.DB.Entities
         public string Icon { get; set; }
         public string? Group { get; set; }
         public string? Description { get; set; }
+        /// <summary>
+        /// How the value is edited, for constants that describe an item attribute: Text, Number,
+        /// Money, Date or LongText. Null means Text, so rows written before this column exist keep
+        /// working.
+        /// </summary>
+        public string? DataType { get; set; }
         public int SortOrder { get; set; }
 
         public int? ParentId { get; set; }
