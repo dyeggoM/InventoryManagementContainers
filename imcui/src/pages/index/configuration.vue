@@ -1,189 +1,42 @@
 <template>
-  <q-page>
-    <q-linear-progress v-if="loading" indeterminate color="primary" />
-
-    <q-splitter v-model="splitterModel" v-if="$q.screen.gt.sm">
-      <template v-slot:before>
-        <div class="q-pa-md">
-          <div v-if="!loading && tree.length <= 1" class="text-grey-7 q-mb-md">
-            No constants yet — use the "Add New" node to create the first one.
-          </div>
-          <q-tree
-            :key="treeVersion"
-            :nodes="tree"
-            node-key="id"
-            selected-color="primary"
-            v-model:selected="selected"
-            @update:selected="(target) => selectData(target)"
-            v-model:expanded="expanded"
-          >
-            <template v-slot:default-header="prop">
-              <div class="row items-center">
-                <q-icon :name="prop.node.icon" />
-                <div>
-                  <span>{{ prop.node.id }} - {{ prop.node.label }}</span>
-                </div>
-              </div>
-            </template>
-          </q-tree>
-        </div>
-      </template>
-
-      <template v-slot:after>
-        <q-tab-panels
-          v-model="selected"
-          animated
-          transition-prev="jump-up"
-          transition-next="jump-up"
-        >
-          <q-tab-panel v-for="item in panels" :key="item.id" :name="item.id">
-            <div class="text-h4 q-mb-md">Id: {{ item.id }}</div>
-            <q-form @submit="sendTreeItem" @reset="resetTreeItem" class="q-gutter-md">
-              <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
-              <!-- <q-input label="icon" v-model="treeItem.icon" /> -->
-              <q-select
-                label="parentId"
-                class="col-5"
-                v-model="treeItem.parentId"
-                :options="createSelectOptions(tree, item.id)"
-                :option-label="
-                  (opt) =>
-                    Object(opt) === opt && 'label' in opt && opt.label == 'Add New'
-                      ? 'No Parent'
-                      : opt.label
-                "
-                :option-value="
-                  (opt) =>
-                    Object(opt) === opt && 'value' in opt && opt.value == 0 ? null : opt.value
-                "
-                map-options
-                emit-value
-              />
-              <!-- <q-input label="parentId" v-model="treeItem.parentId" /> -->
-              <q-input label="group" v-model="treeItem.group" />
-              <q-input label="description" v-model="treeItem.description" type="textarea" />
-              <q-input label="sortOrder" v-model="treeItem.sortOrder" />
-              <div>
-                <q-btn label="Submit" type="submit" color="primary" />
-                <q-btn label="Reset" type="reset" color="primary" flat class="q-ml-sm" />
-                <q-btn
-                  v-if="treeItem.id > 0"
-                  label="Delete"
-                  type="button"
-                  color="negative"
-                  flat
-                  class="q-ml-sm"
-                  @click="deleteTreeItem"
-                />
-              </div>
-            </q-form>
-          </q-tab-panel>
-        </q-tab-panels>
-      </template>
-    </q-splitter>
-
-    <div v-else class="q-pa-md">
-      <div v-if="!loading && tree.length <= 1" class="text-grey-7 q-mb-md">
-        No constants yet — use the "Add New" node to create the first one.
-      </div>
-      <q-tree
-        :key="treeVersion"
-        :nodes="tree"
-        node-key="id"
-        selected-color="primary"
-        v-model:selected="selected"
-        @update:selected="(target) => selectData(target)"
-        class="text-h5 text-weight-light"
-        v-model:expanded="expanded"
-      >
-        <template v-slot:default-header="prop">
-          <div class="row items-center">
-            <!-- <q-icon :name="prop.node.icon" size="xl" /> -->
-            <div>
-              <span>{{ prop.node.id }} - {{ prop.node.label }}</span>
-            </div>
-          </div>
-        </template>
-      </q-tree>
-    </div>
-
-    <q-dialog
-      v-model="showMobileDialog"
-      :maximized="$q.screen.lt.md"
-      transition-show="slide-up"
-      transition-hide="slide-down"
-    >
-      <q-card :style="$q.screen.lt.md ? '' : 'min-width: 400px'">
-        <q-card-section v-if="treeItem">
-          <div class="text-h4 q-mb-md">Id: {{ treeItem.id }}</div>
-          <q-form @submit="submitDialog" @reset="resetTreeItem" class="q-gutter-md">
-            <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
-            <q-select
-              label="parentId"
-              class="col-5"
-              v-model="treeItem.parentId"
-              :options="createSelectOptions(tree, treeItem.id)"
-              :option-label="
-                (opt) =>
-                  Object(opt) === opt && 'label' in opt && opt.label == 'Add New'
-                    ? 'No Parent'
-                    : opt.label
-              "
-              :option-value="
-                (opt) =>
-                  Object(opt) === opt && 'value' in opt && opt.value == 0 ? null : opt.value
-              "
-              map-options
-              emit-value
-            />
-            <q-input label="group" v-model="treeItem.group" />
-            <q-input label="description" v-model="treeItem.description" type="textarea" />
-            <q-input label="sortOrder" v-model="treeItem.sortOrder" />
-            <q-card-actions align="between" class="q-px-none q-mt-md">
-              <q-btn flat label="Cancel" color="negative" type="button" v-close-popup />
-              <q-btn
-                v-if="treeItem.id > 0"
-                flat
-                label="Delete"
-                color="negative"
-                type="button"
-                @click="deleteTreeItem"
-              />
-              <q-btn label="Reset" color="secondary" flat type="reset" />
-              <q-btn label="Submit" color="primary" type="submit" :loading="saving" />
-            </q-card-actions>
-          </q-form>
-        </q-card-section>
-      </q-card>
-    </q-dialog>
-  </q-page>
+  <tree-master-detail
+    v-model:selected="selected"
+    v-model:expanded="expanded"
+    v-model:splitter="splitterModel"
+    v-model:dialog="showMobileDialog"
+    :tree="tree"
+    :panels="panels"
+    :entry-id="treeItem.id"
+    :tree-version="treeVersion"
+    :loading="loading"
+    :saving="saving"
+    :empty-message="emptyMessage"
+    @select="selectData"
+    @submit="submitDialog"
+    @reset="resetTreeItem"
+    @delete="deleteTreeItem"
+  >
+    <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
+    <q-select
+      label="parentId"
+      v-model="treeItem.parentId"
+      :options="parentOptions()"
+      map-options
+      emit-value
+    />
+    <q-input label="group" v-model="treeItem.group" />
+    <q-input label="description" v-model="treeItem.description" type="textarea" />
+    <q-input label="sortOrder" v-model="treeItem.sortOrder" />
+  </tree-master-detail>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useQuasar } from 'quasar';
-import { constantsService } from '@services/constants';
-import type { Constants } from '@services/constants';
-import { useFeedback } from '../../composables/useFeedback';
+import { onMounted } from 'vue';
+import TreeMasterDetail from '../../components/TreeMasterDetail.vue';
+import { useTreeEditor } from '../../composables/useTreeEditor';
+import { constantsService, type Constants } from '@services/constants';
 
-const feedback = useFeedback();
-const $q = useQuasar();
-
-const labelRule = (value: string) => (value && value.trim().length > 0) || 'Label is required';
-
-const createItem = {
-  id: 0,
-  label: 'Add New',
-  icon: '',
-  children: [],
-  sortOrder: 0,
-  group: '',
-  parentId: null,
-  description: '',
-  parent: undefined,
-};
-
-const treeItem = ref<Constants>({
+const blank = (): Constants => ({
   id: 0,
   label: '',
   icon: '',
@@ -195,166 +48,37 @@ const treeItem = ref<Constants>({
   parent: undefined,
 });
 
-const splitterModel = ref(30);
-const selected = ref(0);
-const tree = ref<Constants[]>([]);
-const panels = ref<Constants[]>([]);
-
-const loading = ref(false);
-const saving = ref(false);
-const treeVersion = ref(0);
-
-const expanded = ref<number[]>([]);
-
-function collectExpandable(nodes: { id: number; children?: unknown[] }[], acc: number[] = []): number[] {
-  for (const node of nodes) {
-    const kids = (node.children ?? []) as { id: number; children?: unknown[] }[];
-    if (kids.length > 0) {
-      acc.push(node.id);
-      collectExpandable(kids, acc);
-    }
-  }
-  return acc;
-}
-
-const showMobileDialog = ref(false);
-
-async function loadData() {
-  loading.value = true;
-
-  try {
-    const constants = await constantsService.getAll();
-
-    if (constants != null && constants != undefined) {
-      if (constants.tree != null && constants.tree != undefined) {
-        tree.value = constants.tree;
-        tree.value.unshift(createItem);
-      }
-      if (constants.panels != null && constants.panels != undefined) {
-        panels.value = constants.panels;
-        panels.value.unshift(createItem);
-      }
-    }
-  } catch (error) {
-    feedback.error(error, 'Could not load the constants');
-  } finally {
-    loading.value = false;
-    expanded.value = collectExpandable(tree.value);
-    // Re-create the tree with data present so expansion and node state start consistent.
-    treeVersion.value += 1;
-  }
-}
+const {
+  tree,
+  panels,
+  treeItem,
+  splitterModel,
+  selected,
+  expanded,
+  loading,
+  saving,
+  treeVersion,
+  showMobileDialog,
+  emptyMessage,
+  labelRule,
+  loadData,
+  selectData,
+  resetTreeItem,
+  submitDialog,
+  deleteTreeItem,
+  parentOptions,
+} = useTreeEditor<Constants>({
+  service: constantsService,
+  addNew: () => ({ ...blank(), label: 'Add New' }),
+  blank,
+  flatten: (nodes) => constantsService.flattenConstants(nodes),
+  entity: 'constant',
+  emptyMessage: 'No constants yet — use the "Add New" node to create the first one.',
+  deleteHint: 'Its children are deleted with it.',
+  splitter: 30,
+});
 
 onMounted(() => {
   void loadData();
 });
-
-function selectData(target: number) {
-  const data = findConstantById(tree.value, target);
-  if (data != undefined) {
-    treeItem.value.id = data.id;
-    treeItem.value.label = data.label;
-    treeItem.value.icon = data.icon;
-    treeItem.value.children = data.children;
-    treeItem.value.sortOrder = data.sortOrder;
-    treeItem.value.group = data.group;
-    treeItem.value.parentId = data.parentId;
-    treeItem.value.description = data.description;
-    treeItem.value.parent = data.parent;
-  }
-
-  if ($q.screen.lt.md) {
-    showMobileDialog.value = true;
-  }
-}
-
-function findConstantById(constants: Constants[], id: number): Constants | undefined {
-  for (const data of constants) {
-    if (data.id === id) {
-      return data;
-    }
-
-    const found = findConstantById(data.children, id);
-
-    if (found) {
-      return found;
-    }
-  }
-
-  return undefined;
-}
-
-async function sendTreeItem(): Promise<boolean> {
-  const id = treeItem.value.id;
-  saving.value = true;
-  try {
-    if (id > 0) {
-      await constantsService.update(id, treeItem.value);
-      feedback.success('Constant updated');
-    } else {
-      await constantsService.create(treeItem.value);
-      feedback.success('Constant created');
-    }
-    resetTreeItem();
-    await loadData();
-    return true;
-  } catch (error) {
-    feedback.error(error, 'Could not save the constant');
-    return false;
-  } finally {
-    saving.value = false;
-  }
-}
-
-async function submitDialog() {
-  if (await sendTreeItem()) {
-    showMobileDialog.value = false;
-  }
-}
-
-async function deleteTreeItem() {
-  const id = treeItem.value.id;
-  if (id <= 0) return;
-  const confirmed = await feedback.confirmDelete(
-    `Delete "${treeItem.value.label || id}"? Its children are deleted with it.`,
-  );
-  if (!confirmed) return;
-  try {
-    await constantsService.delete(id);
-    feedback.success('Constant deleted');
-    resetTreeItem();
-    await loadData();
-  } catch (error) {
-    feedback.error(error, 'Could not delete the constant');
-  }
-}
-
-function resetTreeItem() {
-  treeItem.value = {
-    id: 0,
-    label: '',
-    icon: '',
-    children: [],
-    sortOrder: 0,
-    group: '',
-    parentId: null,
-    description: '',
-    parent: undefined,
-  };
-}
-
-function createSelectOptions(constants: Constants[], id: number) {
-  const flattened = constantsService.flattenConstants(constants);
-
-  const mappedFlattened = flattened
-    .filter((x) => x.id != id || id == 0)
-    .map((item) => ({
-      value: item.id,
-      label: item.hierarchicalLabel,
-      // Optional: add indentation for better visual hierarchy
-      displayLabel: `${'  '.repeat(item.depth)}${item.label}`,
-      depth: item.depth,
-    }));
-  return mappedFlattened;
-}
 </script>
