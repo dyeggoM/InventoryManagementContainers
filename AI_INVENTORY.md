@@ -256,7 +256,7 @@ Indexed: **351 symbols** across **42 files** (198 C#, 0 Python, 153 JS/TS/Vue) �
 - `L155` **function** `AttachmentEditor.pickFromGallery`(row) — Asking for a capture device makes phones skip the gallery, so this reopens it. · → 1 (AttachmentEditor.onFile)
 - `L168` **function** `AttachmentEditor.onFile`(row, file) · → 1 (fileToBase64) · ← 1
 
-### `imcui/src/components/AttributeEditor.vue` — 370 lines, 21 symbols
+### `imcui/src/components/AttributeEditor.vue` — 379 lines, 21 symbols
 
 - `L1` **component** `AttributeEditor` (SFC) — state: `focusedIndex, filter, visibleRows, availableLabels`
 - `L186` **function** `AttributeEditor.isCustom`(row) — A row the catalogue cannot name: typed by hand, stored on this item only. · ← 1

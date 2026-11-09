@@ -10,6 +10,32 @@
       No attributes on this item yet.
     </div>
 
+    <!-- Adding a row must not require scrolling past the rows: the actions sit above the table. -->
+    <div class="row items-center q-gutter-x-sm q-mb-xs attribute-actions">
+      <q-btn
+        flat
+        no-caps
+        icon="add"
+        label="Add attribute"
+        color="primary"
+        type="button"
+        :disable="availableLabels.length === 0"
+        @click="add"
+      />
+      <q-btn
+        flat
+        no-caps
+        icon="playlist_add"
+        label="Add custom"
+        color="primary"
+        type="button"
+        @click="addCustom"
+      />
+      <span class="text-caption text-grey-7" v-if="availableLabels.length === 0 && labels.length > 0">
+        all listed
+      </span>
+    </div>
+
     <!-- Ten rows of attributes scroll past the fold; a filter finds one without scrolling. -->
     <div v-if="rows.length > 5" class="row items-center no-wrap q-mb-xs attribute-filter">
       <q-input
@@ -112,32 +138,6 @@
       </div>
     </div>
 
-    <div class="row items-center q-gutter-sm q-mt-sm">
-      <q-btn
-        flat
-        no-caps
-        dense
-        icon="add"
-        label="Add attribute"
-        color="primary"
-        type="button"
-        :disable="availableLabels.length === 0"
-        @click="add"
-      />
-      <q-btn
-        flat
-        no-caps
-        dense
-        icon="playlist_add"
-        label="Custom attribute"
-        color="primary"
-        type="button"
-        @click="addCustom"
-      />
-      <span v-if="availableLabels.length === 0 && labels.length > 0" class="text-caption text-grey-7">
-        Every listed attribute is on this item
-      </span>
-    </div>
   </div>
 </template>
 
@@ -292,6 +292,7 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
 }
 
 .attribute-head {
+  margin-top: 6px;
   margin-bottom: 2px;
   font-size: 11px;
   font-weight: 600;
@@ -318,6 +319,14 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
 .attribute-name :deep(.q-field__native) {
   color: #4b5563;
   font-size: 14px;
+}
+
+.attribute-actions {
+  min-height: 40px;
+}
+
+.attribute-actions :deep(.q-btn) {
+  padding: 0 8px; /* a 40px row keeps the tap target without a dense 23px button */
 }
 
 .attribute-filter :deep(.q-field__native) {
