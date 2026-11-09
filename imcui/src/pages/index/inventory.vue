@@ -201,7 +201,8 @@ function addAttachment() {
   attachments.value.push({
     id: 0,
     itemId: treeItem.value.id,
-    type: null,
+    // Photos are the common case on a phone, and the type decides which picker opens.
+    type: attachmentTypes.value.includes('Photo') ? 'Photo' : null,
     fileName: null,
     uploadBase64: null,
     attributes: null,
