@@ -1,15 +1,21 @@
 <template>
   <q-page>
+    <q-linear-progress v-if="loading" indeterminate color="primary" />
+
     <q-splitter v-model="splitterModel" v-if="$q.screen.gt.sm">
       <template v-slot:before>
         <div class="q-pa-md">
+          <div v-if="!loading && tree.length <= 1" class="text-grey-7 q-mb-md">
+            No items yet — use the "Add New" node to create the first one.
+          </div>
           <q-tree
+            :key="treeVersion"
             :nodes="tree"
             node-key="id"
             selected-color="primary"
             v-model:selected="selected"
             @update:selected="(target) => selectData(target)"
-            default-expand-all
+            v-model:expanded="expanded"
           >
             <template v-slot:default-header="prop">
               <div class="row items-center">
@@ -36,13 +42,13 @@
               <q-btn
                 v-if="item.id > 0"
                 label="Delete"
-                type="submit"
+                type="button"
                 color="negative"
                 @click="deleteTreeItem"
               />
             </div>
             <q-form @submit="sendTreeItem" @reset="resetTreeItem" class="q-gutter-md">
-              <q-input label="label" v-model="treeItem.label" />
+              <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
               <!-- <q-input label="icon" v-model="treeItem.icon" /> -->
               <q-select
                 label="parentId"
@@ -174,14 +180,18 @@
     </q-splitter>
 
     <div v-else class="q-pa-md">
+      <div v-if="!loading && tree.length <= 1" class="text-grey-7 q-mb-md">
+        No items yet — use the "Add New" node to create the first one.
+      </div>
       <q-tree
+        :key="treeVersion"
         :nodes="tree"
         node-key="id"
         selected-color="primary"
         v-model:selected="selected"
         @update:selected="(target) => selectData(target)"
         class="text-h5 text-weight-light"
-        default-expand-all
+        v-model:expanded="expanded"
       >
         <template v-slot:default-header="prop">
           <div class="row items-center">
@@ -203,8 +213,8 @@
       <q-card :style="$q.screen.lt.md ? '' : 'min-width: 400px'">
         <q-card-section v-if="treeItem">
           <div class="text-h4 q-mb-md">Id: {{ treeItem.id }}</div>
-          <q-form @submit="sendTreeItem" @reset="resetTreeItem" class="q-gutter-md">
-            <q-input label="label" v-model="treeItem.label" />
+          <q-form @submit="submitDialog" @reset="resetTreeItem" class="q-gutter-md">
+            <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
             <!-- <q-input label="icon" v-model="treeItem.icon" /> -->
             <q-select
               label="parentId"
@@ -321,14 +331,21 @@
                 </div>
               </div>
             </div>
+            <q-card-actions align="between" class="q-px-none q-mt-md">
+              <q-btn flat label="Cancel" color="negative" type="button" v-close-popup />
+              <q-btn
+                v-if="treeItem.id > 0"
+                flat
+                label="Delete"
+                color="negative"
+                type="button"
+                @click="deleteTreeItem"
+              />
+              <q-btn label="Reset" color="secondary" flat type="reset" />
+              <q-btn label="Submit" color="primary" type="submit" :loading="saving" />
+            </q-card-actions>
           </q-form>
         </q-card-section>
-
-        <q-card-actions align="between">
-          <q-btn flat label="Cancel" color="negative" v-close-popup />
-          <q-btn flat label="Reset" color="secondary" @click="resetTreeItem" />
-          <q-btn flat label="Submit" color="primary" @click="sendTreeItem" v-close-popup />
-        </q-card-actions>
       </q-card>
     </q-dialog>
   </q-page>
@@ -336,6 +353,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { useQuasar } from 'quasar';
 import { itemsService } from '@services/items';
 import { attachmentsService } from '@services/attachment';
 import { constantsService } from '@services/constants';
@@ -343,6 +361,12 @@ import { fileToBase64 } from '@services/utilities';
 import type { Item, Attributes } from '@services/items';
 import type { Attachment } from '@services/attachment';
 import type { Constants } from '@services/constants';
+import { useFeedback } from '../../composables/useFeedback';
+
+const feedback = useFeedback();
+const $q = useQuasar();
+
+const labelRule = (value: string) => (value && value.trim().length > 0) || 'Label is required';
 
 const createItem = {
   id: 0,
@@ -389,40 +413,28 @@ const treeItem = ref<Item>({
 
 const splitterModel = ref(50);
 const selected = ref(-1);
-const tree = ref<Item[]>([
-  {
-    label: 'Relax Hotel',
-    id: 0,
-    icon: '',
-    children: [
-      {
-        label: 'Food',
-        id: 1,
-        icon: 'restaurant_menu',
-        children: [],
-      },
-    ],
-  },
-]);
+const tree = ref<Item[]>([]);
 
-const panels = ref<Item[]>([
-  {
-    label: 'Relax Hotel',
-    id: 0,
-    icon: '',
-    children: [],
-  },
-  {
-    label: 'Food',
-    id: 1,
-    icon: 'restaurant_menu',
-    children: [],
-  },
-]);
+const panels = ref<Item[]>([]);
 
 const fileBase64 = ref<string>('');
 const file = ref<File>();
 const loading = ref(false);
+const saving = ref(false);
+const treeVersion = ref(0);
+
+const expanded = ref<number[]>([]);
+
+function collectExpandable(nodes: { id: number; children?: unknown[] }[], acc: number[] = []): number[] {
+  for (const node of nodes) {
+    const kids = (node.children ?? []) as { id: number; children?: unknown[] }[];
+    if (kids.length > 0) {
+      acc.push(node.id);
+      collectExpandable(kids, acc);
+    }
+  }
+  return acc;
+}
 
 const attributes = ref<Attributes[]>([]);
 
@@ -452,23 +464,22 @@ async function loadData() {
         panels.value.unshift(createItem);
       }
     }
-    console.log(items);
     if (constantsAttachmentTypes != null && constantsAttachmentTypes != undefined) {
       attachmentTypes.value = constantsAttachmentTypes.map((x) => x.label);
     }
-    console.log(constantsAttachmentTypes);
     if (constantsAttributeLabels != null && constantsAttributeLabels != undefined) {
       attributeLabels.value = constantsAttributeLabels.map((x) => x.label);
     }
-    console.log(constantsAttributeLabels);
     if (constants != null && constants != undefined) {
       constantsData.value = constants.panels;
     }
-    console.log(constants);
   } catch (error) {
-    console.error(error);
+    feedback.error(error, 'Could not load the items');
   } finally {
     loading.value = false;
+    expanded.value = collectExpandable(tree.value);
+    // Re-create the tree with data present so expansion and node state start consistent.
+    treeVersion.value += 1;
   }
 }
 
@@ -492,7 +503,7 @@ async function loadAttachments(id: number) {
       attachments.value = [];
     }
   } catch (error) {
-    console.error(error);
+    feedback.error(error, 'Could not load the attachments');
   } finally {
     loading.value = false;
   }
@@ -510,10 +521,10 @@ async function selectData(target: number) {
     treeItem.value.parentId = data.parentId;
     treeItem.value.parent = data.parent;
     if (data.id > 0) {
-      const json = JSON.parse(data.attributes ?? '{}') as Record<string, string>;
+      const parsed = parseAttributes(data.attributes);
       attributes.value = attributeLabels.value.map((label) => ({
         label,
-        value: json[label] ?? '',
+        value: parsed[label] ?? '',
       }));
       await loadAttachments(data.id);
     } else {
@@ -526,8 +537,20 @@ async function selectData(target: number) {
     }
   }
 
-  if (window.innerWidth < 768) {
+  if ($q.screen.lt.md) {
     showMobileDialog.value = true;
+  }
+}
+
+function parseAttributes(raw: string | null | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
+  } catch {
+    // Rows written before the serializer existed can hold invalid JSON; the form must still open.
+    feedback.error('This item has malformed attributes; they were reset in the form.');
+    return {};
   }
 }
 
@@ -547,27 +570,33 @@ function findItemById(item: Item[], id: number): Item | undefined {
   return undefined;
 }
 
-async function sendTreeItem() {
+async function sendTreeItem(): Promise<boolean> {
   const id = treeItem.value.id;
-  if (id > 0) {
-    //TODO: ADD ATTACHMENTS, ADD ONLY ATTACHMENTS WITH ID 0
-    treeItem.value.attachments = [];
-    const attachmentsData = attachments.value.filter((x) => x.id == 0);
-    treeItem.value.attachments = attachmentsData;
-    const [itemUpdate] = await Promise.all([itemsService.update(id, treeItem.value)]);
-    console.log(itemUpdate);
+  saving.value = true;
+  try {
+    // Only attachments created in this form are sent; existing ones live in their own table.
+    treeItem.value.attachments = attachments.value.filter((x) => x.id == 0);
+    if (id > 0) {
+      await itemsService.update(id, treeItem.value);
+      feedback.success('Item updated');
+    } else {
+      await itemsService.create(treeItem.value);
+      feedback.success('Item created');
+    }
     resetTreeItem();
-    await Promise.all([loadData()]);
-  } else if (id == 0) {
-    //TODO: ADD ATTACHMENTS, ADD ONLY ATTACHMENTS WITH ID 0
-    // treeItem.value.attachments=[]
-    treeItem.value.attachments = [];
-    const attachmentsData = attachments.value.filter((x) => x.id == 0);
-    treeItem.value.attachments = attachmentsData;
-    const [itemCreate] = await Promise.all([itemsService.create(treeItem.value)]);
-    console.log(itemCreate);
-    resetTreeItem();
-    await Promise.all([loadData()]);
+    await loadData();
+    return true;
+  } catch (error) {
+    feedback.error(error, 'Could not save the item');
+    return false;
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function submitDialog() {
+  if (await sendTreeItem()) {
+    showMobileDialog.value = false;
   }
 }
 
@@ -597,10 +626,18 @@ function resetTreeItem() {
 
 async function deleteTreeItem() {
   const id = treeItem.value.id;
-  if (id > 0) {
-    await Promise.all([itemsService.delete(id)]);
+  if (id <= 0) return;
+  const confirmed = await feedback.confirmDelete(
+    `Delete "${treeItem.value.label || id}"? Its attachments are deleted with it.`,
+  );
+  if (!confirmed) return;
+  try {
+    await itemsService.delete(id);
+    feedback.success('Item deleted');
     resetTreeItem();
-    await Promise.all([loadData()]);
+    await loadData();
+  } catch (error) {
+    feedback.error(error, 'Could not delete the item');
   }
 }
 
@@ -625,14 +662,21 @@ function addAttribute() {
 
 async function deleteAttachment(index: number) {
   const attachmentData = attachments.value[index];
-  if (attachmentData != null && attachmentData != undefined) {
-    if (attachmentData.id > 0) {
-      await Promise.all([attachmentsService.delete(attachmentData.id)]);
-
-      await Promise.all([loadAttachments(attachmentData.itemId)]);
-    } else {
-      attachments.value.splice(index, 1);
+  if (!attachmentData) return;
+  if (attachmentData.id > 0) {
+    const confirmed = await feedback.confirmDelete(
+      `Delete attachment "${attachmentData.fileName || attachmentData.id}"?`,
+    );
+    if (!confirmed) return;
+    try {
+      await attachmentsService.delete(attachmentData.id);
+      feedback.success('Attachment deleted');
+      await loadAttachments(attachmentData.itemId);
+    } catch (error) {
+      feedback.error(error, 'Could not delete the attachment');
     }
+  } else {
+    attachments.value.splice(index, 1);
   }
 }
 
@@ -659,22 +703,20 @@ async function onFileSelected(file: File | null, index: number) {
       attachments.value[index].fileBase64 = fileBase64.value;
     }
   } catch (error) {
-    console.error('Unable to convert file:', error);
+    feedback.error(error, 'Could not read the selected file');
   }
 }
 
 watch(
   attributes,
   () => {
-    let json = '{';
-    attributes.value.forEach((x) => {
-      json += `"${x.label}":"${x.value}",`;
-    });
-    if (json.length > 1) {
-      json = json.slice(0, -1);
+    // Build the payload with a serializer, never by string concatenation: a value containing a
+    // quote, backslash or newline used to produce invalid JSON that the API stored verbatim.
+    const record: Record<string, string> = {};
+    for (const attribute of attributes.value) {
+      if (attribute.label) record[attribute.label] = attribute.value ?? '';
     }
-    json += '}';
-    treeItem.value.attributes = json;
+    treeItem.value.attributes = JSON.stringify(record);
   },
   { deep: true },
 );
@@ -700,7 +742,7 @@ function getAttributeList(attribute: string): string[] {
 }
 
 function validateAttributeValue(value: string): boolean | string {
-  return !value.includes('"') || 'Double-quotes are not allowed';
+  return (value ?? '').length <= 500 || 'Max 500 characters';
 }
 
 function createSelectOptions(items: Item[], id: number) {
@@ -715,7 +757,6 @@ function createSelectOptions(items: Item[], id: number) {
       displayLabel: `${'  '.repeat(item.depth)}${item.label}`,
       depth: item.depth,
     }));
-  console.log(mappedFlattened);
   return mappedFlattened;
 }
 </script>

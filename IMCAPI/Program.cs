@@ -21,10 +21,22 @@ namespace IMCAPI
             #region CORS
             builder.Services.AddCors(confg =>
                 confg.AddPolicy("AllowCors",
-                    p => p
-                        .WithOrigins(builder.Configuration["CORS:AllowedCors"]?.Split(",") ?? Array.Empty<string>())
-                        .WithMethods("POST", "PUT", "GET", "DELETE")
-                        .AllowAnyHeader()));
+                    p =>
+                    {
+                        if (builder.Environment.IsDevelopment())
+                        {
+                            // A dev box is reached from other machines (LAN IP, dev-server port), so
+                            // pinning one origin only produces opaque browser failures.
+                            p.SetIsOriginAllowed(_ => true);
+                        }
+                        else
+                        {
+                            p.WithOrigins(builder.Configuration["CORS:AllowedCors"]?.Split(",") ?? Array.Empty<string>());
+                        }
+
+                        p.WithMethods("POST", "PUT", "GET", "DELETE")
+                         .AllowAnyHeader();
+                    }));
             #endregion
 
             builder.Services.AddControllers().AddJsonOptions(options =>
