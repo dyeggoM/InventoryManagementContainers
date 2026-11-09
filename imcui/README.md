@@ -54,6 +54,16 @@ python3 "$CODE_INVENTORY_HOME/scripts/inventory.py" sync --root IMCAPI --lang cs
 python3 "$CODE_INVENTORY_HOME/scripts/ai_inventory.py" --root . --no-stamp
 ```
 
+## Tests
+
+```bash
+npm test          # Vitest + jsdom: the tree editor's state machine, the attribute editor's rows
+npm run typecheck # vue-tsc
+npm run lint:check
+```
+
+Components mount with Quasar's own components stubbed, so no dev server or browser is needed.
+
 ## Branches
 
 Merged branches accumulate. `scripts/branches.sh` lists every branch — local and remote — whose work

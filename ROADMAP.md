@@ -15,6 +15,9 @@ What is deliberately not built yet, in the order it is worth doing.
   new record named `<name> (copy)`. Files are not copied.
 - **Installable on the home screen.** PWA mode, manifest, icons and a service worker that serves the
   shell offline.
+- **Tests with teeth.** `GetById` was returning no children at all (the two failures on `main` were
+  a real bug, not flaky tests); nine API integration tests now drive the app over HTTP against a
+  throwaway database, and Vitest covers the tree editor's state machine and the attribute editor.
 - **Search by attribute value.** `SN-0042` finds the record that carries it and shows the pair under
   the name; the count only counts rows that matched themselves.
 
@@ -24,15 +27,16 @@ Attachments are posted as a data URL inside JSON, which is ~33 % overhead and ho
 in memory on the phone. A multipart endpoint (and `capture="environment"` straight on the input)
 would stream the file and let the server thumbnail it as it lands.
 
-## 2. Tests
+## 2. Authentication
 
-The API has `Testing/` (repository, attachment storage, thumbnail rules). The UI has none:
-`useTreeEditor`, the attribute editor (typed rows, custom keys) and the attachment editor deserve
-Vitest tests before the next refactor, and the controllers need integration tests over the real
-endpoints.
+The API has no authentication: `[Authorize]` is commented out, CORS is open in development and the
+service binds `0.0.0.0` for the LAN. On the workshop network that is a conscious trade-off; before
+the app leaves it, a shared token (or ASP.NET Identity, which the context already inherits from)
+has to close the door. Deferred by decision until the UI and the data model settle.
 
-## 3. Bulk entry
+## 3. Bulk entry from a template
 
-Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case;
-the next step is adding several children to a parent in one pass (a small queue in the sheet), then
-importing a CSV.
+Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case; the
+next step is a CSV/Excel template the user fills in (parent, children, attributes per row, one column
+per attribute key) and uploads, with a preview of what will be created before anything is written.
+Waits on authentication: an import endpoint is the last thing to leave open.

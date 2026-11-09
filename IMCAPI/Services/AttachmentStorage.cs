@@ -17,9 +17,13 @@ public sealed class AttachmentStorage
 
     private readonly string _contentRoot;
 
-    public AttachmentStorage(IWebHostEnvironment environment)
+    public AttachmentStorage(IWebHostEnvironment environment, IConfiguration configuration)
     {
-        _contentRoot = environment.ContentRootPath;
+        // Media:Root keeps files out of the project folder — integration tests point it at a temp
+        // directory, and a deployment can put the files on a mounted volume.
+        _contentRoot = configuration["Media:Root"] is { Length: > 0 } root
+            ? root
+            : environment.ContentRootPath;
     }
 
     public sealed record StoredAttachment(string RelativePath, string? ThumbnailBase64);
