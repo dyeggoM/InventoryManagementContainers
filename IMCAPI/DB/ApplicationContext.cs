@@ -1,0 +1,141 @@
+﻿using IMCAPI.DB.Entities;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+
+namespace IMCAPI.DB
+{
+    public class ApplicationContext : IdentityDbContext
+    {
+        public virtual DbSet<Item> Items { get; set; }
+
+        public virtual DbSet<Attachment> Attachments { get; set; }
+
+        public virtual DbSet<Constants> Constants { get; set; }
+
+        public ApplicationContext(DbContextOptions<ApplicationContext> options)
+            : base(options)
+        {
+        }
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            optionsBuilder.EnableSensitiveDataLogging();
+        }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<Item>().ToTable("Items");
+            modelBuilder.Entity<Attachment>().ToTable("Attachments");
+            modelBuilder.Entity<Constants>().ToTable("Constants");
+
+            ConfigureItem(modelBuilder);
+
+            ConfigureAttachment(modelBuilder);
+
+            ConfigureConstant(modelBuilder);
+
+            // ─────────────────────────────────────────────
+            // GLOBAL QUERY FILTER (soft delete)
+            // ─────────────────────────────────────────────
+            modelBuilder.Entity<Item>().HasQueryFilter(i => i.IsActive);
+            modelBuilder.Entity<Attachment>().HasQueryFilter(i => i.IsActive);
+            modelBuilder.Entity<Constants>().HasQueryFilter(i => i.IsActive);
+
+        }
+
+
+        private void ConfigureItem(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Item>(entity =>
+            {
+                // ── Properties ──
+                entity.Property(e => e.Label)
+                      .HasMaxLength(1000)
+                      .IsRequired();
+                entity.Property(e => e.Icon)
+                      .HasMaxLength(50)
+                      .IsRequired();
+
+                entity.Property(e => e.Attributes);
+//                      .HasColumnType("nvarchar(max)"); // JSON storage
+
+                // ── Self-referencing relationship (Parent/Children) ──
+                entity.HasOne(i => i.Parent)
+                      .WithMany(i => i.Children)
+                      .HasForeignKey(i => i.ParentId)
+                      .OnDelete(DeleteBehavior.Restrict); // Prevent cascade on self-ref
+
+                // ── Indexes ──
+                entity.HasIndex(e => e.ParentId);
+            });
+        }
+
+        private void ConfigureAttachment(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Attachment>(entity =>
+            {
+                entity.Property(e => e.Type)
+                      .HasMaxLength(200)
+                      .IsRequired();
+
+                entity.Property(e => e.FileName)
+                      .HasMaxLength(500)
+                      .IsRequired();
+
+                entity.Property(e => e.FilePath)
+                      .HasMaxLength(2000);
+
+                entity.Property(e => e.FileBase64);
+                //                      .HasColumnType("varbinary(max)");
+
+                entity.Property(e => e.Attributes);
+//                      .HasColumnType("nvarchar(max)");
+
+                // ── Relationship to Item ──
+                entity.HasOne<Item>()
+                      .WithMany(i => i.Attachments)
+                      .HasForeignKey(t => t.ItemId)
+                      .OnDelete(DeleteBehavior.Cascade); // If item deleted, attachments go too
+
+                // ── Indexes ──
+                entity.HasIndex(e => e.ItemId);
+                entity.HasIndex(e => e.Type);
+            });
+        }
+
+        private void ConfigureConstant(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Constants>(entity =>
+            {
+                // ── Properties ──
+                entity.Property(e => e.Group)
+                      .HasMaxLength(500)
+                      .IsRequired();
+
+                entity.Property(e => e.Label)
+                      .HasMaxLength(1000)
+                      .IsRequired();
+                entity.Property(e => e.Icon)
+                      .HasMaxLength(50)
+                      .IsRequired();
+
+                entity.Property(e => e.Description)
+                      .HasMaxLength(5000);
+
+                // ── Self-referencing (optional hierarchy) ──
+                entity.HasOne(c => c.Parent)
+                      .WithMany(c => c.Children)
+                      .HasForeignKey(c => c.ParentId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // ── Indexes ──
+                entity.HasIndex(e => e.Group);
+                entity.HasIndex(e => new { e.Group, e.Label }).IsUnique();
+                entity.HasIndex(e => new { e.ParentId, e.Label }).IsUnique();
+                entity.HasIndex(e => e.ParentId);
+            });
+        }
+
+    }
+}

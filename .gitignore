@@ -1,0 +1,112 @@
+
+############################################
+# .NET BACKEND
+############################################
+
+
+IMCAPI/[Bb]in/
+IMCAPI/[Oo]bj/
+IMCAPI/[Dd]ebug/
+IMCAPI/[Rr]elease/
+IMCAPI/artifacts/
+IMCAPI/Logs/
+Testing/[Bb]in/
+Testing/[Oo]bj/
+Testing/[Dd]ebug/
+Testing/[Rr]elease/
+Testing/artifacts/
+Testing/Logs/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .NET logs and test results
+Testing/TestResults/
+**/TestResults/
+*.log
+
+# Logs and test results
+*.log
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+coverage/
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# Publish artifacts
+publish/
+*.publishsettings
+*.azurePubxml
+
+# Local database files
+*.mdf
+*.ldf
+*.ndf
+
+# Certificates and private keys
+*.pfx
+*.p12
+*.key
+
+
+############################################
+# QUASAR / VUE.JS
+############################################
+
+# Dependencies
+imcui/node_modules/
+
+# Build output
+imcui/dist/
+imcui/.quasar/
+
+# Caches
+imcui/.vite/
+imcui/.cache/
+imcui/coverage/
+
+# Environment variables
+imcui/.env
+imcui/.env.*
+!imcui/.env.example
+
+# Debug logs
+imcui/npm-debug.log*
+imcui/yarn-debug.log*
+imcui/pnpm-debug.log*
+
+# Dependencies
+imcui/node_modules/
+
+############################################
+# IDE
+############################################
+
+.vscode/
+.history/
+
+############################################
+# OS
+############################################
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+############################################
+# TEMPORARY FILES
+############################################
+
+*.tmp
+*.bak
+*.swp
+*~
