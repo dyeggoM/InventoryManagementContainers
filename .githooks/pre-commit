@@ -40,6 +40,13 @@ fi
 
 echo "pre-commit: refreshing the code inventory"
 
+# The index reads the working tree, so unstaged edits end up in the document. Say so rather than
+# letting a partially staged commit look like it describes only what it contains.
+if [ -n "$(git diff --name-only)" ]; then
+  echo "pre-commit: note — the working tree has unstaged changes; the inventory reflects the files,"
+  echo "            not just the staged diff."
+fi
+
 if [ "$touch_js" -eq 1 ]; then
   python3 "$inventory/scripts/inventory.py" sync --root "$root" --lang js >/dev/null
 fi
