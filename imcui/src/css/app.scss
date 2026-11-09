@@ -1,1 +1,35 @@
-// app global css
+// Shared layout primitives. The pages are phone-first, so the scale lives in one place: a section
+// heading, a comfortable tap target and the room a floating action button needs.
+.imc-page {
+  padding-bottom: 88px; // keeps the last row above the FAB
+}
+
+.imc-section + .imc-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eff1f4;
+}
+
+.imc-section__title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.imc-row {
+  min-height: 44px;
+}
+
+.imc-empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.imc-empty .q-icon {
+  font-size: 48px;
+  color: #c4c9d2;
+}

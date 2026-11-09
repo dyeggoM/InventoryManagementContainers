@@ -90,7 +90,9 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     loading.value = true;
     try {
       const response = await options.service.getAll();
-      tree.value = [...(response?.tree ?? []), options.addNew()];
+      // The tree lists real records only; the empty entry lives in the panels, so "new" is a
+      // button and not a node pretending to be an item.
+      tree.value = response?.tree ?? [];
       panels.value = [...(response?.panels ?? []), options.addNew()];
     } catch (error) {
       feedback.error(error, `Could not load the ${options.entity}s`);
@@ -117,6 +119,14 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     treeItem.value = options.blank();
     selected.value = 0;
     options.onReset?.();
+  }
+
+  /** Opens a blank form: the panel on a desktop, the sheet on a phone. */
+  function createEntry() {
+    resetTreeItem();
+    if ($q.screen.lt.md) {
+      showMobileDialog.value = true;
+    }
   }
 
   async function sendTreeItem(): Promise<boolean> {
@@ -203,6 +213,7 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     loadData,
     selectData,
     resetTreeItem,
+    createEntry,
     sendTreeItem,
     submitDialog,
     deleteTreeItem,
