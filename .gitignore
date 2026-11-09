@@ -74,6 +74,7 @@ IMCAPI/media/
 
 # Dependencies
 imcui/node_modules/
+imcui/src-pwa/node_modules/
 
 # Build output
 imcui/dist/
