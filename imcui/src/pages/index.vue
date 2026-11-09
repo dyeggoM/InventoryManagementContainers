@@ -1,6 +1,6 @@
 <template>
   <q-layout view="lHh Lpr lFf">
-    <q-header elevated>
+    <q-header elevated class="app-header">
       <q-toolbar>
         <q-btn
           flat
@@ -15,7 +15,7 @@
       </q-toolbar>
     </q-header>
 
-    <q-drawer v-model="leftDrawerOpen" bordered show-if-above :width="220">
+    <q-drawer v-model="leftDrawerOpen" bordered show-if-above :width="240" :breakpoint="1023">
       <q-list padding>
         <q-item-label header>Inventory Management</q-item-label>
         <q-item
@@ -67,3 +67,9 @@ function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value;
 }
 </script>
+<style scoped>
+/* Phones with a notch: keep the toolbar out from under the status bar. */
+.app-header {
+  padding-top: env(safe-area-inset-top);
+}
+</style>

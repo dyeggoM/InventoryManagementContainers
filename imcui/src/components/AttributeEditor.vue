@@ -131,4 +131,18 @@ function maxLength(value: string): boolean | string {
   column-gap: 8px;
   align-items: start;
 }
+
+/* Phone: same two columns, tighter, so all eight attributes stay scannable without a long scroll;
+   the remove button keeps a 40px tap area. */
+@media (max-width: 599px) {
+  .attribute-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+    column-gap: 6px;
+  }
+
+  .attribute-row :deep(.q-field__native),
+  .attribute-row :deep(.q-field__input) {
+    font-size: 15px;
+  }
+}
 </style>
