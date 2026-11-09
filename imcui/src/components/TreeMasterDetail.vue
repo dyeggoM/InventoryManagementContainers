@@ -108,7 +108,14 @@
               </div>
               <q-btn v-if="panel.id > 0" flat round dense icon="more_vert" aria-label="More actions">
                 <q-menu anchor="bottom right" self="top right" auto-close>
-                  <q-list dense style="min-width: 180px">
+                  <q-list dense style="min-width: 200px">
+                    <q-item clickable v-close-popup @click="emit('duplicate')">
+                      <q-item-section avatar>
+                        <q-icon name="content_copy" />
+                      </q-item-section>
+                      <q-item-section>Duplicate {{ entityLabel.toLowerCase() }}</q-item-section>
+                    </q-item>
+                    <q-separator />
                     <q-item clickable v-close-popup @click="emit('delete')">
                       <q-item-section avatar>
                         <q-icon name="delete_outline" color="negative" />
@@ -236,7 +243,14 @@
             class="q-mr-xs"
           >
             <q-menu anchor="bottom right" self="top right" auto-close>
-              <q-list dense style="min-width: 180px">
+              <q-list dense style="min-width: 200px">
+                <q-item clickable v-close-popup @click="emit('duplicate')">
+                  <q-item-section avatar>
+                    <q-icon name="content_copy" />
+                  </q-item-section>
+                  <q-item-section>Duplicate {{ entityLabel.toLowerCase() }}</q-item-section>
+                </q-item>
+                <q-separator />
                 <q-item clickable v-close-popup @click="emit('delete')">
                   <q-item-section avatar>
                     <q-icon name="delete_outline" color="negative" />
@@ -305,6 +319,7 @@ const emit = defineEmits<{
   submit: [];
   reset: [];
   delete: [];
+  duplicate: [];
   close: [];
 }>();
 

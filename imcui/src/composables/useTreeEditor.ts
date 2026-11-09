@@ -43,6 +43,8 @@ export interface TreeEditorOptions<T extends TreeEntry> {
   splitter?: number;
   /** Runs after a node is copied into the form (load attachments, parse attributes, ...). */
   onSelect?: (entry: T) => void | Promise<void>;
+  /** Runs after a record has been copied into a new, unsaved form. */
+  onDuplicate?: (source: T) => void;
   onReset?: () => void;
   /** Runs before a save, for payload shaping the service cannot know about. */
   beforeSave?: (entry: T) => void;
@@ -171,6 +173,20 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     markClean(); // a blank form with its parent pre-filled is still nothing the user typed
   }
 
+  /**
+   * Opens a new form seeded from the record on screen: kits and sets repeat, and retyping ten
+   * attributes to add the next drum is the kind of work a phone should not ask for.
+   */
+  function duplicateEntry() {
+    const source = treeItem.value;
+    if (source.id <= 0) return;
+    createEntry();
+    treeItem.value.parentId = source.parentId ?? null;
+    treeItem.value.label = `${source.label} (copy)`;
+    treeItem.value.icon = source.icon ?? '';
+    options.onDuplicate?.(source);
+  }
+
   async function sendTreeItem(): Promise<boolean> {
     const id = treeItem.value.id;
     const problem = options.validate?.(treeItem.value) ?? null;
@@ -259,6 +275,7 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     resetTreeItem,
     createEntry,
     createChildEntry,
+    duplicateEntry,
     sendTreeItem,
     submitDialog,
     deleteTreeItem,
