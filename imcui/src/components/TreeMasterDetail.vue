@@ -65,7 +65,7 @@
                     >{{ prop.node.label }}</span
                   >
                   <span v-if="prop.node.match" class="ellipsis imc-tree__match">
-                    {{ prettyLabel(prop.node.match.label) }} · {{ short(prop.node.match.value) }}
+                    {{ prettyLabel(prop.node.match.label) }} · {{ shortValue(prop.node.match.value) }}
                   </span>
                 </div>
                 <q-icon
@@ -198,7 +198,7 @@
                 >{{ prop.node.label }}</span
               >
               <span v-if="prop.node.match" class="ellipsis imc-tree__match">
-                {{ prettyLabel(prop.node.match.label) }} · {{ short(prop.node.match.value) }}
+                {{ prettyLabel(prop.node.match.label) }} · {{ shortValue(prop.node.match.value) }}
               </span>
             </div>
             <q-icon
@@ -303,6 +303,7 @@ import { computed, ref, watch } from 'vue';
 import type { TreeEntry } from '../composables/useTreeEditor';
 import { useFeedback } from '../composables/useFeedback';
 import { prettyLabel } from '../services/utilities';
+import { countMatches, filterTree, shortValue } from '../services/search';
 
 const feedback = useFeedback();
 
@@ -347,12 +348,6 @@ const dialog = defineModel<boolean>('dialog', { default: false });
 
 const query = ref('');
 
-/** A long value would push the row wide; the label is what matters, the value is a hint. */
-function short(value: string): string {
-  const text = value.replace(/\s+/g, ' ').trim();
-  return text.length > 34 ? `${text.slice(0, 33)}…` : text;
-}
-
 function collectIds(nodes: TreeEntry[], acc: number[] = []): number[] {
   for (const node of nodes) {
     if ((node.children ?? []).length > 0) {
@@ -363,61 +358,10 @@ function collectIds(nodes: TreeEntry[], acc: number[] = []): number[] {
   return acc;
 }
 
-/** The first attribute whose key or value contains the needle; the list shows that pair. */
-function attributeMatch(node: TreeEntry, needle: string): { label: string; value: string } | null {
-  if (!node.attributes) return null;
-  try {
-    const parsed: unknown = JSON.parse(node.attributes);
-    if (!parsed || typeof parsed !== 'object') return null;
-    // Keys are matched with punctuation removed, so "buy price" finds BuyPrice and "serial" finds
-    // a key somebody typed by hand; values match as plain substrings.
-    const needleKey = needle.replace(/[^a-z0-9]/g, '');
-    for (const [key, raw] of Object.entries(parsed as Record<string, unknown>)) {
-      // Only scalars are searchable: an object would stringify to "[object Object]".
-      const value =
-        typeof raw === 'string'
-          ? raw
-          : typeof raw === 'number' || typeof raw === 'boolean'
-            ? String(raw)
-            : '';
-      const keyHit =
-        needleKey.length > 0 && key.toLowerCase().replace(/[^a-z0-9]/g, '').includes(needleKey);
-      if (keyHit || value.toLowerCase().includes(needle)) {
-        return { label: key, value };
-      }
-    }
-  } catch {
-    // A malformed row simply does not match by attribute; the label search still works.
-  }
-  return null;
-}
-
-function filterTree(nodes: TreeEntry[], needle: string): TreeEntry[] {
-  const result: TreeEntry[] = [];
-  for (const node of nodes) {
-    const children = filterTree(node.children ?? [], needle);
-    const byLabel = node.label.toLowerCase().includes(needle);
-    const match = byLabel ? null : attributeMatch(node, needle);
-    if (byLabel || children.length > 0 || match) {
-      // hit: this row matched by itself; a parent kept only for context does not count.
-      result.push({ ...node, children, match, hit: byLabel || match !== null });
-    }
-  }
-  return result;
-}
-
 const visibleTree = computed(() => {
   const needle = query.value.trim().toLowerCase();
   return needle ? filterTree(props.tree, needle) : props.tree;
 });
-
-/** Only rows that matched themselves: a parent shown for context is not a result. */
-function countMatches(nodes: TreeEntry[]): number {
-  return nodes.reduce(
-    (total, node) => total + (node.hit ? 1 : 0) + countMatches(node.children ?? []),
-    0,
-  );
-}
 
 const matchCount = computed(() => countMatches(visibleTree.value));
 

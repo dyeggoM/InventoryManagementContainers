@@ -37,7 +37,7 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   (quality 72), 20 MB limit.
 - “Open original” streams the file from `GET /api/attachment/{id}/file` (range requests supported) so
   a large photo opens in the phone's viewer instead of being decoded into the page.
-- Deleting an attachment or a record removes the files.
+- Deleting an attachment or a record removes the files from disk, not only the row.
 
 ## Configuration
 

@@ -52,7 +52,8 @@ public class ApiTests
     [Test]
     public async Task GetItems_ReturnsARootTreeAndPanels()
     {
-        await PostItem(Unique("Root"));
+        var label = Unique("Root");
+        await PostItem(label);
 
         var payload = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
 
@@ -61,8 +62,12 @@ public class ApiTests
             Assert.That(payload.TryGetProperty("tree", out var tree), Is.True);
             Assert.That(payload.TryGetProperty("panels", out var panels), Is.True);
             Assert.That(tree.ValueKind, Is.EqualTo(JsonValueKind.Array));
-            Assert.That(tree.GetArrayLength(), Is.GreaterThan(0), "the record just created is a root");
-            Assert.That(panels.GetArrayLength(), Is.GreaterThan(0));
+            Assert.That(
+                tree.EnumerateArray().Select(n => n.GetProperty("label").GetString()),
+                Does.Contain(label), "the record just created is in the tree");
+            Assert.That(
+                panels.EnumerateArray().Select(n => n.GetProperty("label").GetString()),
+                Does.Contain(label), "and in the flat list the form uses");
         });
 
         var node = payload.GetProperty("tree")[0];
@@ -270,6 +275,168 @@ public class ApiTests
 
         Assert.That((int)response.StatusCode, Is.GreaterThanOrEqualTo(400),
             "a record without a label cannot be stored");
+    }
+
+
+    [Test]
+    public async Task GetItemById_UnknownId_Returns404()
+    {
+        var response = await _client.GetAsync("/api/item/987654");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
+    public async Task PutItem_WithAMismatchedId_Returns400()
+    {
+        var item = await PostItem(Unique("Mismatch"));
+        var id = item.GetProperty("id").GetInt32();
+
+        var response = await _client.PutAsJsonAsync($"/api/item/{id + 1}", new
+        {
+            id,
+            label = "Should not land",
+            icon = "",
+            attributes = "{}",
+            children = Array.Empty<object>(),
+            attachments = Array.Empty<object>(),
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
+    public async Task DeleteItem_AlsoDeletesItsAttachmentsAndFiles()
+    {
+        var item = await PostItem(Unique("Cascade"));
+        var itemId = item.GetProperty("id").GetInt32();
+
+        var created = await _client.PostAsJsonAsync("/api/attachment", new
+        {
+            itemId,
+            type = "Photo",
+            fileName = "cascade.png",
+            uploadBase64 = "data:image/png;base64," + Convert.ToBase64String(Png(16, 16)),
+        });
+        created.EnsureSuccessStatusCode();
+        var attachment = await created.Content.ReadFromJsonAsync<JsonElement>(Json);
+        var attachmentId = attachment.GetProperty("id").GetInt32();
+        var path = Path.Combine(_factory.MediaRoot, attachment.GetProperty("filePath").GetString()!
+            .Replace('/', Path.DirectorySeparatorChar));
+        Assert.That(File.Exists(path), Is.True);
+
+        var deleted = await _client.DeleteAsync($"/api/item/{itemId}");
+        Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(File.Exists(path), Is.False, "the file goes with the record");
+            Assert.That(
+                _client.GetAsync($"/api/attachment/item/{itemId}").GetAwaiter().GetResult().StatusCode,
+                Is.EqualTo(HttpStatusCode.NoContent), "and so does the row");
+        });
+    }
+
+    [Test]
+    public async Task GetAttachmentFile_SupportsARangeRequest()
+    {
+        var item = await PostItem(Unique("Ranged"));
+        var itemId = item.GetProperty("id").GetInt32();
+        var bytes = Png(20, 20);
+
+        var created = await _client.PostAsJsonAsync("/api/attachment", new
+        {
+            itemId,
+            type = "Photo",
+            fileName = "range.png",
+            uploadBase64 = "data:image/png;base64," + Convert.ToBase64String(bytes),
+        });
+        created.EnsureSuccessStatusCode();
+        var attachment = await created.Content.ReadFromJsonAsync<JsonElement>(Json);
+        var id = attachment.GetProperty("id").GetInt32();
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/attachment/{id}/file");
+        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 9);
+        var response = await _client.SendAsync(request);
+        var body = await response.Content.ReadAsByteArrayAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.PartialContent));
+            Assert.That(response.Content.Headers.ContentRange?.Length, Is.EqualTo(bytes.Length));
+            Assert.That(body, Has.Length.EqualTo(10));
+        });
+    }
+
+    [Test]
+    public async Task GetAttachmentsByItem_ReturnsTheRows_OrNoContent()
+    {
+        var empty = await PostItem(Unique("NoFiles"));
+        var emptyId = empty.GetProperty("id").GetInt32();
+        Assert.That((await _client.GetAsync($"/api/attachment/item/{emptyId}")).StatusCode,
+            Is.EqualTo(HttpStatusCode.NoContent));
+
+        var item = await PostItem(Unique("Files"));
+        var itemId = item.GetProperty("id").GetInt32();
+        (await _client.PostAsJsonAsync("/api/attachment", new
+        {
+            itemId,
+            type = "User Manual",
+            fileName = "manual.pdf",
+            uploadBase64 = "data:application/pdf;base64," + Convert.ToBase64String(new byte[] { 1, 2, 3 }),
+        })).EnsureSuccessStatusCode();
+
+        var list = await _client.GetFromJsonAsync<JsonElement>($"/api/attachment/item/{itemId}", Json);
+        Assert.Multiple(() =>
+        {
+            Assert.That(list.GetArrayLength(), Is.EqualTo(1));
+            Assert.That(list[0].GetProperty("fileName").GetString(), Is.EqualTo("manual.pdf"));
+            Assert.That(list[0].GetProperty("itemId").GetInt32(), Is.EqualTo(itemId));
+        });
+    }
+
+    [Test]
+    public async Task GetConstantsByGroup_ReturnsOnlyThatGroup()
+    {
+        var attributes = await _client.GetFromJsonAsync<JsonElement>("/api/constants/group/Attribute", Json);
+
+        Assert.That(attributes.GetArrayLength(), Is.GreaterThan(0));
+        Assert.That(
+            attributes.EnumerateArray().Select(c => c.GetProperty("group").GetString()).Distinct(),
+            Is.EquivalentTo(new[] { "Attribute" }));
+    }
+
+    [Test]
+    public async Task PostItem_WithALabelBeyondTheColumn_IsRejected()
+    {
+        var response = await _client.PostAsJsonAsync("/api/item", new
+        {
+            label = new string('x', 1001),
+            icon = "",
+            attributes = "{}",
+            children = Array.Empty<object>(),
+            attachments = Array.Empty<object>(),
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest),
+            "the label column holds 1000 characters");
+    }
+
+    [Test]
+    public async Task PostAttachment_WithoutAPayload_IsRejected()
+    {
+        var item = await PostItem(Unique("NoPayload"));
+        var itemId = item.GetProperty("id").GetInt32();
+
+        var response = await _client.PostAsJsonAsync("/api/attachment", new
+        {
+            itemId,
+            type = "Photo",
+            fileName = "nothing.png",
+            uploadBase64 = "%%%not-base64%%%",
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
     private async Task<int> TreeAttachmentCount(int itemId)

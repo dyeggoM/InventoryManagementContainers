@@ -18,8 +18,12 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Without an origin jsdom runs with an opaque one and `localStorage` throws; services/api.ts
+    // reads a token from it at import time.
+    environmentOptions: { jsdom: { url: 'http://localhost/' } },
     globals: true,
     include: ['src/**/*.spec.ts'],
+    setupFiles: ['src/test-setup.ts'],
     css: false,
   },
 });

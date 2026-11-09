@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick, ref } from 'vue';
 
 // The composable asks Quasar for the screen size and for notifications; both are replaced here so
 // the state machine can be exercised without mounting anything.
@@ -213,5 +214,87 @@ describe('useTreeEditor', () => {
     feedback.confirmDelete.mockResolvedValueOnce(true);
     await editor.deleteTreeItem();
     expect(service.delete).toHaveBeenCalledWith(1);
+  });
+
+  it('saves an existing record through update and a new one through create', async () => {
+    const { editor, service } = makeEditor(newCaptured());
+    await editor.loadData();
+    await editor.selectData(1);
+
+    editor.treeItem.value.label = 'Renamed';
+    expect(await editor.sendTreeItem()).toBe(true);
+    expect(service.update).toHaveBeenCalledWith(1, expect.objectContaining({ label: 'Renamed' }));
+    expect(service.create).not.toHaveBeenCalled();
+
+    editor.createEntry();
+    editor.treeItem.value.label = 'Brand new';
+    expect(await editor.sendTreeItem()).toBe(true);
+    expect(service.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the sheet only when the save succeeded, and keeps it open when it failed', async () => {
+    screen.lt.md = true;
+    const { editor, service } = makeEditor(newCaptured());
+    await editor.loadData();
+    await editor.selectData(1);
+
+    editor.treeItem.value.label = 'Fine';
+    expect(await editor.submitDialog()).toBe(true);
+    expect(editor.showMobileDialog.value).toBe(false);
+
+    await editor.selectData(2);
+    service.update.mockRejectedValueOnce(new Error('500'));
+    editor.treeItem.value.label = 'Broken';
+    expect(await editor.submitDialog()).toBe(false);
+    expect(editor.showMobileDialog.value, 'the form stays open so the work is not lost').toBe(true);
+    expect(feedback.error).toHaveBeenCalled();
+  });
+
+  it('reports a load failure instead of leaving the page blank', async () => {
+    const { editor, service } = makeEditor(newCaptured());
+    service.getAll.mockRejectedValueOnce(new Error('offline'));
+
+    await editor.loadData();
+
+    expect(feedback.error).toHaveBeenCalledWith(expect.anything(), 'Could not load the items');
+    expect(editor.loading.value).toBe(false);
+    expect(editor.tree.value).toEqual([]);
+  });
+
+  it('keeps the record when the delete fails', async () => {
+    const { editor, service } = makeEditor(newCaptured());
+    await editor.loadData();
+    await editor.selectData(2);
+
+    feedback.confirmDelete.mockResolvedValueOnce(true);
+    service.delete.mockRejectedValueOnce(new Error('locked'));
+
+    await editor.deleteTreeItem();
+
+    expect(feedback.error).toHaveBeenCalled();
+    expect(editor.treeItem.value.id, 'the form still holds the record that could not be deleted').toBe(2);
+  });
+
+  it('takes the page snapshot into account when deciding what is dirty', async () => {
+    const extra = ref('a'); // a page ref, like the attribute rows the form keeps beside the entry
+    const { service } = makeEditor(newCaptured());
+    const editor = useTreeEditor<Row>({
+      service,
+      addNew: () => ({ id: 0, label: 'Add New', icon: '', children: [] }),
+      blank: () => ({ id: 0, label: '', icon: '', children: [], parentId: null }),
+      flatten: () => [],
+      entity: 'item',
+      emptyMessage: '',
+      deleteHint: '',
+      dirtySnapshot: (entry) => JSON.stringify({ entry, extra: extra.value }),
+    });
+
+    await editor.loadData();
+    await editor.selectData(1);
+    expect(editor.isDirty.value).toBe(false);
+
+    extra.value = 'b'; // an attribute row changed on the page
+    await nextTick();
+    expect(editor.isDirty.value).toBe(true);
   });
 });

@@ -25,6 +25,19 @@ The suite stops lying, and grows teeth.
   typed rows (money keypad, prose textarea, date picker, text kept verbatim, custom keys, filter).
 - `AttachmentStorage` takes an optional `Media:Root` so tests (and a deployment) can keep files out
   of the project folder.
+- **Deleting a record deletes its files.** The API soft-deleted the record and left the attachment
+  rows and their files behind, although the confirm dialog says “Its attachments are deleted with
+  it.” `ItemController.Delete` now removes the files and the rows first; a test proves the file is
+  gone from disk and the list endpoint returns `204`.
+- **A review pass over the suite**: the search logic moved out of the component into
+  `services/search.ts` so it can be tested at all (14 cases: key/value matching, case and punctuation
+  insensitivity, malformed JSON, parents kept for context, the count), and the API gained 8 cases it
+  was missing — 404 on an unknown id, `400` on a mismatched PUT, range requests on the file endpoint,
+  attachments by item (`204` when empty), the group endpoint, a label over the column length, an
+  invalid upload, and the delete cascade. UI cases added for the attachment editor (camera vs file
+  manager by type, preview vs icon, remove/add, the saved-file link) and for the tree editor's save
+  paths (update vs create, the sheet closing only on success, a failed load keeping the page usable,
+  a failed delete keeping the record, and the page's own snapshot counting as dirty).
 
 ## Pending — `feat/pwa` (stacked on `feat/search-values`)
 
