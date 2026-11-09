@@ -1,7 +1,8 @@
-const API_BASE_URL = import.meta.env.QCLI_API_URL;
-if (!API_BASE_URL) {
-  throw new Error('QCLI_API_URL is not configured');
-}
+// Prefer the configured URL (see .env.example). Without one, assume the API runs beside the page on
+// port 5173: deriving the host from location keeps the app usable when it is opened from another
+// machine on the LAN, where "localhost" would point at the browser's own PC.
+const configuredBaseUrl = (import.meta.env.QCLI_API_URL ?? '').trim();
+const API_BASE_URL = configuredBaseUrl || `http://${window.location.hostname}:5173/api`;
 // const API_BASE_URL = 'https://your-api.com/api';
 
 const token = localStorage.getItem('access_token');

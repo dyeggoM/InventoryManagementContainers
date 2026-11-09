@@ -8,6 +8,14 @@
       "dotnetRunMessages": true,
       "applicationUrl": "http://localhost:5173"
     },
+    "lan": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://0.0.0.0:5173"
+    },
     "https": {
       "commandName": "Project",
       "environmentVariables": {

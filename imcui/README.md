@@ -7,18 +7,20 @@ Two processes: the API and this UI.
 ```bash
 # 1. API  — http://localhost:5173 (routes under /api)
 export DOTNET_ROOT="$HOME/.dotnet" && export PATH="$DOTNET_ROOT:$PATH"
-dotnet run --project ../IMCAPI
+dotnet run --project ../IMCAPI                # local only
+dotnet run --project ../IMCAPI --launch-profile lan   # reachable from the LAN
 
 # 2. UI   — http://localhost:9000
-cp .env.example .env      # QCLI_API_URL=http://localhost:5173/api
+cp .env.example .env      # optional: QCLI_API_URL=http://localhost:5173/api
 npm install
 npm run dev
 ```
 
-The API allows exactly `http://localhost:9000` and `https://localhost:9000` (see
-`IMCAPI/appsettings.Development.json`), so if you change the Quasar dev port you must change CORS
-too — otherwise every request fails as an opaque network error. `QCLI_API_URL` is required at
-startup: `src/services/api.ts` throws if it is missing.
+Without `QCLI_API_URL` the UI calls `http://<the host serving the page>:5173/api`, so opening
+`http://<lan-ip>:9000` from another machine works without editing `.env`. In Development the API
+accepts any origin (CORS is pinned to `CORS:AllowedCors` only outside Development); changing the
+Quasar dev port therefore no longer breaks it, but `--launch-profile lan` is required for the API to
+listen on anything other than loopback.
 
 ## Install the dependencies
 
