@@ -1,93 +1,101 @@
 <template>
-  <div class="column q-gutter-sm">
-    <div class="row items-center q-gutter-md">
-      <q-btn label="Add Attachment" type="button" color="secondary" @click="emit('add')" />
-      <span v-if="rows.length" class="text-caption text-grey-7">
-        {{ rows.length }} on this item
-      </span>
+  <div class="attachment-editor">
+    <div v-if="rows.length === 0" class="text-caption text-grey-7 q-mb-sm">
+      No attachments yet — take a photo or pick a file.
     </div>
 
-    <div v-if="rows.length === 0" class="text-caption text-grey-7">No attachments yet.</div>
-
-    <q-card v-for="(row, index) in rows" :key="`${row.id}-${index}`" flat bordered class="q-pa-sm">
-      <div class="attachment-row">
-        <q-select
-          dense
-          options-dense
-          label="type"
-          v-model="row.type"
-          :options="types"
-          :rules="[(value: string) => !!value || 'Pick a type']"
-        />
-
-        <div v-if="row.id === 0" class="attachment-pick">
-          <q-file
-            dense
-            :label="isPhoto(row) ? 'Take a photo' : 'Select a file'"
-            :accept="isPhoto(row) ? 'image/*' : undefined"
-            :capture="isPhoto(row) ? 'environment' : undefined"
-            :model-value="row.file ?? null"
-            :rules="[() => !!(row.file || row.fileName) || 'Choose a file']"
-            @update:model-value="(file: File | null) => onFile(row, file)"
-          >
-            <template v-slot:prepend>
-              <q-icon :name="isPhoto(row) ? 'photo_camera' : 'attach_file'" />
-            </template>
-          </q-file>
-
-          <!-- The camera shortcut hides the gallery; keep a way back to the camera roll. -->
-          <q-btn
-            v-if="isPhoto(row)"
-            flat
-            dense
-            size="sm"
-            icon="photo_library"
-            label="Pick from gallery instead"
-            class="q-mt-xs"
-            @click="pickFromGallery(row)"
-          />
+    <div class="attachment-list">
+      <div v-for="(row, index) in rows" :key="`${row.id}-${index}`" class="attachment-item">
+        <div class="attachment-thumb" :class="{ 'attachment-thumb--empty': !preview(row) }">
+          <q-img v-if="preview(row)" :src="preview(row) ?? ''" fit="cover" />
+          <q-icon v-else :name="typeIcon(row)" size="22px" />
         </div>
-        <div v-else class="attachment-file">
-          <div class="text-body2 ellipsis">{{ row.fileName || 'Unnamed file' }}</div>
-          <div class="text-caption text-grey-7 row items-center q-gutter-xs">
-            <span>Saved attachment #{{ row.id }}</span>
+
+        <div class="attachment-body">
+          <div class="text-body2 ellipsis">{{ row.fileName || 'New attachment' }}</div>
+
+          <div class="row items-center q-gutter-xs">
+            <q-select
+              dense
+              borderless
+              options-dense
+              class="attachment-type"
+              v-model="row.type"
+              :options="types"
+              :rules="[(value: string) => !!value || 'Pick a type']"
+            />
             <q-btn
-              v-if="row.filePath"
+              v-if="row.id > 0 && row.filePath"
               flat
               dense
               size="sm"
-              label="Open original"
+              no-caps
+              icon="open_in_new"
+              label="Open"
               :href="fileUrl(row.id)"
               target="_blank"
               rel="noopener"
-              icon="open_in_new"
               class="q-px-xs"
+            />
+          </div>
+
+          <div v-if="row.id === 0" class="column">
+            <q-file
+              dense
+              borderless
+              :label="isPhoto(row) ? 'Take a photo' : 'Select a file'"
+              :accept="isPhoto(row) ? 'image/*' : undefined"
+              :capture="isPhoto(row) ? 'environment' : undefined"
+              :model-value="row.file ?? null"
+              :rules="[() => !!(row.file || row.fileName) || 'Choose a file']"
+              @update:model-value="(file: File | null) => onFile(row, file)"
+            >
+              <template v-slot:prepend>
+                <q-icon :name="isPhoto(row) ? 'photo_camera' : 'attach_file'" />
+              </template>
+            </q-file>
+
+            <!-- The camera shortcut hides the gallery; keep a way back to the camera roll. -->
+            <q-btn
+              v-if="isPhoto(row)"
+              flat
+              dense
+              size="sm"
+              no-caps
+              icon="photo_library"
+              label="Pick from gallery instead"
+              class="self-start q-px-none"
+              @click="pickFromGallery(row)"
             />
           </div>
         </div>
 
         <q-btn
-          icon="delete"
+          icon="delete_outline"
           flat
           round
-          color="negative"
+          dense
+          color="grey-6"
           type="button"
           :aria-label="`Remove attachment ${row.fileName || row.id}`"
           @click="emit('remove', index)"
         />
       </div>
+    </div>
 
-      <q-img
-        v-if="row.type === 'Photo' && (row.thumbnailBase64 || row.uploadBase64)"
-        :src="row.thumbnailBase64 || row.uploadBase64 || ''"
-        height="90px"
-        fit="contain"
-        class="q-mt-sm"
+    <div class="row items-center q-gutter-sm q-mt-sm">
+      <q-btn
+        flat
+        no-caps
+        dense
+        icon="add"
+        label="Add attachment"
+        color="primary"
+        type="button"
+        @click="emit('add')"
       />
-      <div v-else-if="row.type === 'Photo' && row.id > 0" class="text-caption text-grey-7 q-mt-sm">
-        No preview stored for this photo.
-      </div>
-    </q-card>
+      <span v-if="rows.length" class="text-caption text-grey-7">{{ rows.length }} on this item</span>
+    </div>
   </div>
 </template>
 
@@ -131,6 +139,18 @@ function isPhoto(row: AttachmentRow): boolean {
   return (row.type ?? '').toLowerCase() === 'photo';
 }
 
+function preview(row: AttachmentRow): string | null {
+  return row.thumbnailBase64 || row.uploadBase64 || null;
+}
+
+function typeIcon(row: AttachmentRow): string {
+  const type = (row.type ?? '').toLowerCase();
+  if (type.includes('photo')) return 'image';
+  if (type.includes('manual')) return 'menu_book';
+  if (type.includes('warranty')) return 'verified';
+  return 'description';
+}
+
 /** Asking for a capture device makes phones skip the gallery, so this reopens it. */
 function pickFromGallery(row: AttachmentRow) {
   const input = document.createElement('input');
@@ -159,35 +179,48 @@ async function onFile(row: AttachmentRow, file: File | null) {
 </script>
 
 <style scoped>
-.attachment-row {
+.attachment-list {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) auto;
-  column-gap: 8px;
-  align-items: center;
+  row-gap: 4px;
 }
 
-/* The picker and its gallery shortcut stack inside their cell. */
-.attachment-pick {
+/* A small thumb, the facts, and the action: a list, not a gallery, so several fit on a phone. */
+.attachment-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 36px;
+  column-gap: 10px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  min-height: 56px;
+}
+
+.attachment-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f2f4f7;
+}
+
+.attachment-thumb--empty {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
+  color: #8b93a1;
 }
 
-/* Phone: type above the file picker, delete on the right of both. */
-@media (max-width: 599px) {
-  .attachment-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    row-gap: 4px;
-  }
+.attachment-body {
+  min-width: 0;
+}
 
-  .attachment-row > :nth-child(2) {
-    grid-column: 1;
-  }
+.attachment-type {
+  max-width: 150px;
+  font-size: 13px;
+}
 
-  .attachment-row > :nth-child(3) {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    align-self: center;
-  }
+.attachment-type :deep(.q-field__native) {
+  min-height: 24px;
+  padding: 0;
 }
 </style>

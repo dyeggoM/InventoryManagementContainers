@@ -12,28 +12,41 @@
     :saving="saving"
     :empty-message="emptyMessage"
     entity-label="Item"
+    :entry-label="treeItem.label"
     @select="selectData"
+    @create="createEntry"
     @submit="submitDialog"
     @reset="resetTreeItem"
     @delete="deleteTreeItem"
   >
-    <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
-    <q-select
-      label="parentId"
-      v-model="treeItem.parentId"
-      :options="parentOptions()"
-      map-options
-      emit-value
-    />
+    <div class="imc-section">
+      <div class="imc-section__title">Details</div>
+      <q-input label="Name" v-model="treeItem.label" :rules="[labelRule]" />
+      <q-select
+        label="Parent item"
+        v-model="treeItem.parentId"
+        :options="parentOptions()"
+        :display-value="treeItem.parentId == null ? 'No parent' : undefined"
+        map-options
+        emit-value
+        class="q-mt-sm"
+      />
+    </div>
 
-    <attribute-editor v-model="attributes" :labels="attributeLabels" :lists="attributeLists" />
+    <div class="imc-section">
+      <div class="imc-section__title">Attributes</div>
+      <attribute-editor v-model="attributes" :labels="attributeLabels" :lists="attributeLists" />
+    </div>
 
-    <attachment-editor
-      v-model="attachments"
-      :types="attachmentTypes"
-      @add="addAttachment"
-      @remove="removeAttachment"
-    />
+    <div class="imc-section">
+      <div class="imc-section__title">Attachments</div>
+      <attachment-editor
+        v-model="attachments"
+        :types="attachmentTypes"
+        @add="addAttachment"
+        @remove="removeAttachment"
+      />
+    </div>
   </tree-master-detail>
 </template>
 
@@ -87,6 +100,7 @@ const {
   loadData,
   selectData,
   resetTreeItem,
+  createEntry,
   submitDialog,
   deleteTreeItem,
   parentOptions,
@@ -96,9 +110,9 @@ const {
   blank,
   flatten: (nodes) => itemsService.flattenItems(nodes),
   entity: 'item',
-  emptyMessage: 'No items yet — use the "Add New" node to create the first one.',
+  emptyMessage: 'No items yet',
   deleteHint: 'Its attachments are deleted with it.',
-  splitter: 50,
+  splitter: 34,
   onSelect: async (entry) => {
     if (entry.id > 0) {
       const parsed = parseAttributes(entry.attributes);

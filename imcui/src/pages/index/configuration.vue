@@ -12,22 +12,40 @@
     :saving="saving"
     :empty-message="emptyMessage"
     entity-label="Constant"
+    :entry-label="treeItem.label"
     @select="selectData"
+    @create="createEntry"
     @submit="submitDialog"
     @reset="resetTreeItem"
     @delete="deleteTreeItem"
   >
-    <q-input label="label" v-model="treeItem.label" :rules="[labelRule]" />
-    <q-select
-      label="parentId"
-      v-model="treeItem.parentId"
-      :options="parentOptions()"
-      map-options
-      emit-value
-    />
-    <q-input label="group" v-model="treeItem.group" />
-    <q-input label="description" v-model="treeItem.description" type="textarea" />
-    <q-input label="sortOrder" v-model="treeItem.sortOrder" />
+    <div class="imc-section">
+      <div class="imc-section__title">Details</div>
+      <q-input label="Name" v-model="treeItem.label" :rules="[labelRule]" />
+      <q-select
+        label="Parent"
+        v-model="treeItem.parentId"
+        :options="parentOptions()"
+        :display-value="treeItem.parentId == null ? 'No parent' : undefined"
+        map-options
+        emit-value
+        class="q-mt-sm"
+      />
+    </div>
+
+    <div class="imc-section">
+      <div class="imc-section__title">Definition</div>
+      <q-input label="Group" v-model="treeItem.group" />
+      <q-input
+        dense
+        label="Description"
+        v-model="treeItem.description"
+        type="textarea"
+        autogrow
+        class="q-mt-md"
+      />
+      <q-input label="Sort order" v-model="treeItem.sortOrder" class="q-mt-md" />
+    </div>
   </tree-master-detail>
 </template>
 
@@ -65,6 +83,7 @@ const {
   loadData,
   selectData,
   resetTreeItem,
+  createEntry,
   submitDialog,
   deleteTreeItem,
   parentOptions,
@@ -74,7 +93,7 @@ const {
   blank,
   flatten: (nodes) => constantsService.flattenConstants(nodes),
   entity: 'constant',
-  emptyMessage: 'No constants yet — use the "Add New" node to create the first one.',
+  emptyMessage: 'No constants yet',
   deleteHint: 'Its children are deleted with it.',
   splitter: 30,
 });
