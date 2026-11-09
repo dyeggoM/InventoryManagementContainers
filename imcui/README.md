@@ -22,6 +22,11 @@ accepts any origin (CORS is pinned to `CORS:AllowedCors` only outside Developmen
 Quasar dev port therefore no longer breaks it, but `--launch-profile lan` is required for the API to
 listen on anything other than loopback.
 
+The API creates `IMCAPI/imc.db` on first run: migrations build the schema and, when the constant
+table is empty, `IMCAPI/DB/Seed/seed.sql` fills the configuration tree (attribute names, attachment
+types, categories, brands…). The database is git-ignored — inventory items are user data and are
+never seeded. To start over, stop the API and delete the file.
+
 ## Install the dependencies
 
 ```bash

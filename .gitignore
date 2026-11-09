@@ -54,6 +54,11 @@ publish/
 *.ldf
 *.ndf
 
+# SQLite database created on first run (seeded from DB/Seed/seed.sql)
+IMCAPI/imc.db
+IMCAPI/imc.db-shm
+IMCAPI/imc.db-wal
+
 # Certificates and private keys
 *.pfx
 *.p12

@@ -11,6 +11,7 @@
     :loading="loading"
     :saving="saving"
     :empty-message="emptyMessage"
+    entity-label="Constant"
     @select="selectData"
     @submit="submitDialog"
     @reset="resetTreeItem"

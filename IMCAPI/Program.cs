@@ -90,6 +90,12 @@ namespace IMCAPI
             {
                 var context = serviceScope.ServiceProvider.GetService<ApplicationContext>();
                 context?.Database.Migrate();
+
+                // The database is not in source control: build the configuration tree on first run.
+                if (context is not null)
+                {
+                    DatabaseSeeder.SeedConfiguration(context, app.Environment.ContentRootPath);
+                }
             }
             #endregion
 

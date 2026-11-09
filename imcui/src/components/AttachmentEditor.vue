@@ -10,9 +10,8 @@
     <div v-if="rows.length === 0" class="text-caption text-grey-7">No attachments yet.</div>
 
     <q-card v-for="(row, index) in rows" :key="`${row.id}-${index}`" flat bordered class="q-pa-sm">
-      <div class="row items-center q-gutter-sm">
+      <div class="attachment-row">
         <q-select
-          class="col-3"
           dense
           options-dense
           label="type"
@@ -23,7 +22,6 @@
 
         <q-file
           v-if="row.id === 0"
-          class="col-6"
           dense
           label="Select a file"
           :model-value="row.file ?? null"
@@ -34,7 +32,7 @@
             <q-icon name="attach_file" />
           </template>
         </q-file>
-        <div v-else class="col-6">
+        <div v-else class="attachment-file">
           <div class="text-body2 ellipsis">{{ row.fileName || 'Unnamed file' }}</div>
           <div class="text-caption text-grey-7">Saved attachment #{{ row.id }}</div>
         </div>
@@ -102,3 +100,30 @@ async function onFile(row: AttachmentRow, file: File | null) {
   row.fileBase64 = await fileToBase64(file);
 }
 </script>
+
+<style scoped>
+.attachment-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+}
+
+/* Phone: type above the file picker, delete on the right of both. */
+@media (max-width: 599px) {
+  .attachment-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+
+  .attachment-row > :nth-child(2) {
+    grid-column: 1;
+  }
+
+  .attachment-row > :nth-child(3) {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+}
+</style>
