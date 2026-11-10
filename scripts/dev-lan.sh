@@ -33,7 +33,9 @@ start_api() {
 
 start_ui() {
   echo "Dev app  -> http://${lan_ip:-<host-ip>}:9000/     (binds 0.0.0.0:9000)"
-  ( cd "$repo_root/imcui" && npx quasar dev --host 0.0.0.0 --port 9000 )
+  # Host and port come from imcui/quasar.config.ts (devServer: 0.0.0.0:9000). The Quasar CLI flag for
+  # a host is --hostname/-H; there is no --host, and passing it just prints the help.
+  ( cd "$repo_root/imcui" && BROWSER=none npx quasar dev -H 0.0.0.0 -p 9000 )
 }
 
 trap 'kill 0' INT TERM EXIT
