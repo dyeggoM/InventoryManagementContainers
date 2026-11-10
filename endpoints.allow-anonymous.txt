@@ -8,3 +8,6 @@ GET /api/constants/test
 GET /api/constants
 GET /api/constants/{id:int}
 GET /api/constants/group/{group}
+POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout

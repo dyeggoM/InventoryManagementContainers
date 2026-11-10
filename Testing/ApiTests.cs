@@ -3,7 +3,10 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
+using IMCAPI.DB;
 using IMCAPI.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Testing;
 
@@ -11,6 +14,7 @@ namespace Testing;
 /// The API over HTTP, the way the app talks to it: the shapes the UI depends on (a tree with
 /// children, panels with attributes, attachment counts), the write paths, and the file endpoint.
 /// </summary>
+[NonParallelizable]
 [TestFixture]
 public class ApiTests
 {
@@ -20,10 +24,19 @@ public class ApiTests
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [OneTimeSetUp]
-    public void StartApi()
+    public async Task StartApi()
     {
         _factory = new ApiFactory();
         _client = _factory.CreateClient();
+        var response = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email = "bootstrap@example.test",
+            password = "AuthTest!Secure123",
+        });
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        var auth = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer", auth.GetProperty("access_token").GetString());
     }
 
     [OneTimeTearDown]
@@ -584,5 +597,107 @@ public class ApiTests
         canvas.Clear(SkiaSharp.SKColors.SteelBlue);
         using var encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 90);
         return encoded.ToArray();
+    }
+
+    /// <summary>
+    /// A cycle that already reached the database must not take the API down. The controllers refuse
+    /// to create one, but an import, a maintenance UPDATE or a database written before the guard
+    /// existed does not go through them, so the projection is the last line of defence. This writes
+    /// a three-node cycle straight into SQLite for exactly that reason: a two-node cycle is not
+    /// enough to prove anything, it is the shape the tree walk already handled by accident.
+    /// </summary>
+    [Test]
+    public async Task GetItems_SurvivesAThreeNodeCycleThatReachedTheDatabase()
+    {
+        var a = (await PostItem(Unique("PoisonA"))).GetProperty("id").GetInt32();
+        var b = (await PostItem(Unique("PoisonB"), a)).GetProperty("id").GetInt32();
+        var c = (await PostItem(Unique("PoisonC"), b)).GetProperty("id").GetInt32();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+            await context.Database.ExecuteSqlRawAsync("UPDATE Items SET ParentId = {0} WHERE Id = {1}", c, a);
+            await context.Database.ExecuteSqlRawAsync("UPDATE Items SET ParentId = {0} WHERE Id = {1}", a, b);
+            await context.Database.ExecuteSqlRawAsync("UPDATE Items SET ParentId = {0} WHERE Id = {1}", b, c);
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var response = await _client.GetAsync("/api/item", timeout.Token);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK),
+            "a cycle in the data is a projection problem, not a reason for the process to die");
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>(Json, timeout.Token);
+        var ids = new List<int>();
+        CollectIds(payload.GetProperty("tree"), ids);
+        Assert.That(ids, Does.Not.Contain(0), "the walk still returns nodes");
+        Assert.That(ids.Count, Is.EqualTo(ids.Distinct().Count()), "no record is rendered twice");
+    }
+
+    /// <summary>
+    /// The tree advertises a `parent` object per node; carrying the ancestors through that second
+    /// recursion is what keeps deep cycles from looping, and this holds the contract in place so the
+    /// guard cannot be "fixed" by nulling the field.
+    /// </summary>
+    [Test]
+    public async Task GetItems_RendersTheParentOfAChild()
+    {
+        var parentId = (await PostItem(Unique("ParentChain"))).GetProperty("id").GetInt32();
+        var childLabel = Unique("ChildChain");
+        await PostItem(childLabel, parentId);
+
+        var payload = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var child = payload.GetProperty("tree").EnumerateArray()
+            .SelectMany(node => node.GetProperty("children").EnumerateArray())
+            .Single(node => node.GetProperty("label").GetString() == childLabel);
+
+        Assert.That(child.TryGetProperty("parent", out var parent), Is.True, "a child carries its parent");
+        Assert.That(parent.ValueKind, Is.EqualTo(JsonValueKind.Object), "and it is the object, not a bare id");
+        Assert.That(parent.GetProperty("id").GetInt32(), Is.EqualTo(parentId));
+    }
+
+    /// <summary>
+    /// The cycle guard has to see soft-deleted rows: a record out of the tree still carries a parent,
+    /// and a loop closed through it would be resurrected the moment it is reactivated. This is the
+    /// only way to persist a cycle while the guards are in place, so it is also the regression test
+    /// for the guard reading the same rows the tree can eventually reach.
+    /// </summary>
+    [Test]
+    public async Task PutItem_RejectsACycleThroughASoftDeletedRecord()
+    {
+        var a = (await PostItem(Unique("HiddenA"))).GetProperty("id").GetInt32();
+        var b = (await PostItem(Unique("HiddenB"), a)).GetProperty("id").GetInt32();
+        var c = (await PostItem(Unique("HiddenC"), b)).GetProperty("id").GetInt32();
+
+        // B leaves the tree but keeps its row, so the loop A -> C -> B -> A only closes once A is
+        // re-pointed, and it passes through the inactive B: exactly what the filtered query missed.
+        var deleted = await _client.DeleteAsync($"/api/item/{b}");
+        Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+
+        var response = await _client.PutAsJsonAsync($"/api/item/{a}", new
+        {
+            id = a,
+            label = Unique("HiddenA-edited"),
+            icon = "",
+            parentId = c,
+            attributes = "{}",
+            children = Array.Empty<object>(),
+            attachments = Array.Empty<object>(),
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest),
+            "a cycle through an inactive record must be refused, not stored: " + await response.Content.ReadAsStringAsync());
+    }
+
+    private static void CollectIds(JsonElement nodes, List<int> ids)
+    {
+        foreach (var node in nodes.EnumerateArray())
+        {
+            ids.Add(node.GetProperty("id").GetInt32());
+            if (node.TryGetProperty("children", out var children) && children.GetArrayLength() > 0)
+            {
+                CollectIds(children, ids);
+            }
+        }
     }
 }

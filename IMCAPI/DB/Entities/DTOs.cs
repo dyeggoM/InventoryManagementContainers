@@ -36,9 +36,13 @@ namespace IMCAPI.DB.Entities
             Attachments = attachments.Count() > 0 ? attachments.Select(x => new AttachmentDTO(x)).ToList() : new List<AttachmentDTO>();
             Icon = "";
         }
-        public ItemDTO(Item data, bool includeChildren = true) : this(data, includeChildren, new HashSet<int>()) { }
+        public ItemDTO(Item data, bool includeChildren = true) : this(data, includeChildren, new HashSet<int>(), 0) { }
 
-        private ItemDTO(Item data, bool includeChildren, HashSet<int> visited)
+        // Generous bound: the visited set is what stops a cycle, this only keeps a pathological
+        // legitimate chain from eating the stack.
+        private const int ParentDepthLimit = 512;
+
+        private ItemDTO(Item data, bool includeChildren, HashSet<int> visited, int parentDepth)
         {
             // CTOR for tree
             Id = data.Id;
@@ -46,11 +50,16 @@ namespace IMCAPI.DB.Entities
             Label = data.Label;
             Attributes = data.Attributes;
             ParentId = data.ParentId;
-            Parent = !alreadyVisited && data.Parent != null && !visited.Contains(data.Parent.Id)
-                ? new ItemDTO(data.Parent, includeChildren: false, new HashSet<int> { data.Id })
+            // Parent is a second recursion over the same rows. It has to carry the ancestors already
+            // walked, otherwise a cycle of three or more nodes closes it and overflows the stack:
+            // seeding the set with only { data.Id } guards the two-node case and nothing else. The
+            // immediate parent still renders (its own set already contains it, so the chain stops one
+            // hop up instead of looping).
+            Parent = !alreadyVisited && parentDepth < ParentDepthLimit && data.Parent != null
+                ? new ItemDTO(data.Parent, includeChildren: false, new HashSet<int>(visited), parentDepth + 1)
                 : null;
             Children = !alreadyVisited && includeChildren && data.Children != null && data.Children.Any()
-                ? data.Children.Where(x => !visited.Contains(x.Id)).Select(x => new ItemDTO(x, includeChildren: true, new HashSet<int>(visited))).ToList()
+                ? data.Children.Where(x => !visited.Contains(x.Id)).Select(x => new ItemDTO(x, includeChildren: true, new HashSet<int>(visited), 0)).ToList()
                 : new List<ItemDTO>();
             Attachments = data.Attachments.Count() > 0 ? data.Attachments.Select(x => new AttachmentDTO(x)).ToList() : new List<AttachmentDTO>();
             Icon = "";
@@ -119,9 +128,11 @@ namespace IMCAPI.DB.Entities
             Icon = "";
         }
 
-        public ConstantsDTO(Constants data, bool includeChildren = true) : this(data, includeChildren, new HashSet<int>()) { }
+        public ConstantsDTO(Constants data, bool includeChildren = true) : this(data, includeChildren, new HashSet<int>(), 0) { }
 
-        private ConstantsDTO(Constants data, bool includeChildren, HashSet<int> visited)
+        private const int ParentDepthLimit = 512;
+
+        private ConstantsDTO(Constants data, bool includeChildren, HashSet<int> visited, int parentDepth)
         {
             // CTOR for tree
             Id = data.Id;
@@ -132,11 +143,12 @@ namespace IMCAPI.DB.Entities
             DataType = data.DataType;
             SortOrder = data.SortOrder;
             ParentId = data.ParentId;
-            Parent = !alreadyVisited && data.Parent != null && !visited.Contains(data.Parent.Id)
-                ? new ConstantsDTO(data.Parent, includeChildren: false, new HashSet<int> { data.Id })
+            // Same reason as ItemDTO: the parent walk needs the ancestors it already walked.
+            Parent = !alreadyVisited && parentDepth < ParentDepthLimit && data.Parent != null
+                ? new ConstantsDTO(data.Parent, includeChildren: false, new HashSet<int>(visited), parentDepth + 1)
                 : null;
             Children = !alreadyVisited && includeChildren && data.Children != null && data.Children.Any()
-                ? data.Children.Where(x => !visited.Contains(x.Id)).Select(x => new ConstantsDTO(x, includeChildren: true, new HashSet<int>(visited))).ToList()
+                ? data.Children.Where(x => !visited.Contains(x.Id)).Select(x => new ConstantsDTO(x, includeChildren: true, new HashSet<int>(visited), 0)).ToList()
                 : new List<ConstantsDTO>();
             Icon = "";
         }

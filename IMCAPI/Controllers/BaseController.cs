@@ -19,6 +19,7 @@ namespace IMCAPI.Controllers
             _logger = logger;
         }
 
+        [AllowAnonymous]
         [HttpGet("test")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -50,6 +51,7 @@ namespace IMCAPI.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Policy = "RequiereLectura")]
         public virtual async Task<IActionResult> Get()
         {
             var methodName = $"{GetType().Name}.{MethodBase.GetCurrentMethod()!.Name}";
@@ -77,6 +79,7 @@ namespace IMCAPI.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Policy = "RequiereLectura")]
         public virtual async Task<IActionResult> Get(int id)
         {
             var methodName = $"{GetType().Name}.{MethodBase.GetCurrentMethod()!.Name}";
@@ -107,6 +110,7 @@ namespace IMCAPI.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Policy = "RequiereEscritura")]
         public virtual async Task<IActionResult> Put(int id, T data)
         {
             var methodName = $"{GetType().Name}.{MethodBase.GetCurrentMethod()!.Name}";
@@ -144,6 +148,7 @@ namespace IMCAPI.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Policy = "RequiereEscritura")]
         public virtual async Task<IActionResult> Post(T data)
         {
             var methodName = $"{GetType().Name}.{MethodBase.GetCurrentMethod()!.Name}";
@@ -170,6 +175,7 @@ namespace IMCAPI.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Policy = "RequiereEscritura")]
         public virtual async Task<IActionResult> Delete(int id)
         {
             var methodName = $"{GetType().Name}.{MethodBase.GetCurrentMethod()!.Name}";

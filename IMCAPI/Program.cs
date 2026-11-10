@@ -2,9 +2,12 @@
 using IMCAPI.DB;
 using IMCAPI.DB.Repositories;
 using IMCAPI.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Text;
 using System.Text.Json.Serialization;
 
 namespace IMCAPI
@@ -75,7 +78,47 @@ namespace IMCAPI
             #region DB
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
             builder.Services.AddDbContext<ApplicationContext>(options => options.UseSqlite(connectionString));
-            //builder.Services.AddDbContext<ApplicationContext>(options => options.UseInMemoryDatabase(connectionString));
+
+            var jwtKey = builder.Configuration["Auth:Jwt:Key"] ?? Environment.GetEnvironmentVariable("AUTH_JWT_KEY")
+                ?? throw new InvalidOperationException("Configure Auth:Jwt:Key or AUTH_JWT_KEY.");
+            var jwtIssuer = builder.Configuration["Auth:Jwt:Issuer"] ?? Environment.GetEnvironmentVariable("AUTH_JWT_ISSUER")
+                ?? throw new InvalidOperationException("Configure Auth:Jwt:Issuer or AUTH_JWT_ISSUER.");
+            if (Encoding.UTF8.GetByteCount(jwtKey) < 32)
+                throw new InvalidOperationException("Auth:Jwt:Key must contain at least 32 UTF-8 bytes.");
+            var authEnforce = !bool.TryParse(builder.Configuration["Auth:Enforce"], out var configuredEnforce) || configuredEnforce;
+
+            builder.Services.AddIdentityCore<IdentityUser>()
+                .AddRoles<IdentityRole>()
+                .AddEntityFrameworkStores<ApplicationContext>()
+                .AddSignInManager()
+                .AddDefaultTokenProviders();
+            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidIssuer = jwtIssuer,
+                        ValidateAudience = true,
+                        ValidAudience = jwtIssuer,
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+                        ValidateLifetime = true,
+                        ClockSkew = TimeSpan.FromSeconds(30),
+                        NameClaimType = System.Security.Claims.ClaimTypes.Name,
+                        RoleClaimType = System.Security.Claims.ClaimTypes.Role,
+                    };
+                });
+            builder.Services.AddAuthorization(options =>
+            {
+                AddRolePolicy(options, "RequiereLectura", ["superadmin", "admin", "operador", "lector"], authEnforce);
+                AddRolePolicy(options, "RequiereEscritura", ["superadmin", "admin", "operador"], authEnforce);
+                AddRolePolicy(options, "RequiereAdmin", ["superadmin", "admin"], authEnforce);
+                AddRolePolicy(options, "RequiereSuperadmin", ["superadmin"], authEnforce);
+            });
+            builder.Services.AddProblemDetails();
+            builder.Services.AddScoped<AuthTokenService>();
+
 
             #endregion
 
@@ -97,6 +140,9 @@ namespace IMCAPI
                 if (context is not null)
                 {
                     DatabaseSeeder.SeedConfiguration(context, app.Environment.ContentRootPath);
+                    var userManager = serviceScope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+                    var roleManager = serviceScope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+                    DatabaseSeeder.SeedIdentityAsync(userManager, roleManager, app.Configuration).GetAwaiter().GetResult();
 
                     // Older rows carry the whole image; move it to disk once.
                     var storage = serviceScope.ServiceProvider.GetRequiredService<AttachmentStorage>();
@@ -114,16 +160,28 @@ namespace IMCAPI
                 app.UseSwaggerUI();
             }
 
+            if (!app.Environment.IsDevelopment())
+            {
+                app.UseExceptionHandler();
+            }
+
             app.UseCors("AllowCors");
 
             app.UseHttpsRedirection();
 
+            app.UseAuthentication();
             app.UseAuthorization();
 
 
             app.MapControllers();
 
             app.Run();
+        }
+        private static void AddRolePolicy(Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
+            string name, string[] roles, bool enforce)
+        {
+            options.AddPolicy(name, policy => policy.RequireAssertion(context =>
+                !enforce || roles.Any(context.User.IsInRole)));
         }
     }
 }

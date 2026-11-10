@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using System.Reflection;
 
@@ -17,6 +18,7 @@ namespace IMCAPI.Controllers
         }
 
         [HttpGet("{date}")]
+        [Authorize(Policy = "RequiereAdmin")]
         public IActionResult Logs(string date)
         {
             var methodName = $"{GetType().Name}.{MethodBase.GetCurrentMethod()!.Name}";

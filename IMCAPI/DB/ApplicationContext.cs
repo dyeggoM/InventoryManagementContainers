@@ -1,4 +1,5 @@
 ﻿using IMCAPI.DB.Entities;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ namespace IMCAPI.DB
         public virtual DbSet<Attachment> Attachments { get; set; }
 
         public virtual DbSet<Constants> Constants { get; set; }
+        public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
 
         public ApplicationContext(DbContextOptions<ApplicationContext> options)
             : base(options)
@@ -24,6 +26,15 @@ namespace IMCAPI.DB
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<RefreshToken>(entity =>
+            {
+                entity.HasIndex(token => token.TokenHash).IsUnique();
+                entity.HasIndex(token => token.UserId);
+                entity.Property(token => token.TokenHash).HasMaxLength(64).IsRequired();
+                entity.Property(token => token.UserId).IsRequired();
+                entity.HasOne<IdentityUser>().WithMany().HasForeignKey(token => token.UserId).OnDelete(DeleteBehavior.Cascade);
+            });
 
             modelBuilder.Entity<Item>().ToTable("Items");
             modelBuilder.Entity<Attachment>().ToTable("Attachments");

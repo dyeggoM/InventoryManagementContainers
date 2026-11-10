@@ -25,6 +25,7 @@ namespace IMCAPI.Controllers
         }
 
         [HttpPost]
+        [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Post(Item data)
         {
             // Attachments are created with the item, so their files are stored here too.
@@ -41,6 +42,7 @@ namespace IMCAPI.Controllers
         }
 
         [HttpPut("{id:int}")]
+        [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Put(int id, Item data)
         {
             if (data.ParentId is int proposedParentId && await WouldCreateCycle(id, proposedParentId))
@@ -70,7 +72,13 @@ namespace IMCAPI.Controllers
             for (var depth = 0; depth < 10000 && visited.Add(currentId); depth++)
             {
                 if (currentId == id) return true;
-                var parentId = await _context.Items.Where(x => x.Id == currentId).Select(x => x.ParentId).SingleOrDefaultAsync();
+                // IgnoreQueryFilters: a soft-deleted row still carries a parent, and the guard has to
+                // see the same rows the tree can reach once somebody reactivates them. Otherwise a
+                // cycle through an inactive record is accepted silently and lies dormant.
+                var parentId = await _context.Items.IgnoreQueryFilters()
+                    .Where(x => x.Id == currentId)
+                    .Select(x => x.ParentId)
+                    .SingleOrDefaultAsync();
                 if (parentId is not int nextId) return false;
                 currentId = nextId;
             }
@@ -97,6 +105,7 @@ namespace IMCAPI.Controllers
         /// folder are impossible to find again once the row that named them is gone.
         /// </summary>
         [HttpDelete("{id:int}")]
+        [Authorize(Policy = "RequiereAdmin")]
         public override async Task<IActionResult> Delete(int id)
         {
             var attachments = await _context.Attachments
@@ -117,6 +126,7 @@ namespace IMCAPI.Controllers
             return await base.Delete(id);
         }
 
+        [Authorize(Policy = "RequiereLectura")]
         public override async Task<IActionResult> Get()
         {
             try
@@ -171,6 +181,7 @@ namespace IMCAPI.Controllers
         }
 
         [HttpPost]
+        [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Post(Attachment data)
         {
             var error = await _storage.ApplyUploadAsync(data);
@@ -185,6 +196,7 @@ namespace IMCAPI.Controllers
         /// </summary>
         [HttpPost("upload")]
         [RequestSizeLimit(25 * 1024 * 1024)]
+        [Authorize(Policy = "RequiereEscritura")]
         public async Task<IActionResult> Upload([FromForm] int itemId, [FromForm] string? type,
             [FromForm] string? fileName, IFormFile? file)
         {
@@ -216,6 +228,7 @@ namespace IMCAPI.Controllers
         }
 
         [HttpDelete("{id:int}")]
+        [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Delete(int id)
         {
             var existing = await _repository.GetById(id);
@@ -230,6 +243,7 @@ namespace IMCAPI.Controllers
 
         /// <summary>The original file, as stored on disk.</summary>
         [HttpGet("{id:int}/file")]
+        [Authorize(Policy = "RequiereLectura")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetFile(int id)
@@ -252,6 +266,7 @@ namespace IMCAPI.Controllers
         }
 
         [HttpGet("item/{id:int}")]
+        [Authorize(Policy = "RequiereLectura")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -290,7 +305,20 @@ namespace IMCAPI.Controllers
             _context = context;
         }
 
+        [HttpGet("{id:int}")]
+        [AllowAnonymous]
+        public override Task<IActionResult> Get(int id) => base.Get(id);
+
+        [HttpPost]
+        [Authorize(Policy = "RequiereAdmin")]
+        public override Task<IActionResult> Post(Constants data) => base.Post(data);
+
+        [HttpDelete("{id:int}")]
+        [Authorize(Policy = "RequiereAdmin")]
+        public override Task<IActionResult> Delete(int id) => base.Delete(id);
+
         [HttpPut("{id:int}")]
+        [Authorize(Policy = "RequiereAdmin")]
         public override async Task<IActionResult> Put(int id, Constants data)
         {
             if (data.ParentId is int proposedParentId)
@@ -302,7 +330,10 @@ namespace IMCAPI.Controllers
                 {
                     if (currentId == id)
                         return BadRequest("Un registro no puede ser padre de sí mismo ni de uno de sus descendientes.");
-                    var parentId = await _context.Constants.Where(x => x.Id == currentId).Select(x => x.ParentId).SingleOrDefaultAsync();
+                    var parentId = await _context.Constants.IgnoreQueryFilters()
+                        .Where(x => x.Id == currentId)
+                        .Select(x => x.ParentId)
+                        .SingleOrDefaultAsync();
                     if (parentId is not int nextId)
                     {
                         reachedRoot = true;
@@ -317,6 +348,7 @@ namespace IMCAPI.Controllers
             return await base.Put(id, data);
         }
 
+        [AllowAnonymous]
         public override async Task<IActionResult> Get()
         {
             try
@@ -340,6 +372,7 @@ namespace IMCAPI.Controllers
         }
 
         [HttpGet("group/{group}")]
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
