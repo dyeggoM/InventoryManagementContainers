@@ -34,15 +34,18 @@ public sealed class AuthMatrixTests
     private HttpClient _lector = null!;
     private HttpClient _operador = null!;
     private HttpClient _admin = null!;
+    private HttpClient _superadmin = null!;
 
     /// <summary>Verb, path and the cheapest role that may reach it.</summary>
     private static readonly (string Method, string Path, string Minimum)[] Matrix =
     [
         ("GET", "/api/item", "lector"),
+        ("GET", "/api/item/archive", "superadmin"),
         ("GET", "/api/item/1", "lector"),
         ("POST", "/api/item", "operador"),
         ("PUT", "/api/item/1", "operador"),
         ("DELETE", "/api/item/1", "admin"),
+        ("PATCH", "/api/item/1/activate", "admin"),
         ("GET", "/api/attachment", "lector"),
         ("GET", "/api/attachment/1", "lector"),
         ("GET", "/api/attachment/1/file", "lector"),
@@ -65,6 +68,12 @@ public sealed class AuthMatrixTests
         _lector = await LoginAs("lector@example.test", "lector");
         _operador = await LoginAs("operador@example.test", "operador");
         _admin = await LoginAs("admin@example.test", "admin");
+        _superadmin = _factory.CreateClient();
+        var rootLogin = await _superadmin.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = Password });
+        Assert.That(rootLogin.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var rootPayload = await rootLogin.Content.ReadFromJsonAsync<JsonElement>();
+        _superadmin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", rootPayload.GetProperty("access_token").GetString());
     }
 
     [OneTimeTearDown]
@@ -75,6 +84,7 @@ public sealed class AuthMatrixTests
         _lector.Dispose();
         _operador.Dispose();
         _admin.Dispose();
+        _superadmin.Dispose();
         _factory.Dispose();
     }
 
@@ -115,6 +125,7 @@ public sealed class AuthMatrixTests
             Content = JsonContent.Create(new { id = 1, label = "matrix", icon = "", parentId = (int?)null, attributes = "{}" }),
         },
         "DELETE" => new HttpRequestMessage(HttpMethod.Delete, path),
+        "PATCH" => new HttpRequestMessage(HttpMethod.Patch, path),
         _ => throw new ArgumentOutOfRangeException(nameof(method), method, null),
     };
 
@@ -123,6 +134,7 @@ public sealed class AuthMatrixTests
         "lector" => [],
         "operador" => ["lector"],
         "admin" => ["lector", "operador"],
+        "superadmin" => ["lector", "operador", "admin"],
         _ => [],
     };
 
@@ -150,6 +162,7 @@ public sealed class AuthMatrixTests
         {
             ["lector"] = _lector,
             ["operador"] = _operador,
+            ["admin"] = _admin,
         };
 
         var failures = new List<string>();
@@ -176,6 +189,7 @@ public sealed class AuthMatrixTests
             ["lector"] = _lector,
             ["operador"] = _operador,
             ["admin"] = _admin,
+            ["superadmin"] = _superadmin,
         };
 
         var failures = new List<string>();

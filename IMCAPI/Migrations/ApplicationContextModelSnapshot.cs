@@ -244,6 +244,80 @@ namespace IMCAPI.Migrations
                     b.ToTable("Items", (string)null);
                 });
 
+            modelBuilder.Entity("IMCAPI.DB.Entities.ItemArchive", b =>
+                {
+                    b.Property<int>("ArchiveId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AttachmentsJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Attributes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DeletedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedById")
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ParentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("RestoredAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RestoredById")
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ArchiveId");
+
+                    b.HasIndex("DeletedAtUtc");
+
+                    b.HasIndex("DeletedById");
+
+                    b.HasIndex("ItemId");
+
+                    b.ToTable("ItemsArchive", (string)null);
+                });
+
             modelBuilder.Entity("IMCAPI.DB.Entities.RefreshToken", b =>
                 {
                     b.Property<int>("Id")

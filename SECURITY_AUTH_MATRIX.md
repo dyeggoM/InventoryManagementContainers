@@ -17,6 +17,8 @@ Roles: `superadmin` > `admin` > `operador` > `lector`.
 | 4 | `PUT /api/item/{id:int}` | `Controllers/Controllers.cs:43` | anónimo | `REQUIERE_AUTH (operador)` |
 | 5 | `POST /api/item` | `Controllers/Controllers.cs:27` | anónimo | `REQUIERE_AUTH (operador)` |
 | 6 | `DELETE /api/item/{id:int}` | `Controllers/Controllers.cs:76` | anónimo | `REQUIERE_AUTH (admin)` |
+| 6b | `PATCH /api/item/{id:int}/activate` | `Controllers/Controllers.cs:186` | — (nueva) | `REQUIERE_AUTH (admin)` — simétrica con el borrado |
+| 6c | `GET /api/item/archive` | `Controllers/Controllers.cs:143` | — (nueva) | `REQUIERE_AUTH (superadmin)` — la bitácora de borrados no la ve un admin |
 | 7 | `GET /api/attachment/test` | `Controllers/BaseController.cs:22` | anónimo | `PUEDE_SER_ANONIMO` |
 | 8 | `GET /api/attachment` | `Controllers/BaseController.cs:49` | anónimo | `REQUIERE_AUTH (lector)` |
 | 9 | `GET /api/attachment/{id:int}` | `Controllers/BaseController.cs:75` | anónimo | `REQUIERE_AUTH (lector)` |

@@ -84,9 +84,10 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
             var changes = new List<Change>(changed.Count);
             foreach (var entry in changed)
             {
+                var isItemRestore = entry.Entity is Item && http?.Items.ContainsKey("ItemArchiveRestore") == true;
                 if (entry.Entity is Base entity)
                 {
-                    if (entry.State == EntityState.Added)
+                    if (entry.State == EntityState.Added && !isItemRestore)
                     {
                         entity.CreatedAt = now;
                         entity.CreatedBy = actorEmail ?? actorId;
@@ -118,7 +119,7 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                         && Equals(entry.Property(nameof(Base.IsActive)).CurrentValue, false)
                     || entry.Entity is UserProfile && Equals(entry.Property(nameof(UserProfile.IsActive)).OriginalValue, true)
                         && Equals(entry.Property(nameof(UserProfile.IsActive)).CurrentValue, false));
-                var action = isRole ? "RoleChange" : isSoftDelete ? "SoftDelete" : entry.State switch
+                var action = isRole ? "RoleChange" : isSoftDelete ? "SoftDelete" : isItemRestore ? "Restore" : entry.State switch
                 {
                     EntityState.Added => "Create", EntityState.Modified => "Update", EntityState.Deleted => "Delete",
                     _ => throw new InvalidOperationException("Unexpected entity state.")

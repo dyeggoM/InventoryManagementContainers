@@ -663,14 +663,13 @@ public class ApiTests
     /// for the guard reading the same rows the tree can eventually reach.
     /// </summary>
     [Test]
-    public async Task PutItem_RejectsACycleThroughASoftDeletedRecord()
+    public async Task PutItem_DoesNotCreateCycleThroughHardDeletedRecord()
     {
         var a = (await PostItem(Unique("HiddenA"))).GetProperty("id").GetInt32();
         var b = (await PostItem(Unique("HiddenB"), a)).GetProperty("id").GetInt32();
         var c = (await PostItem(Unique("HiddenC"), b)).GetProperty("id").GetInt32();
 
-        // B leaves the tree but keeps its row, so the loop A -> C -> B -> A only closes once A is
-        // re-pointed, and it passes through the inactive B: exactly what the filtered query missed.
+        // B is hard-deleted and C is detached from it, so the former relationship cannot close a cycle.
         var deleted = await _client.DeleteAsync($"/api/item/{b}");
         Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
@@ -685,8 +684,8 @@ public class ApiTests
             attachments = Array.Empty<object>(),
         });
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest),
-            "a cycle through an inactive record must be refused, not stored: " + await response.Content.ReadAsStringAsync());
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent),
+            "the detached child is now a root and no cycle exists: " + await response.Content.ReadAsStringAsync());
     }
 
     private static void CollectIds(JsonElement nodes, List<int> ids)

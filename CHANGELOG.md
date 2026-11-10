@@ -6,6 +6,17 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/api-items-archive`
+
+- **Item deletion is now archival**, not soft deletion: `ItemsArchive` stores a detached item snapshot,
+  deletion actor/time and attachment metadata; the live item and attachment rows are removed and the
+  attachment files are deleted.
+- **Superadmin archive listing** supports deletion date, actor, label and pagination filters; admin
+  activation restores the latest unrestored snapshot, preferring the original ID when available and
+  writing a `Restore` audit action.
+- `IsActive` is server-owned on item create and update. API coverage exercises deletion, restoration,
+  filtering, authorization and server-managed activation state.
+
 ## Pending — `feat/api-change-audit`
 
 The database now records **who changed what, with the before and after**, instead of only a

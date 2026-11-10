@@ -2,6 +2,18 @@
 
 What is deliberately not built yet, in the order it is worth doing.
 
+### Deuda abierta del archivado de registros (`feat/api-items-archive`)
+
+- **Los hijos de un registro borrado quedan como raíces** (`ParentId = null`), decisión implícita: si se
+  prefiere borrar en cascada o bloquear el borrado con hijos, hay que elegirlo explícitamente.
+- **Las filas de `ItemsArchive` no caducan**: no hay retención ni purga, y `AttachmentsJson` puede
+  crecer con los adjuntos. Definir política (por antigüedad o por tamaño) antes de que haya volumen.
+- **Restaurar no devuelve los adjuntos**: los ficheros se borran del disco en el `DELETE`, así que un
+  registro restaurado vuelve sin ellos. Si se quiere recuperación completa, hay que pasar a papelera
+  de ficheros en vez de borrado.
+- **`GET /api/item/archive` hace `COUNT(*)` por página** y no tiene índice por `Label`; revisar cuando
+  la tabla crezca (misma deuda que `AuditLogs`).
+
 ## Done
 
 - **Per-item custom attributes.** A row can be added with a key the catalogue does not define; it is

@@ -28,6 +28,8 @@ namespace IMCAPI.Controllers
         [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Post(Item data)
         {
+            // The client may send IsActive, but only delete/restore may control visibility.
+            data.IsActive = true;
             // Attachments are created with the item, so their files are stored here too.
             if (data.Attachments is { Count: > 0 })
             {
@@ -45,6 +47,10 @@ namespace IMCAPI.Controllers
         [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Put(int id, Item data)
         {
+            if (id != data.Id) return BadRequest();
+            var existing = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.Id == id);
+            if (existing is null) return NotFound();
+            data.IsActive = existing.IsActive;
             if (data.ParentId is int proposedParentId && await WouldCreateCycle(id, proposedParentId))
                 return BadRequest("Un registro no puede ser padre de sí mismo ni de uno de sus descendientes.");
 
@@ -108,22 +114,97 @@ namespace IMCAPI.Controllers
         [Authorize(Policy = "RequiereAdmin")]
         public override async Task<IActionResult> Delete(int id)
         {
-            var attachments = await _context.Attachments
-                .Where(attachment => attachment.ItemId == id)
-                .ToListAsync();
+            var item = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(row => row.Id == id);
+            if (item is null) return NotFound();
 
-            foreach (var attachment in attachments)
+            var attachments = await _context.Attachments.IgnoreQueryFilters()
+                .Where(attachment => attachment.ItemId == id).ToListAsync();
+            var childItems = await _context.Items.IgnoreQueryFilters()
+                .Where(child => child.ParentId == id).ToListAsync();
+            var actorId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+            var actorEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+            var now = DateTime.UtcNow;
+            var archive = new ItemArchive
             {
-                _attachments.Delete(attachment.FilePath);
-            }
+                ItemId = item.Id, Label = item.Label, Icon = item.Icon, ParentId = item.ParentId,
+                Attributes = item.Attributes, IsActive = item.IsActive, CreatedAt = item.CreatedAt,
+                CreatedBy = item.CreatedBy, UpdatedAt = item.UpdatedAt, UpdatedBy = item.UpdatedBy,
+                DeletedAtUtc = now, DeletedById = actorId, DeletedBy = actorEmail,
+                AttachmentsJson = attachments.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(
+                    attachments.Select(attachment => new { attachment.FileName, attachment.Type, attachment.FilePath }))
+            };
+            var filePaths = attachments.Select(attachment => attachment.FilePath).ToArray();
 
-            if (attachments.Count > 0)
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            _context.ItemArchives.Add(archive);
+            foreach (var child in childItems) child.ParentId = null;
+            _context.Attachments.RemoveRange(attachments);
+            _context.Items.Remove(item);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            foreach (var filePath in filePaths) _attachments.Delete(filePath);
+            return NoContent();
+        }
+
+        [HttpGet("archive")]
+        [Authorize(Policy = "RequiereSuperadmin")]
+        public async Task<IActionResult> GetArchive([FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to,
+            [FromQuery] string? actor, [FromQuery] string? label, [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 25, CancellationToken cancellationToken = default)
+        {
+            if (page < 1 || pageSize < 1 || pageSize > 100 || from > to)
+                return BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Invalid archive filters",
+                    Detail = "Use page >= 1, pageSize between 1 and 100, and a from value no later than to."
+                });
+
+            var query = _context.ItemArchives.AsNoTracking().AsQueryable();
+            if (from is not null) query = query.Where(row => row.DeletedAtUtc >= from.Value.UtcDateTime);
+            if (to is not null) query = query.Where(row => row.DeletedAtUtc <= to.Value.UtcDateTime);
+            if (!string.IsNullOrWhiteSpace(actor))
+                query = query.Where(row => row.DeletedById == actor || row.DeletedBy == actor || row.DeletedBy!.Contains(actor));
+            if (!string.IsNullOrWhiteSpace(label)) query = query.Where(row => row.Label.Contains(label));
+            var totalCount = await query.CountAsync(cancellationToken);
+            var items = await query.OrderByDescending(row => row.DeletedAtUtc).ThenByDescending(row => row.ArchiveId)
+                .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+            return Ok(new { items, page, pageSize, total = totalCount });
+        }
+
+        [HttpPatch("{id:int}/activate")]
+        [Authorize(Policy = "RequiereAdmin")]
+        public async Task<IActionResult> Activate(int id, CancellationToken cancellationToken)
+        {
+            var archive = await _context.ItemArchives.Where(row => row.ItemId == id && row.RestoredAtUtc == null)
+                .OrderByDescending(row => row.DeletedAtUtc).ThenByDescending(row => row.ArchiveId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (archive is null) return NotFound();
+
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            var idIsFree = !await _context.Items.IgnoreQueryFilters().AnyAsync(item => item.Id == id, cancellationToken);
+            var parentId = archive.ParentId;
+            if (parentId is not null && !await _context.Items.IgnoreQueryFilters()
+                    .AnyAsync(item => item.Id == parentId.Value, cancellationToken))
+                parentId = null;
+
+            var restored = new Item
             {
-                _context.Attachments.RemoveRange(attachments);
-                await _context.SaveChangesAsync();
-            }
-
-            return await base.Delete(id);
+                Id = idIsFree ? archive.ItemId : 0,
+                Label = archive.Label, Icon = archive.Icon, ParentId = parentId, Attributes = archive.Attributes,
+                IsActive = true, CreatedAt = archive.CreatedAt, CreatedBy = archive.CreatedBy,
+                UpdatedAt = archive.UpdatedAt, UpdatedBy = archive.UpdatedBy
+            };
+            archive.RestoredAtUtc = DateTime.UtcNow;
+            archive.RestoredById = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+            HttpContext.Items["ItemArchiveRestore"] = true;
+            _context.Items.Add(restored);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Ok(restored);
         }
 
         [Authorize(Policy = "RequiereLectura")]
