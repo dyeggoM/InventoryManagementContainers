@@ -657,35 +657,96 @@ public class ApiTests
     }
 
     /// <summary>
-    /// The cycle guard has to see soft-deleted rows: a record out of the tree still carries a parent,
-    /// and a loop closed through it would be resurrected the moment it is reactivated. This is the
-    /// only way to persist a cycle while the guards are in place, so it is also the regression test
-    /// for the guard reading the same rows the tree can eventually reach.
+    /// A parent with children must not be archived or leave orphaned roots behind.
     /// </summary>
     [Test]
-    public async Task PutItem_DoesNotCreateCycleThroughHardDeletedRecord()
+    public async Task DeleteItem_WithChildrenReturnsConflictAndLeavesTheTreeIntact()
     {
         var a = (await PostItem(Unique("HiddenA"))).GetProperty("id").GetInt32();
         var b = (await PostItem(Unique("HiddenB"), a)).GetProperty("id").GetInt32();
         var c = (await PostItem(Unique("HiddenC"), b)).GetProperty("id").GetInt32();
 
-        // B is hard-deleted and C is detached from it, so the former relationship cannot close a cycle.
         var deleted = await _client.DeleteAsync($"/api/item/{b}");
-        Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+        var problem = await deleted.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.That(problem.GetProperty("detail").GetString(), Does.Contain("1"));
+        Assert.That(problem.GetProperty("detail").GetString(), Does.Contain("move").Or.Contain("Move"));
 
-        var response = await _client.PutAsJsonAsync($"/api/item/{a}", new
+        var payload = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var treeRoot = payload.GetProperty("tree").EnumerateArray().Single(node => node.GetProperty("id").GetInt32() == a);
+        var childB = treeRoot.GetProperty("children").EnumerateArray().Single(node => node.GetProperty("id").GetInt32() == b);
+        Assert.That(childB.GetProperty("children")[0].GetProperty("id").GetInt32(), Is.EqualTo(c));
+    }
+
+    [Test]
+    public async Task PutItem_RejectsSelfParentAndThreeNodeCycle()
+    {
+        var a = (await PostItem(Unique("CycleA"))).GetProperty("id").GetInt32();
+        var self = await _client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "CycleA", icon = "", parentId = a, attributes = "{}" });
+        Assert.That(self.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+
+        var b = (await PostItem(Unique("CycleB"), a)).GetProperty("id").GetInt32();
+        var c = (await PostItem(Unique("CycleC"), b)).GetProperty("id").GetInt32();
+        var cycle = await _client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "CycleA", icon = "", parentId = c, attributes = "{}" });
+        Assert.That(cycle.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
+    public async Task PutItem_RejectsFourNodeCycleAndMovingSubtreeUnderItsDescendant()
+    {
+        var a = (await PostItem(Unique("Cycle4A"))).GetProperty("id").GetInt32();
+        var b = (await PostItem(Unique("Cycle4B"), a)).GetProperty("id").GetInt32();
+        var c = (await PostItem(Unique("Cycle4C"), b)).GetProperty("id").GetInt32();
+        var d = (await PostItem(Unique("Cycle4D"), c)).GetProperty("id").GetInt32();
+        var cycle = await _client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "Cycle4A", icon = "", parentId = d, attributes = "{}" });
+        Assert.That(cycle.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+
+        var move = await _client.PutAsJsonAsync($"/api/item/{b}", new { id = b, label = "Cycle4B", icon = "", parentId = d, attributes = "{}" });
+        Assert.That(move.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
+    public async Task ItemDepth_DefaultLimitAcceptsDiegosNineLevelChainAndRejectsThirteen()
+    {
+        // The real hierarchy this inventory is meant to hold, down to a component on a board.
+        var chain = new[]
         {
-            id = a,
-            label = Unique("HiddenA-edited"),
-            icon = "",
-            parentId = c,
-            attributes = "{}",
-            children = Array.Empty<object>(),
-            attachments = Array.Empty<object>(),
-        });
+            "Bodega 1", "Habitacion 2", "Estanteria 1", "Cajon 1.1", "caja 3",
+            "Piano electronico", "tarjeta controladora 1", "sub tarjeta electronica 2", "circuito integrado LM0705"
+        };
+        var parentId = (await PostItem(chain[0])).GetProperty("id").GetInt32();
+        for (var level = 2; level <= 12; level++)
+        {
+            var label = level <= chain.Length ? chain[level - 1] : $"subparte nivel {level}";
+            parentId = (await PostItem(label, parentId)).GetProperty("id").GetInt32();
+        }
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent),
-            "the detached child is now a root and no cycle exists: " + await response.Content.ReadAsStringAsync());
+        var rejected = await _client.PostAsJsonAsync("/api/item", new
+        {
+            label = "nivel trece", icon = "", parentId, attributes = "{}",
+            children = Array.Empty<object>(), attachments = Array.Empty<object>()
+        });
+        Assert.That(rejected.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        var problem = await rejected.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.That(problem.GetProperty("detail").GetString(), Does.Contain("13").And.Contain("12"));
+    }
+
+    [Test]
+    public async Task PutItem_RejectsMovingSubtreePastMaximumDepth()
+    {
+        var subtreeRoot = (await PostItem(Unique("MovableRoot"))).GetProperty("id").GetInt32();
+        await PostItem(Unique("MovableChild"), subtreeRoot);
+        var parentId = (await PostItem(Unique("DeepRoot"))).GetProperty("id").GetInt32();
+        for (var level = 2; level <= 11; level++)
+            parentId = (await PostItem(Unique($"Deep{level}"), parentId)).GetProperty("id").GetInt32();
+
+        var response = await _client.PutAsJsonAsync($"/api/item/{subtreeRoot}", new
+        {
+            id = subtreeRoot, label = "MovableRoot", icon = "", parentId, attributes = "{}"
+        });
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.That(problem.GetProperty("detail").GetString(), Does.Contain("13").And.Contain("12"));
     }
 
     private static void CollectIds(JsonElement nodes, List<int> ids)

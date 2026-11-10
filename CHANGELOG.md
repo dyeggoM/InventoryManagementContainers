@@ -14,6 +14,9 @@ The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still
 - **Superadmin archive listing** supports deletion date, actor, label and pagination filters; admin
   activation restores the latest unrestored snapshot, preferring the original ID when available and
   writing a `Restore` audit action.
+- Deletion now returns `409 ProblemDetails` when children remain, preserving their parent links. Item
+  hierarchies are cycle-checked and limited to seven levels by default; configure with `Items:MaxDepth`
+  or override using `ITEMS_MAX_DEPTH`.
 - `IsActive` is server-owned on item create and update. API coverage exercises deletion, restoration,
   filtering, authorization and server-managed activation state.
 

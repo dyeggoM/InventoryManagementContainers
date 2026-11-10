@@ -85,7 +85,8 @@ public sealed class ItemArchiveTests
     [Test]
     public async Task Activate_RestoresMostRecentArchiveAndRecordsRestoreAudit()
     {
-        var id = await CreateItem("restorable-" + Guid.NewGuid().ToString("N"));
+        var parentId = await CreateItem("restore-parent-" + Guid.NewGuid().ToString("N"));
+        var id = await CreateItem("restorable-" + Guid.NewGuid().ToString("N"), parentId);
         Assert.That((await _client.DeleteAsync($"/api/item/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
         var response = await _client.PatchAsync($"/api/item/{id}/activate", content: null);
@@ -96,6 +97,7 @@ public sealed class ItemArchiveTests
             Assert.That(restored.GetProperty("id").GetInt32(), Is.EqualTo(id));
             Assert.That(restored.GetProperty("isActive").GetBoolean(), Is.True);
             Assert.That(restored.GetProperty("label").GetString(), Does.StartWith("restorable-"));
+            Assert.That(restored.GetProperty("parentId").GetInt32(), Is.EqualTo(parentId));
         });
         Assert.That((await _client.GetAsync($"/api/item/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
 
@@ -114,6 +116,69 @@ public sealed class ItemArchiveTests
             Assert.That(archive.GetProperty("restoredById").GetString(), Is.EqualTo(actor.Id));
         });
         Assert.That(await context.AuditLogs.AnyAsync(row => row.Action == "Restore" && row.Entity == "Item" && row.EntityId == id.ToString()), Is.True);
+    }
+
+    [Test]
+    public async Task Activate_WhenArchivedParentNoLongerExists_RestoresAsRoot()
+    {
+        var parentId = await CreateItem("removed-parent-" + Guid.NewGuid().ToString("N"));
+        var childId = await CreateItem("restored-root-" + Guid.NewGuid().ToString("N"), parentId);
+        Assert.That((await _client.DeleteAsync($"/api/item/{childId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+            var parent = await context.Items.SingleAsync(item => item.Id == parentId);
+            context.Items.Remove(parent);
+            await context.SaveChangesAsync();
+        }
+
+        var response = await _client.PatchAsync($"/api/item/{childId}/activate", content: null);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        var restored = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.That(!restored.TryGetProperty("parentId", out var restoredParentId)
+            || restoredParentId.ValueKind == JsonValueKind.Null, Is.True);
+    }
+
+    [Test]
+    public async Task ItemsMaxDepthEnvironmentVariableOverridesTheDefault()
+    {
+        var previous = Environment.GetEnvironmentVariable("ITEMS_MAX_DEPTH");
+        Environment.SetEnvironmentVariable("ITEMS_MAX_DEPTH", "3");
+        try
+        {
+            using var factory = new ApiFactory();
+            using var client = factory.CreateClient();
+            var login = await client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = Password });
+            Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            async Task<int> Create(string label, int? parentId)
+            {
+                var response = await client.PostAsJsonAsync("/api/item", new
+                {
+                    label, icon = "", parentId, attributes = "{}", children = Array.Empty<object>(), attachments = Array.Empty<object>()
+                });
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+                return (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetInt32();
+            }
+
+            var root = await Create("environment-root", null);
+            var child = await Create("environment-child", root);
+            var grandchild = await Create("environment-grandchild", child);
+            var rejected = await client.PostAsJsonAsync("/api/item", new
+            {
+                label = "environment-level-four", icon = "", parentId = grandchild, attributes = "{}",
+                children = Array.Empty<object>(), attachments = Array.Empty<object>()
+            });
+            Assert.That(rejected.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+            var problem = await rejected.Content.ReadFromJsonAsync<JsonElement>(Json);
+            Assert.That(problem.GetProperty("detail").GetString(), Does.Contain("4").And.Contain("3"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ITEMS_MAX_DEPTH", previous);
+        }
     }
 
     [Test]
@@ -146,11 +211,11 @@ public sealed class ItemArchiveTests
         Assert.That(read.GetProperty("isActive").GetBoolean(), Is.True);
     }
 
-    private async Task<int> CreateItem(string label)
+    private async Task<int> CreateItem(string label, int? parentId = null)
     {
         var response = await _client.PostAsJsonAsync("/api/item", new
         {
-            label, icon = "", parentId = (int?)null, attributes = "{}",
+            label, icon = "", parentId, attributes = "{}",
             children = Array.Empty<object>(), attachments = Array.Empty<object>()
         });
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
