@@ -6,6 +6,23 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/multipart`
+
+Photos travel as bytes, not as base64 inside JSON.
+
+- **`POST /api/attachment/upload` takes multipart form data** (`itemId`, `type`, `fileName`, `file`)
+  and streams the file to disk: a third smaller than the base64 payload and no encoded copy in
+  memory on the phone. Rejects a missing file, a bad record id and anything over the 20 MB cap.
+- **The item payload no longer carries files.** The form saves the record first, then uploads the
+  picked files against the id it got back (`afterSave` in `useTreeEditor`), so a new record and its
+  first photo work in one pass. The sheet stays busy until the uploads finish; a failed upload is
+  reported and does not undo the record.
+- **The preview is local until it is saved.** A picked photo is shown through an object URL instead
+  of a base64 copy — no encoding, no megabyte string in the form, and the URL is released when the
+  row goes away or the sheet closes.
+- **Deleting a file prunes its folder** when the last one is gone, so deleting records leaves no
+  empty directories behind.
+
 ## Pending — `feat/tests` (stacked on `feat/pwa`)
 
 The suite stops lying, and grows teeth.

@@ -38,12 +38,15 @@ export function getErrorMessage(error: unknown): string {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  // FormData must go out untouched: the browser writes the multipart boundary itself, and a
+  // JSON content type would make the server reject the body.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token
         ? {
             Authorization: `Bearer ${token}`,
@@ -81,6 +84,11 @@ export const api = {
       ...options,
       method: 'GET',
     });
+  },
+
+  /** Multipart upload: the browser sets the boundary, so no Content-Type header here. */
+  postForm<T>(endpoint: string, form: FormData): Promise<T> {
+    return request<T>(endpoint, { method: 'POST', body: form, headers: {} });
   },
 
   post<T>(endpoint: string, body?: unknown, options?: RequestInit): Promise<T> {

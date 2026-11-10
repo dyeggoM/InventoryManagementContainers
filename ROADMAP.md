@@ -18,23 +18,19 @@ What is deliberately not built yet, in the order it is worth doing.
 - **Tests with teeth.** `GetById` was returning no children at all (the two failures on `main` were
   a real bug, not flaky tests); nine API integration tests now drive the app over HTTP against a
   throwaway database, and Vitest covers the tree editor's state machine and the attribute editor.
+- **Uploads without base64.** A multipart endpoint takes the file as bytes; the form saves the
+  record first and uploads against the id it gets back.
 - **Search by attribute value.** `SN-0042` finds the record that carries it and shows the pair under
   the name; the count only counts rows that matched themselves.
 
-## 1. Uploads without base64
-
-Attachments are posted as a data URL inside JSON, which is ~33 % overhead and holds the whole photo
-in memory on the phone. A multipart endpoint (and `capture="environment"` straight on the input)
-would stream the file and let the server thumbnail it as it lands.
-
-## 2. Authentication
+## 1. Authentication
 
 The API has no authentication: `[Authorize]` is commented out, CORS is open in development and the
 service binds `0.0.0.0` for the LAN. On the workshop network that is a conscious trade-off; before
 the app leaves it, a shared token (or ASP.NET Identity, which the context already inherits from)
 has to close the door. Deferred by decision until the UI and the data model settle.
 
-## 3. Bulk entry from a template
+## 2. Bulk entry from a template
 
 Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case; the
 next step is a CSV/Excel template the user fills in (parent, children, attributes per row, one column

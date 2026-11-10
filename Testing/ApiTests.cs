@@ -1,7 +1,9 @@
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
+using IMCAPI.Services;
 
 namespace Testing;
 
@@ -437,6 +439,85 @@ public class ApiTests
         });
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+
+    [Test]
+    public async Task PostAttachmentMultipart_StoresTheFileAndServesItBack()
+    {
+        var item = await PostItem(Unique("Multipart"));
+        var itemId = item.GetProperty("id").GetInt32();
+        var bytes = Png(48, 32);
+
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent(itemId.ToString()), "itemId" },
+            { new StringContent("Photo"), "type" },
+            { new StringContent("streamed.png"), "fileName" },
+            { new ByteArrayContent(bytes), "file", "streamed.png" },
+        };
+
+        var response = await _client.PostAsync("/api/attachment/upload", form);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        var attachment = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        var id = attachment.GetProperty("id").GetInt32();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(attachment.GetProperty("fileName").GetString(), Is.EqualTo("streamed.png"));
+            Assert.That(attachment.GetProperty("filePath").GetString(), Does.StartWith($"media/items/{itemId}/"));
+            Assert.That(attachment.GetProperty("thumbnailBase64").GetString(), Is.Not.Null.And.Not.Empty);
+        });
+
+        var file = await _client.GetAsync($"/api/attachment/{id}/file");
+        file.EnsureSuccessStatusCode();
+        Assert.That(
+            Convert.ToHexString(SHA256.HashData(await file.Content.ReadAsByteArrayAsync())),
+            Is.EqualTo(Convert.ToHexString(SHA256.HashData(bytes))),
+            "what was uploaded is what comes back");
+    }
+
+    [Test]
+    public async Task PostAttachmentMultipart_WithoutAFile_IsRejected()
+    {
+        var item = await PostItem(Unique("NoFile"));
+        var itemId = item.GetProperty("id").GetInt32();
+
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent(itemId.ToString()), "itemId" },
+            { new StringContent("Photo"), "type" },
+        };
+
+        var response = await _client.PostAsync("/api/attachment/upload", form);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
+    public async Task PostAttachmentMultipart_AboveTheLimit_IsRejected()
+    {
+        var item = await PostItem(Unique("TooBig"));
+        var itemId = item.GetProperty("id").GetInt32();
+        // One byte over the 20 MB cap: the API must refuse before it writes anything.
+        var oversized = new byte[AttachmentStorage.MaxBytes + 1];
+
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent(itemId.ToString()), "itemId" },
+            { new StringContent("Photo"), "type" },
+            { new ByteArrayContent(oversized), "file", "huge.png" },
+        };
+
+        var response = await _client.PostAsync("/api/attachment/upload", form);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+            Assert.That(
+              _client.GetAsync($"/api/attachment/item/{itemId}").GetAwaiter().GetResult().StatusCode,
+              Is.EqualTo(HttpStatusCode.NoContent), "nothing was stored");
+        });
     }
 
     private async Task<int> TreeAttachmentCount(int itemId)

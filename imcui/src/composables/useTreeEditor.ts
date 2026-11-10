@@ -54,6 +54,11 @@ export interface TreeEditorOptions<T extends TreeEntry> {
   onReset?: () => void;
   /** Runs before a save, for payload shaping the service cannot know about. */
   beforeSave?: (entry: T) => void;
+  /**
+   * Runs after the record is stored and before the list reloads: the moment a new record has an id
+   * and its files can be uploaded against it.
+   */
+  afterSave?: (id: number) => void | Promise<void>;
   /** Returns a message to stop the save and show it, or null when the form is valid. */
   validate?: (entry: T) => string | null;
   /**
@@ -203,13 +208,16 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     saving.value = true;
     try {
       options.beforeSave?.(treeItem.value);
+      let savedId = id;
       if (id > 0) {
         await options.service.update(id, treeItem.value);
         feedback.success(`${cap(options.entity)} updated`);
       } else {
-        await options.service.create(treeItem.value);
+        const created = (await options.service.create(treeItem.value)) as { id?: number } | undefined;
+        savedId = typeof created?.id === 'number' ? created.id : 0;
         feedback.success(`${cap(options.entity)} created`);
       }
+      await options.afterSave?.(savedId);
       resetTreeItem();
       await loadData();
       return true;

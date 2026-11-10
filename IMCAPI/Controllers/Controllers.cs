@@ -156,6 +156,42 @@ namespace IMCAPI.Controllers
             return await base.Post(data);
         }
 
+        /// <summary>
+        /// The same upload as a multipart form: the bytes travel as bytes instead of base64 inside
+        /// JSON, which is a third smaller and does not hold the whole photo twice in memory.
+        /// </summary>
+        [HttpPost("upload")]
+        [RequestSizeLimit(25 * 1024 * 1024)]
+        public async Task<IActionResult> Upload([FromForm] int itemId, [FromForm] string? type,
+            [FromForm] string? fileName, IFormFile? file)
+        {
+            if (itemId <= 0) return BadRequest("An attachment needs the record it belongs to");
+            if (file is null || file.Length == 0) return BadRequest("Choose a file to upload");
+            if (file.Length > AttachmentStorage.MaxBytes)
+                return BadRequest($"The file is larger than {AttachmentStorage.MaxBytes / (1024 * 1024)} MB");
+
+            byte[] bytes;
+            await using (var buffer = new MemoryStream())
+            {
+                await file.CopyToAsync(buffer);
+                bytes = buffer.ToArray();
+            }
+
+            var stored = await _storage.SaveAsync(itemId, fileName ?? file.FileName, bytes);
+
+            var attachment = new Attachment
+            {
+                ItemId = itemId,
+                Type = type ?? "Photo",
+                FileName = fileName ?? file.FileName,
+                FilePath = stored.RelativePath,
+                ThumbnailBase64 = stored.ThumbnailBase64,
+            };
+
+            await _repository.Add(attachment);
+            return Ok(attachment);
+        }
+
         [HttpDelete("{id:int}")]
         public override async Task<IActionResult> Delete(int id)
         {
