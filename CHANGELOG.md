@@ -6,6 +6,19 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/api-items-archive`
+
+- **Item deletion is now archival**, not soft deletion: `ItemsArchive` stores a detached item snapshot,
+  deletion actor/time and attachment metadata; the live item and attachment rows are removed and the
+  attachment files are deleted.
+- **Superadmin archive listing** supports deletion date, actor, label and pagination filters; admin
+  activation restores the latest unrestored snapshot, preferring the original ID when available and
+  writing a `Restore` audit action.
+- Deletion now returns `409 ProblemDetails` when children remain, preserving their parent links. Item
+  hierarchies are cycle-checked and limited to seven levels by default; configure with `Items:MaxDepth`
+  or override using `ITEMS_MAX_DEPTH`.
+- `IsActive` is server-owned on item create and update. API coverage exercises deletion, restoration,
+  filtering, authorization and server-managed activation state.
 ## Pending — `fix/ui-pwa-service-worker`
 
 The PWA registration imported `register-service-worker`, which is declared in `src-pwa/package.json`

@@ -15,6 +15,7 @@ namespace IMCAPI.DB
         public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
         public virtual DbSet<AuditLog> AuditLogs { get; set; }
         public virtual DbSet<UserProfile> UserProfiles { get; set; }
+        public virtual DbSet<ItemArchive> ItemArchives { get; set; }
 
         public ApplicationContext(DbContextOptions<ApplicationContext> options)
             : base(options)
@@ -49,6 +50,23 @@ namespace IMCAPI.DB
                 entity.Property(profile => profile.UserId).HasMaxLength(450);
                 entity.HasOne<IdentityUser>().WithOne().HasForeignKey<UserProfile>(profile => profile.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ItemArchive>(entity =>
+            {
+                entity.ToTable("ItemsArchive");
+                entity.HasKey(archive => archive.ArchiveId);
+                entity.Property(archive => archive.ArchiveId).ValueGeneratedOnAdd();
+                entity.Property(archive => archive.Label).HasMaxLength(1000).IsRequired();
+                entity.Property(archive => archive.Icon).HasMaxLength(50).IsRequired();
+                entity.Property(archive => archive.CreatedBy).HasMaxLength(320);
+                entity.Property(archive => archive.UpdatedBy).HasMaxLength(320);
+                entity.Property(archive => archive.DeletedById).HasMaxLength(450);
+                entity.Property(archive => archive.DeletedBy).HasMaxLength(320);
+                entity.Property(archive => archive.RestoredById).HasMaxLength(450);
+                entity.HasIndex(archive => archive.ItemId);
+                entity.HasIndex(archive => archive.DeletedAtUtc);
+                entity.HasIndex(archive => archive.DeletedById);
             });
 
             modelBuilder.Entity<AuditLog>(entity =>

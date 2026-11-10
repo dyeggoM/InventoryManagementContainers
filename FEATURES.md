@@ -79,6 +79,6 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - `CHANGELOG.md` — every pull request and what it changed; this file — the resulting capability list.
 - Checks used before each commit: `vue-tsc`, `eslint`, `dotnet build`, `dotnet test`, `npm test`.
 - **API tests** run the app itself over a throwaway database and media folder: the tree shape, the
-  write paths, attachments written and served back byte-for-byte, soft deletes, seeding and
+  write paths, attachments written and served back byte-for-byte, archival deletion with restore, seeding and
   validation.
 - **UI tests** cover the tree editor's state machine and the attribute editor's typed rows.

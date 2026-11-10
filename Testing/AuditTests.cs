@@ -208,7 +208,7 @@ public sealed class AuditTests
     }
 
     [Test]
-    public async Task SoftDeletedItemCanBeFoundBySoftDeleteAction()
+    public async Task ArchivedItemDeletionCanBeFoundByDeleteAction()
     {
         using var client = _factory.CreateClient();
         await Authenticate(client, "bootstrap@example.test", "AuthTest!Secure123");
@@ -220,10 +220,10 @@ public sealed class AuditTests
         var id = (await create.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetInt32();
         Assert.That((await client.DeleteAsync($"/api/item/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
-        var response = await client.GetAsync($"/api/audit?action=SoftDelete&entity=Item&entityId={id}");
+        var response = await client.GetAsync($"/api/audit?action=Delete&entity=Item&entityId={id}");
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var rows = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.That(rows.GetProperty("items").EnumerateArray().Single().GetProperty("action").GetString(), Is.EqualTo("SoftDelete"));
+        Assert.That(rows.GetProperty("items").EnumerateArray().Single().GetProperty("action").GetString(), Is.EqualTo("Delete"));
     }
 
     [Test]

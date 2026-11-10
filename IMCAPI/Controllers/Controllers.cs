@@ -17,17 +17,39 @@ namespace IMCAPI.Controllers
     {
         private readonly AttachmentStorage _attachments;
         private readonly ApplicationContext _context;
+        private readonly int _maxDepth;
 
-        public ItemController(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments, ApplicationContext context) : base(repository, logger)
+        public ItemController(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments,
+            ApplicationContext context, IConfiguration configuration) : base(repository, logger)
         {
             _attachments = attachments;
             _context = context;
+            var environmentMaxDepth = Environment.GetEnvironmentVariable("ITEMS_MAX_DEPTH");
+            _maxDepth = int.TryParse(environmentMaxDepth, out var parsedEnvironmentDepth) && parsedEnvironmentDepth > 0
+                ? parsedEnvironmentDepth
+                : int.TryParse(configuration["Items:MaxDepth"], out var configuredDepth) && configuredDepth > 0
+                    ? configuredDepth
+                    : 12;
         }
 
         [HttpPost]
         [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Post(Item data)
         {
+            if (data.ParentId is int parentId)
+            {
+                var hierarchy = await AnalyzeParentChain(0, parentId);
+                if (hierarchy.Cycle)
+                    return InvalidHierarchy("The parent assignment creates a cycle.");
+                if (!hierarchy.ParentExists)
+                    return InvalidHierarchy($"Parent item {parentId} does not exist.");
+                var attemptedLevel = hierarchy.ParentLevel + 1;
+                if (attemptedLevel > _maxDepth)
+                    return DepthExceeded(attemptedLevel);
+            }
+
+            // The client may send IsActive, but only delete/restore may control visibility.
+            data.IsActive = true;
             // Attachments are created with the item, so their files are stored here too.
             if (data.Attachments is { Count: > 0 })
             {
@@ -45,8 +67,27 @@ namespace IMCAPI.Controllers
         [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Put(int id, Item data)
         {
-            if (data.ParentId is int proposedParentId && await WouldCreateCycle(id, proposedParentId))
-                return BadRequest("Un registro no puede ser padre de sí mismo ni de uno de sus descendientes.");
+            if (id != data.Id) return BadRequest();
+            var existing = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.Id == id);
+            if (existing is null) return NotFound();
+            data.IsActive = existing.IsActive;
+            var subtreeHeight = await GetSubtreeHeight(id);
+            if (data.ParentId is int proposedParentId)
+            {
+                var hierarchy = await AnalyzeParentChain(id, proposedParentId);
+                if (hierarchy.Cycle)
+                    return InvalidHierarchy("The parent assignment creates a cycle.");
+                if (!hierarchy.ParentExists)
+                    return InvalidHierarchy($"Parent item {proposedParentId} does not exist.");
+                var rootLevel = hierarchy.ParentLevel + 1;
+                var attemptedLevel = rootLevel + subtreeHeight - 1;
+                if (attemptedLevel > _maxDepth)
+                    return DepthExceeded(attemptedLevel);
+            }
+            else if (subtreeHeight > _maxDepth)
+            {
+                return DepthExceeded(subtreeHeight);
+            }
 
             if (data.Attachments is { Count: > 0 })
             {
@@ -65,25 +106,63 @@ namespace IMCAPI.Controllers
             return await base.Put(id, data);
         }
 
-        private async Task<bool> WouldCreateCycle(int id, int proposedParentId)
+        private async Task<(bool Cycle, bool ParentExists, int ParentLevel)> AnalyzeParentChain(int itemId, int proposedParentId)
         {
             var visited = new HashSet<int>();
             var currentId = proposedParentId;
-            for (var depth = 0; depth < 10000 && visited.Add(currentId); depth++)
+            var parentLevel = 0;
+            while (visited.Add(currentId))
             {
-                if (currentId == id) return true;
-                // IgnoreQueryFilters: a soft-deleted row still carries a parent, and the guard has to
-                // see the same rows the tree can reach once somebody reactivates them. Otherwise a
-                // cycle through an inactive record is accepted silently and lies dormant.
-                var parentId = await _context.Items.IgnoreQueryFilters()
-                    .Where(x => x.Id == currentId)
-                    .Select(x => x.ParentId)
+                if (itemId != 0 && currentId == itemId) return (true, true, parentLevel);
+                var parent = await _context.Items.IgnoreQueryFilters().AsNoTracking()
+                    .Where(item => item.Id == currentId)
+                    .Select(item => new { item.ParentId })
                     .SingleOrDefaultAsync();
-                if (parentId is not int nextId) return false;
+                if (parent is null) return (false, false, parentLevel);
+                parentLevel++;
+                if (parent.ParentId is not int nextId) return (false, true, parentLevel);
                 currentId = nextId;
             }
-            return true;
+            return (true, true, parentLevel);
         }
+
+        private async Task<int> GetSubtreeHeight(int rootId)
+        {
+            var items = await _context.Items.IgnoreQueryFilters().AsNoTracking()
+                .Select(item => new { item.Id, item.ParentId }).ToListAsync();
+            var childrenByParent = items.Where(item => item.ParentId is not null)
+                .GroupBy(item => item.ParentId!.Value)
+                .ToDictionary(group => group.Key, group => group.Select(item => item.Id).ToArray());
+            var pending = new Queue<(int Id, int Depth)>();
+            var visited = new HashSet<int> { rootId };
+            pending.Enqueue((rootId, 1));
+            var height = 1;
+            while (pending.TryDequeue(out var current))
+            {
+                height = Math.Max(height, current.Depth);
+                if (!childrenByParent.TryGetValue(current.Id, out var children)) continue;
+                foreach (var childId in children)
+                    if (visited.Add(childId)) pending.Enqueue((childId, current.Depth + 1));
+            }
+            return height;
+        }
+
+        private BadRequestObjectResult InvalidHierarchy(string detail) => BadRequest(new ProblemDetails
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Invalid item hierarchy",
+            Detail = detail
+        });
+
+        private BadRequestObjectResult DepthExceeded(int attemptedLevel) => InvalidHierarchy(
+            $"The requested hierarchy would reach level {attemptedLevel}; the maximum allowed depth is {_maxDepth}.");
+
+        private static ObjectResult ChildrenPreventDelete(int count) => new(new ProblemDetails
+        {
+            Status = StatusCodes.Status409Conflict,
+            Title = "Item has children",
+            Detail = $"This item has {count} child item(s). Move or delete them before deleting this item."
+        }) { StatusCode = StatusCodes.Status409Conflict };
 
         private static void ApplyAttachmentCount(ItemDTO node, Dictionary<int, int> counts)
         {
@@ -108,22 +187,97 @@ namespace IMCAPI.Controllers
         [Authorize(Policy = "RequiereAdmin")]
         public override async Task<IActionResult> Delete(int id)
         {
-            var attachments = await _context.Attachments
-                .Where(attachment => attachment.ItemId == id)
-                .ToListAsync();
+            var item = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(row => row.Id == id);
+            if (item is null) return NotFound();
 
-            foreach (var attachment in attachments)
+            var attachments = await _context.Attachments.IgnoreQueryFilters()
+                .Where(attachment => attachment.ItemId == id).ToListAsync();
+            var childCount = await _context.Items.IgnoreQueryFilters()
+                .CountAsync(child => child.ParentId == id);
+            if (childCount > 0) return ChildrenPreventDelete(childCount);
+            var actorId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+            var actorEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+            var now = DateTime.UtcNow;
+            var archive = new ItemArchive
             {
-                _attachments.Delete(attachment.FilePath);
-            }
+                ItemId = item.Id, Label = item.Label, Icon = item.Icon, ParentId = item.ParentId,
+                Attributes = item.Attributes, IsActive = item.IsActive, CreatedAt = item.CreatedAt,
+                CreatedBy = item.CreatedBy, UpdatedAt = item.UpdatedAt, UpdatedBy = item.UpdatedBy,
+                DeletedAtUtc = now, DeletedById = actorId, DeletedBy = actorEmail,
+                AttachmentsJson = attachments.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(
+                    attachments.Select(attachment => new { attachment.FileName, attachment.Type, attachment.FilePath }))
+            };
+            var filePaths = attachments.Select(attachment => attachment.FilePath).ToArray();
 
-            if (attachments.Count > 0)
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            _context.ItemArchives.Add(archive);
+            _context.Attachments.RemoveRange(attachments);
+            _context.Items.Remove(item);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            foreach (var filePath in filePaths) _attachments.Delete(filePath);
+            return NoContent();
+        }
+
+        [HttpGet("archive")]
+        [Authorize(Policy = "RequiereSuperadmin")]
+        public async Task<IActionResult> GetArchive([FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to,
+            [FromQuery] string? actor, [FromQuery] string? label, [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 25, CancellationToken cancellationToken = default)
+        {
+            if (page < 1 || pageSize < 1 || pageSize > 100 || from > to)
+                return BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Invalid archive filters",
+                    Detail = "Use page >= 1, pageSize between 1 and 100, and a from value no later than to."
+                });
+
+            var query = _context.ItemArchives.AsNoTracking().AsQueryable();
+            if (from is not null) query = query.Where(row => row.DeletedAtUtc >= from.Value.UtcDateTime);
+            if (to is not null) query = query.Where(row => row.DeletedAtUtc <= to.Value.UtcDateTime);
+            if (!string.IsNullOrWhiteSpace(actor))
+                query = query.Where(row => row.DeletedById == actor || row.DeletedBy == actor || row.DeletedBy!.Contains(actor));
+            if (!string.IsNullOrWhiteSpace(label)) query = query.Where(row => row.Label.Contains(label));
+            var totalCount = await query.CountAsync(cancellationToken);
+            var items = await query.OrderByDescending(row => row.DeletedAtUtc).ThenByDescending(row => row.ArchiveId)
+                .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+            return Ok(new { items, page, pageSize, total = totalCount });
+        }
+
+        [HttpPatch("{id:int}/activate")]
+        [Authorize(Policy = "RequiereAdmin")]
+        public async Task<IActionResult> Activate(int id, CancellationToken cancellationToken)
+        {
+            var archive = await _context.ItemArchives.Where(row => row.ItemId == id && row.RestoredAtUtc == null)
+                .OrderByDescending(row => row.DeletedAtUtc).ThenByDescending(row => row.ArchiveId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (archive is null) return NotFound();
+
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            var idIsFree = !await _context.Items.IgnoreQueryFilters().AnyAsync(item => item.Id == id, cancellationToken);
+            var parentId = archive.ParentId;
+            if (parentId is not null && !await _context.Items.IgnoreQueryFilters()
+                    .AnyAsync(item => item.Id == parentId.Value, cancellationToken))
+                parentId = null;
+
+            var restored = new Item
             {
-                _context.Attachments.RemoveRange(attachments);
-                await _context.SaveChangesAsync();
-            }
-
-            return await base.Delete(id);
+                Id = idIsFree ? archive.ItemId : 0,
+                Label = archive.Label, Icon = archive.Icon, ParentId = parentId, Attributes = archive.Attributes,
+                IsActive = true, CreatedAt = archive.CreatedAt, CreatedBy = archive.CreatedBy,
+                UpdatedAt = archive.UpdatedAt, UpdatedBy = archive.UpdatedBy
+            };
+            archive.RestoredAtUtc = DateTime.UtcNow;
+            archive.RestoredById = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+            HttpContext.Items["ItemArchiveRestore"] = true;
+            _context.Items.Add(restored);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Ok(restored);
         }
 
         [Authorize(Policy = "RequiereLectura")]
