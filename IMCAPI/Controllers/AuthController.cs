@@ -46,6 +46,19 @@ public sealed class AuthController : ControllerBase
             await _audit.WriteAsync("LoginFailed", "IdentityUser", user?.Id, actorEmail: request.Email);
             return Unauthorized();
         }
+        var profile = await _context.UserProfiles.SingleOrDefaultAsync(row => row.UserId == user.Id);
+        if (profile is { IsActive: false })
+        {
+            await _audit.WriteAsync("LoginFailed", "IdentityUser", user.Id, actorEmail: request.Email);
+            return Unauthorized();
+        }
+        if (profile is null)
+        {
+            profile = new UserProfile { UserId = user.Id, IsActive = true };
+            _context.UserProfiles.Add(profile);
+        }
+        profile.LastAccessUtc = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
         await _audit.WriteAsync("Login", "IdentityUser", user.Id, user.Id, user.Email);
 
         var refresh = AuthTokenService.NewRefreshToken();
@@ -87,7 +100,8 @@ public sealed class AuthController : ControllerBase
         }
 
         var user = await _users.FindByIdAsync(stored.UserId);
-        if (user is null)
+        var profile = user is null ? null : await _context.UserProfiles.SingleOrDefaultAsync(row => row.UserId == user.Id);
+        if (user is null || profile is { IsActive: false })
         {
             stored.RevokedAtUtc = now;
             await _context.SaveChangesAsync();
@@ -135,6 +149,29 @@ public sealed class AuthController : ControllerBase
         DeleteRefreshCookie();
         await _audit.WriteAsync("Logout", "IdentityUser", actorId, actorId, actorEmail);
         return NoContent();
+    }
+
+    [Authorize]
+    [HttpPost("stop-impersonation")]
+    public async Task<IActionResult> StopImpersonation(CancellationToken cancellationToken)
+    {
+        var targetId = User.FindFirst("impersonated_user_id")?.Value
+            ?? User.FindFirst("impersonatedUserId")?.Value;
+        var actorId = User.FindFirst("act")?.Value;
+        var actorEmail = User.FindFirst("act_email")?.Value;
+        if (string.IsNullOrWhiteSpace(targetId) || string.IsNullOrWhiteSpace(actorId)
+            || string.IsNullOrWhiteSpace(actorEmail)) return Forbid();
+
+        var actor = await _users.FindByIdAsync(actorId);
+        if (actor is null || !string.Equals(actor.Email, actorEmail, StringComparison.OrdinalIgnoreCase)
+            || !await _users.IsInRoleAsync(actor, "superadmin")) return Forbid();
+        var profile = await _context.UserProfiles.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == actorId, cancellationToken);
+        if (profile is { IsActive: false }) return Forbid();
+
+        await _audit.WriteAsync("ImpersonateEnd", "IdentityUser", targetId, actor.Id, actor.Email,
+            cancellationToken, impersonatedUserId: targetId);
+        var access = await _tokens.CreateAccessTokenAsync(actor);
+        return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc });
     }
 
     private void SetRefreshCookie(string token, DateTime expires) => Response.Cookies.Append(RefreshCookie, token,

@@ -14,6 +14,7 @@ namespace IMCAPI.DB
         public virtual DbSet<Constants> Constants { get; set; }
         public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
         public virtual DbSet<AuditLog> AuditLogs { get; set; }
+        public virtual DbSet<UserProfile> UserProfiles { get; set; }
 
         public ApplicationContext(DbContextOptions<ApplicationContext> options)
             : base(options)
@@ -40,6 +41,15 @@ namespace IMCAPI.DB
             modelBuilder.Entity<Item>().ToTable("Items");
             modelBuilder.Entity<Attachment>().ToTable("Attachments");
             modelBuilder.Entity<Constants>().ToTable("Constants");
+
+            modelBuilder.Entity<UserProfile>(entity =>
+            {
+                entity.ToTable("UserProfiles");
+                entity.HasKey(profile => profile.UserId);
+                entity.Property(profile => profile.UserId).HasMaxLength(450);
+                entity.HasOne<IdentityUser>().WithOne().HasForeignKey<UserProfile>(profile => profile.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             modelBuilder.Entity<AuditLog>(entity =>
             {

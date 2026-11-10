@@ -59,6 +59,17 @@ public static class DatabaseSeeder
             throw new InvalidOperationException($"Exactly one superadmin account must exist; found {superadmins.Count}.");
     }
 
+    public static async Task EnsureUserProfilesAsync(ApplicationContext context,
+        UserManager<IdentityUser> users, CancellationToken cancellationToken = default)
+    {
+        var idsWithProfiles = await context.UserProfiles.Select(profile => profile.UserId).ToHashSetAsync(cancellationToken);
+        var missingProfiles = await users.Users.Where(user => !idsWithProfiles.Contains(user.Id)).ToListAsync(cancellationToken);
+        foreach (var user in missingProfiles)
+            context.UserProfiles.Add(new IMCAPI.DB.Entities.UserProfile { UserId = user.Id, IsActive = true });
+        if (missingProfiles.Count > 0)
+            await context.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>Seeds catalog definitions on a fresh database.</summary>
     public static bool SeedConfiguration(ApplicationContext context, string contentRootPath)
     {
