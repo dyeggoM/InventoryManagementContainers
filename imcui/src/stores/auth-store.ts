@@ -70,10 +70,17 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
     error.value = null;
     try {
-      const response = await api.post<TokenResponse>('/auth/login', {
-        email: emailAddress,
-        password,
-      });
+      const response = await api.post<TokenResponse>(
+        '/auth/login',
+        {
+          email: emailAddress,
+          password,
+        },
+        // The login response is what sets the HttpOnly refresh cookie. Without credentials the
+        // browser throws that Set-Cookie away on a cross-origin call, and the silent refresh can
+        // never work: the access token expires and the user is sent back to the login form.
+        { credentials: 'include' },
+      );
       if (!response?.access_token) {
         error.value = 'La API no devolvió un token de acceso.';
         return false;
