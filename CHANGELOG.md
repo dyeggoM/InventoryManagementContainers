@@ -40,6 +40,31 @@ last-touched-by string the client could forge.
 Verified: `dotnet build` clean, `dotnet test` **70 passed**, and against a live instance an update
 whose audit row reads `Label: "forged-meta" → "renamed-by-verify"`, a `SoftDelete` row found by
 action, forged audit fields ignored, and `405` on every write attempt against the audit route.
+## Pending — `feat/ui-auth-dashboard`
+
+The API started refusing anonymous requests, and the PWA had no way to answer: it read the token once
+when the module loaded and never showed a login form. This makes the browser client usable again and
+gives the superadmin somewhere to work.
+
+- **Session for real**: the token is read on every request, attached, and on a `401` the client tries
+  `POST /api/auth/refresh` once (credentials included) before retrying; if that fails the session is
+  cleared and the app sends the user to `/login`.
+- **Login screen** with the server's message on failure and a return to the interrupted route.
+- **Role-aware navigation**: the drawer and the forms follow the role — `lector` has no write
+  controls, `operador` edits records and attachments, `admin` opens configuration, the dashboard is
+  `superadmin` only. The router guard is the enforcement; the UI just stops offering what would
+  bounce back.
+- **Superadmin dashboard** with three panels: users (list, create with a role, change roles,
+  deactivate), audit (actor/entity/action/date filters, before-after viewer, CSV export) and
+  impersonation (pick a user, permanent banner, all writes disabled while impersonating).
+- **`/api/users` and `/api/audit` do not exist yet**: the service layer is written against the agreed
+  contract and a `404` renders an explicit "API pending" state instead of an error screen.
+- **Pending on the API side**: the silent refresh needs the API's CORS policy to call
+  `AllowCredentials()`, because the refresh token is an `HttpOnly` cookie that the browser discards on
+  a cross-origin call. That one-line change ships with the audit-trail pull request; until it lands,
+  refresh only works when the app and the API share an origin.
+
+Verified: `npm test` 86 passed (9 files), `npm run typecheck` clean, `npm run build` succeeded.
 
 ## Pending — `security/auth-core`
 

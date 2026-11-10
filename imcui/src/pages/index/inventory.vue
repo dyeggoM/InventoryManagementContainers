@@ -12,6 +12,7 @@
     :saving="saving"
     :empty-message="emptyMessage"
     :dirty="isDirty"
+    :readonly="!canWrite"
     entity-label="Item"
     :entry-label="treeItem.label"
     @select="selectData"
@@ -25,7 +26,7 @@
       <div class="row items-center justify-between q-mb-xs">
         <div class="imc-section__title q-mb-none">Details</div>
         <q-btn
-          v-if="treeItem.id > 0"
+          v-if="treeItem.id > 0 && canWrite"
           flat
           no-caps
           icon="add"
@@ -35,12 +36,18 @@
           @click="createChildEntry"
         />
       </div>
-      <q-input label="Name" v-model="treeItem.label" :rules="[labelRule]" />
+      <q-input
+        label="Name"
+        v-model="treeItem.label"
+        :readonly="!canWrite"
+        :rules="[labelRule]"
+      />
       <q-select
         label="Parent item"
         v-model="treeItem.parentId"
         :options="parentOptions()"
         :display-value="treeItem.parentId == null ? 'No parent' : undefined"
+        :readonly="!canWrite"
         map-options
         emit-value
         class="q-mt-sm"
@@ -54,6 +61,7 @@
         :labels="attributeLabels"
         :lists="attributeLists"
         :types="attributeTypes"
+        :readonly="!canWrite"
       />
     </div>
 
@@ -62,6 +70,7 @@
       <attachment-editor
         v-model="attachments"
         :types="attachmentTypes"
+        :readonly="!canWrite"
         @add="addAttachment"
         @remove="removeAttachment"
       />
@@ -70,17 +79,22 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import TreeMasterDetail from '../../components/TreeMasterDetail.vue';
 import AttributeEditor from '../../components/AttributeEditor.vue';
 import AttachmentEditor, { type AttachmentRow } from '../../components/AttachmentEditor.vue';
 import { useTreeEditor } from '../../composables/useTreeEditor';
 import { useFeedback } from '../../composables/useFeedback';
+import { useAuthStore } from '../../stores/auth-store';
 import { itemsService, type Item, type Attributes } from '@services/items';
 import { attachmentsService } from '@services/attachment';
 import { constantsService } from '@services/constants';
 
 const feedback = useFeedback();
+const auth = useAuthStore();
+
+// A lector reads; an operador writes. A superadmin impersonating somebody writes nothing.
+const canWrite = computed(() => auth.canWrite);
 
 const attributes = ref<Attributes[]>([]);
 const attributeLabels = ref<string[]>([]);

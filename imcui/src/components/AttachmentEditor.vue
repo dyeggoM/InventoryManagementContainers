@@ -19,6 +19,7 @@
               dense
               borderless
               options-dense
+              :readonly="readonly"
               class="attachment-type"
               v-model="row.type"
               :options="types"
@@ -39,7 +40,7 @@
             />
           </div>
 
-          <div v-if="row.id === 0" class="column">
+          <div v-if="row.id === 0 && !readonly" class="column">
             <q-file
               dense
               borderless
@@ -71,6 +72,7 @@
         </div>
 
         <q-btn
+          v-if="!readonly"
           icon="delete_outline"
           flat
           round
@@ -83,7 +85,7 @@
       </div>
     </div>
 
-    <div class="row items-center q-gutter-sm q-mt-sm">
+    <div v-if="!readonly" class="row items-center q-gutter-sm q-mt-sm">
       <q-btn
         flat
         no-caps
@@ -121,6 +123,8 @@ export interface AttachmentRow {
 defineProps<{
   /** Attachment types from the `AttachmentType` constant. */
   types: string[];
+  /** The session cannot write: no picking, adding or removing files. */
+  readonly?: boolean;
 }>();
 
 const rows = defineModel<AttachmentRow[]>({ required: true });

@@ -85,6 +85,11 @@ export default defineConfig((ctx) => {
     devServer: {
       // vueDevtools: true,
       // https: true,
+      // Listening on every interface is what makes the app testable from a phone or another machine on
+      // the LAN: open http://<this-host-ip>:9000. The API base URL is derived from the page's own
+      // hostname (services/api.ts), so the same build talks to the API on that machine.
+      host: '0.0.0.0',
+      port: 9000,
       open: true, // opens browser window automatically
     },
 

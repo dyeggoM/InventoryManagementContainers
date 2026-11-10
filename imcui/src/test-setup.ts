@@ -1,7 +1,7 @@
 /**
  * Node 26 ships a `localStorage` global that only works when the process is started with
- * `--localstorage-file`, and it shadows the one jsdom would provide — so any module reading it at
- * import time (services/api.ts reads a token) throws before a test runs. Give the app a plain
+ * `--localstorage-file`, and it shadows the one jsdom would provide — so any module touching it
+ * (the auth store restores the session from it) throws before a test runs. Give the app a plain
  * in-memory store instead.
  */
 class MemoryStorage implements Storage {
