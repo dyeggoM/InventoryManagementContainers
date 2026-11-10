@@ -43,6 +43,9 @@ namespace IMCAPI.Controllers
         [HttpPut("{id:int}")]
         public override async Task<IActionResult> Put(int id, Item data)
         {
+            if (data.ParentId is int proposedParentId && await WouldCreateCycle(id, proposedParentId))
+                return BadRequest("Un registro no puede ser padre de sí mismo ni de uno de sus descendientes.");
+
             if (data.Attachments is { Count: > 0 })
             {
                 foreach (var attachment in data.Attachments)
@@ -60,12 +63,32 @@ namespace IMCAPI.Controllers
             return await base.Put(id, data);
         }
 
+        private async Task<bool> WouldCreateCycle(int id, int proposedParentId)
+        {
+            var visited = new HashSet<int>();
+            var currentId = proposedParentId;
+            for (var depth = 0; depth < 10000 && visited.Add(currentId); depth++)
+            {
+                if (currentId == id) return true;
+                var parentId = await _context.Items.Where(x => x.Id == currentId).Select(x => x.ParentId).SingleOrDefaultAsync();
+                if (parentId is not int nextId) return false;
+                currentId = nextId;
+            }
+            return true;
+        }
+
         private static void ApplyAttachmentCount(ItemDTO node, Dictionary<int, int> counts)
         {
+            ApplyAttachmentCount(node, counts, new HashSet<int>());
+        }
+
+        private static void ApplyAttachmentCount(ItemDTO node, Dictionary<int, int> counts, HashSet<int> visited)
+        {
+            if (!visited.Add(node.Id)) return;
             node.AttachmentCount = counts.TryGetValue(node.Id, out var count) ? count : 0;
             foreach (var child in node.Children)
             {
-                ApplyAttachmentCount(child, counts);
+                ApplyAttachmentCount(child, counts, visited);
             }
         }
 
@@ -260,11 +283,39 @@ namespace IMCAPI.Controllers
     public class ConstantsController : BaseController<Constants>
     {
         IRepository<Constants> _repository;
-        public ConstantsController(IRepository<Constants> repository, ILogger<BaseController<Constants>> logger) : base(repository, logger)
+        private readonly ApplicationContext _context;
+        public ConstantsController(IRepository<Constants> repository, ILogger<BaseController<Constants>> logger, ApplicationContext context) : base(repository, logger)
         {
             _repository = repository;
+            _context = context;
         }
 
+        [HttpPut("{id:int}")]
+        public override async Task<IActionResult> Put(int id, Constants data)
+        {
+            if (data.ParentId is int proposedParentId)
+            {
+                var visited = new HashSet<int>();
+                var currentId = proposedParentId;
+                var reachedRoot = false;
+                for (var depth = 0; depth < 10000 && visited.Add(currentId); depth++)
+                {
+                    if (currentId == id)
+                        return BadRequest("Un registro no puede ser padre de sí mismo ni de uno de sus descendientes.");
+                    var parentId = await _context.Constants.Where(x => x.Id == currentId).Select(x => x.ParentId).SingleOrDefaultAsync();
+                    if (parentId is not int nextId)
+                    {
+                        reachedRoot = true;
+                        break;
+                    }
+                    currentId = nextId;
+                }
+                if (!reachedRoot)
+                    return BadRequest("Un registro no puede ser padre de sí mismo ni de uno de sus descendientes.");
+            }
+
+            return await base.Put(id, data);
+        }
 
         public override async Task<IActionResult> Get()
         {

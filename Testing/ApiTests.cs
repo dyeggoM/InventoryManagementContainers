@@ -128,6 +128,36 @@ public class ApiTests
     }
 
     [Test]
+    public async Task PutItem_CannotSetAChildAsItsParent_AndTreeRemainsReadable()
+    {
+        var parent = await PostItem(Unique("CycleParent"));
+        var parentId = parent.GetProperty("id").GetInt32();
+        var child = await PostItem(Unique("CycleChild"), parentId);
+        var childId = child.GetProperty("id").GetInt32();
+
+        var response = await _client.PutAsJsonAsync($"/api/item/{parentId}", new
+        {
+            id = parentId,
+            label = parent.GetProperty("label").GetString(),
+            icon = "",
+            parentId = childId,
+            attributes = "{}",
+            children = Array.Empty<object>(),
+            attachments = Array.Empty<object>(),
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest),
+            await response.Content.ReadAsStringAsync());
+
+        var get = await _client.GetAsync("/api/item");
+        Assert.That(get.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var payload = await get.Content.ReadFromJsonAsync<JsonElement>(Json);
+        var tree = payload.GetProperty("tree").EnumerateArray().Single(n => n.GetProperty("id").GetInt32() == parentId);
+        Assert.That(tree.GetProperty("children").GetArrayLength(), Is.EqualTo(1));
+        Assert.That(tree.GetProperty("children")[0].GetProperty("id").GetInt32(), Is.EqualTo(childId));
+    }
+
+    [Test]
     public async Task DeleteItem_TakesItOutOfTheList()
     {
         var item = await PostItem(Unique("Temporary"));

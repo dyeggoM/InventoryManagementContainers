@@ -36,18 +36,21 @@ namespace IMCAPI.DB.Entities
             Attachments = attachments.Count() > 0 ? attachments.Select(x => new AttachmentDTO(x)).ToList() : new List<AttachmentDTO>();
             Icon = "";
         }
-        public ItemDTO(Item data, bool includeChildren = true)
+        public ItemDTO(Item data, bool includeChildren = true) : this(data, includeChildren, new HashSet<int>()) { }
+
+        private ItemDTO(Item data, bool includeChildren, HashSet<int> visited)
         {
             // CTOR for tree
             Id = data.Id;
+            var alreadyVisited = !visited.Add(data.Id);
             Label = data.Label;
             Attributes = data.Attributes;
             ParentId = data.ParentId;
-            Parent = data.Parent != null
-                ? new ItemDTO(data.Parent, includeChildren: false)
+            Parent = !alreadyVisited && data.Parent != null && !visited.Contains(data.Parent.Id)
+                ? new ItemDTO(data.Parent, includeChildren: false, new HashSet<int> { data.Id })
                 : null;
-            Children = includeChildren && data.Children != null && data.Children.Any()
-                ? data.Children.Select(x => new ItemDTO(x, includeChildren: true)).ToList()
+            Children = !alreadyVisited && includeChildren && data.Children != null && data.Children.Any()
+                ? data.Children.Where(x => !visited.Contains(x.Id)).Select(x => new ItemDTO(x, includeChildren: true, new HashSet<int>(visited))).ToList()
                 : new List<ItemDTO>();
             Attachments = data.Attachments.Count() > 0 ? data.Attachments.Select(x => new AttachmentDTO(x)).ToList() : new List<AttachmentDTO>();
             Icon = "";
@@ -116,21 +119,24 @@ namespace IMCAPI.DB.Entities
             Icon = "";
         }
 
-        public ConstantsDTO(Constants data, bool includeChildren = true)
+        public ConstantsDTO(Constants data, bool includeChildren = true) : this(data, includeChildren, new HashSet<int>()) { }
+
+        private ConstantsDTO(Constants data, bool includeChildren, HashSet<int> visited)
         {
             // CTOR for tree
             Id = data.Id;
+            var alreadyVisited = !visited.Add(data.Id);
             Group = data.Group;
             Label = data.Label;
             Description = data.Description;
             DataType = data.DataType;
             SortOrder = data.SortOrder;
             ParentId = data.ParentId;
-            Parent = data.Parent != null 
-                ? new ConstantsDTO(data.Parent, includeChildren: false) 
+            Parent = !alreadyVisited && data.Parent != null && !visited.Contains(data.Parent.Id)
+                ? new ConstantsDTO(data.Parent, includeChildren: false, new HashSet<int> { data.Id })
                 : null;
-            Children = includeChildren && data.Children != null && data.Children.Any()
-                ? data.Children.Select(x => new ConstantsDTO(x, includeChildren: true)).ToList()
+            Children = !alreadyVisited && includeChildren && data.Children != null && data.Children.Any()
+                ? data.Children.Where(x => !visited.Contains(x.Id)).Select(x => new ConstantsDTO(x, includeChildren: true, new HashSet<int>(visited))).ToList()
                 : new List<ConstantsDTO>();
             Icon = "";
         }
