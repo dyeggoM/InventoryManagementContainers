@@ -6,6 +6,38 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `security/auth-audit`
+
+The HTTP surface audited end to end and reproduced in a live run: **15 findings — 2 critical, 3 high,
+6 medium, 4 low**. Full report in [docs/security/2026-11-10-audit.md](docs/security/2026-11-10-audit.md);
+the per-route decision is [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md), and the five routes that
+may stay anonymous are declared in
+[endpoints.allow-anonymous.txt](endpoints.allow-anonymous.txt). Neither critical is fixed yet: C-2 is
+in progress, C-1 is phase (b) of the roadmap.
+
+- **C-1 (critical, CWE-306) — the API authenticates nobody.** `Program.cs:117-124` calls
+  `UseAuthorization()` with no authentication scheme registered and never calls `UseAuthentication()`,
+  and every `[Authorize]` is commented out (`Controllers.cs:15,138,259`, `BaseController.cs:26`).
+  Confirmed without a credential: `POST`, `PUT`, `DELETE`, `upload` and `/file` all answered 200/204
+  — full inventory read, write, delete and arbitrary file upload from anyone who reaches the port.
+- **C-2 (critical, CWE-674) — a `ParentId` cycle kills the process.** Two anonymous `PUT`s (a
+  record's parent set to its own child) leave EF's `Children` navigation closed on itself and the DTO
+  constructors recurse until the stack is gone (`DTOs.cs:49-51` and `:132-134`, plus the twin in
+  `Controllers.cs:63-70`). Confirmed: `GET /api/item` and `GET /api/constants` stop answering and the
+  process dies (`exit 134`, the overflow repeated 23,792 times); the database stays poisoned, so it
+  dies again on the first `GET` after a restart.
+- **A-1 (high, CWE-862) — destructive writes and deletes with no credential, and the delete reaches
+  the disk.** `ItemController.Delete` (`Controllers.cs:76-95`) removes the attachment files before the
+  rows, and `AttachmentStorage.Delete` is not a move to a bin: a loop over `1..N` empties the
+  inventory and its photos for good.
+- **A-2 (high, CWE-915) — mass assignment of `Id`, `IsActive` and `UpdatedBy`.** The client sets the
+  audit field itself (`Models.cs:7-15`, `BaseRepository.cs:135-140`); `POST` returned
+  `"updatedBy":"attacker"` verbatim, so every change can be filed under a name the attacker chooses.
+  An explicit `Id` also collides with a live primary key and answers 500 instead of 409.
+- **A-3 (high, CWE-532 / CWE-200) — `GET /api/logs/{date}` serves raw logs.** `LogsController.cs:19-37`
+  returns the day's file as JSON, absolute server paths and full exception `ToString()`s included: a
+  map of the host and of the code paths that fail.
+
 ## Pending — `feat/multipart`
 
 Photos travel as bytes, not as base64 inside JSON.

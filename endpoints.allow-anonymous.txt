@@ -1,0 +1,10 @@
+# Rutas que pueden responder sin autenticación.
+# Fuente del test de contrato (Testing/AuthSurfaceTests.cs): cualquier endpoint anónimo
+# que no esté en esta lista hace fallar la suite. Formato: <VERBO> <ruta template de ASP.NET>.
+# Un '*' final casa cualquier sufijo de ruta.
+GET /api/item/test
+GET /api/attachment/test
+GET /api/constants/test
+GET /api/constants
+GET /api/constants/{id:int}
+GET /api/constants/group/{group}
