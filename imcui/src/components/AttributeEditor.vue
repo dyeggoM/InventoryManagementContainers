@@ -11,7 +11,7 @@
     </div>
 
     <!-- Adding a row must not require scrolling past the rows: the actions sit above the table. -->
-    <div class="row items-center q-gutter-x-sm q-mb-xs attribute-actions">
+    <div v-if="!readonly" class="row items-center q-gutter-x-sm q-mb-xs attribute-actions">
       <q-btn
         flat
         no-caps
@@ -72,6 +72,7 @@
           dense
           borderless
           hide-bottom-space
+          :readonly="readonly"
           class="attribute-name attribute-name--custom"
           placeholder="Attribute name"
           :model-value="row.label"
@@ -88,6 +89,7 @@
           options-dense
           borderless
           hide-dropdown-icon
+          :readonly="readonly"
           class="attribute-name"
           placeholder="Pick an attribute"
           :model-value="row.label"
@@ -103,6 +105,7 @@
           options-dense
           borderless
           hide-bottom-space
+          :readonly="readonly"
           placeholder="—"
           v-model="row.value"
           :options="listFor(row.label)"
@@ -111,6 +114,7 @@
           v-else
           dense
           borderless
+          :readonly="readonly"
           :placeholder="isDate(row) ? '' : '—'"
           :model-value="display(row, index)"
           :type="inputType(row)"
@@ -124,6 +128,7 @@
           @update:model-value="(value: string | number | null) => onValue(row, index, value)"
         />
         <q-btn
+          v-if="!readonly"
           icon="delete_outline"
           size="sm"
           color="grey-7"
@@ -158,6 +163,8 @@ const props = defineProps<{
   lists: Record<string, string[]>;
   /** label -> data type (Text, Number, Money, Date, LongText), set in Configuration. */
   types?: Record<string, string | null | undefined>;
+  /** The session cannot write: rows render as text and the add/remove buttons are gone. */
+  readonly?: boolean;
 }>();
 
 const rows = defineModel<Attributes[]>({ required: true });

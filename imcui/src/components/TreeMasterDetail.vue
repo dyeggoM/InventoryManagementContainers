@@ -2,6 +2,12 @@
   <q-page class="imc-page">
     <q-linear-progress v-if="loading" indeterminate color="primary" />
 
+    <!-- Signed in as a role that may not write, or impersonating somebody: say so on both layouts. -->
+    <q-banner v-if="readonly" dense class="bg-orange-1 text-orange-10">
+      <template v-slot:avatar><q-icon name="visibility" /></template>
+      Solo lectura: tu rol no permite crear, editar ni borrar.
+    </q-banner>
+
     <!-- Desktop: tree on the left, form on the right. -->
     <q-splitter v-if="$q.screen.gt.sm" v-model="splitter">
       <template v-slot:before>
@@ -21,6 +27,7 @@
               </template>
             </q-input>
             <q-btn
+              v-if="!readonly"
               outline
               no-caps
               icon="add"
@@ -114,7 +121,7 @@
                   <span v-if="dirty" class="text-orange-8 q-ml-sm">· unsaved changes</span>
                 </div>
               </div>
-              <q-btn v-if="panel.id > 0" flat round dense icon="more_vert" aria-label="More actions">
+              <q-btn v-if="panel.id > 0 && !readonly" flat round dense icon="more_vert" aria-label="More actions">
                 <q-menu anchor="bottom right" self="top right" auto-close>
                   <q-list dense style="min-width: 200px">
                     <q-item clickable v-close-popup @click="emit('duplicate')">
@@ -136,7 +143,7 @@
             </div>
             <q-form @submit="emit('submit')" @reset="emit('reset')" class="q-gutter-md">
               <slot />
-              <div class="row q-gutter-sm q-mt-md">
+              <div v-if="!readonly" class="row q-gutter-sm q-mt-md">
                 <q-btn label="Save" type="submit" color="primary" :loading="saving" />
                 <q-btn label="Reset" type="reset" color="grey-9" flat />
               </div>
@@ -160,6 +167,7 @@
         <q-icon name="inventory_2" />
         <div class="text-subtitle1 q-mt-sm q-mb-md">{{ emptyMessage }}</div>
         <q-btn
+          v-if="!readonly"
           unelevated
           no-caps
           color="primary"
@@ -222,7 +230,7 @@
         </template>
       </template>
 
-      <q-page-sticky position="bottom-right" :offset="[16, 16]">
+      <q-page-sticky v-if="!readonly" position="bottom-right" :offset="[16, 16]">
         <q-btn
           round
           unelevated
@@ -250,7 +258,7 @@
             {{ entryId > 0 ? entryLabel || `${entityLabel} #${entryId}` : `New ${entityLabel.toLowerCase()}` }}
           </q-toolbar-title>
           <q-btn
-            v-if="entryId > 0"
+            v-if="entryId > 0 && !readonly"
             icon="more_vert"
             flat
             round
@@ -288,8 +296,8 @@
             <span v-if="dirty" class="text-caption imc-unsaved">Unsaved changes</span>
             <q-space />
             <div class="row items-center q-gutter-x-sm">
-              <q-btn label="Reset" color="grey-9" flat type="reset" />
-              <q-btn label="Save" color="primary" type="submit" :loading="saving" class="q-px-lg" />
+              <q-btn v-if="!readonly" label="Reset" color="grey-9" flat type="reset" />
+              <q-btn v-if="!readonly" label="Save" color="primary" type="submit" :loading="saving" class="q-px-lg" />
             </div>
           </div>
         </q-form>
@@ -327,8 +335,13 @@ const props = withDefaults(
     entryLabel?: string;
     /** The open form has edits that are not saved yet. */
     dirty?: boolean;
+    /**
+     * The session may not write (the lector role, or a superadmin impersonating somebody): every
+     * create, duplicate, delete and save affordance is hidden, and the pages disable their fields.
+     */
+    readonly?: boolean;
   }>(),
-  { entityLabel: 'Item', entryLabel: '', dirty: false },
+  { entityLabel: 'Item', entryLabel: '', dirty: false, readonly: false },
 );
 
 const emit = defineEmits<{
