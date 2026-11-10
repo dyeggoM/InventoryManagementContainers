@@ -16,6 +16,43 @@ Documentation is part of the codebase:
 `ROADMAP.md` (what is planned, in order), `SECURITY_AUTH_MATRIX.md` (which route requires which
 role), `AI_INVENTORY.md` (generated map of the code, refreshed by the pre-commit hook).
 
+## Read the inventory before you read the code
+
+`AI_INVENTORY.md` is a **router index**: it names each module, its size and its main symbols, and
+links to one file per module under `inventory/`. It exists so a change does not start with a repo
+walk. This is not advice, it is the required order of work:
+
+1. **Open `AI_INVENTORY.md` first.** Find the module that owns the change, open **only** that slice.
+   Loading every slice is the same mistake as reading the whole repository.
+2. **Fetch a range, not a file.** Symbols carry `path:line`: read that range plus ~10 lines. Opening a
+   700-line controller to look at one method is how a cheap change becomes an expensive one.
+3. **Reuse before writing.** If the symbol, route or DTO already exists, extend it. A second
+   implementation of the same concern is a defect, not a shortcut.
+4. **Read the Impact line before changing a signature.** Every caller listed goes in the same change,
+   including callers in another module (they carry their own `path:line`).
+5. **Never paste the inventory or a whole source file into the conversation as "context".** Cite
+   `path:line` and read what the change needs; anything quoted into the prompt is re-sent on every
+   later turn. This is measurable: a session that ignored the inventory made 332 API calls and read
+   `Controllers.cs` 30 times for one change.
+6. **One symbol, one question?** Ask the CLI instead of a document:
+   `python3 <skill>/scripts/ai_inventory.py --root . --context SYMBOL_NAME --budget 8000`.
+7. **Absence is not proof.** Dynamic dispatch, reflection and generated code are not indexed. Grep
+   before concluding that something is unused.
+
+Who owns what: `IMCAPI/**` and `Testing/**` are the back-end bot's; `imcui/**` is the front-end bot's;
+nobody edits another bot's directories. Security reviews are read-only.
+
+Regenerate the map (the `code-inventory` skill does this automatically in its pre-commit hook):
+
+```bash
+python3 <skill>/scripts/inventory.py sync --root . --lang cs --full
+python3 <skill>/scripts/inventory.py sync --root . --lang js --full
+python3 <skill>/scripts/ai_inventory.py --root . --max-chars 40000 --split auto
+```
+
+The split flags matter: without them the document is a single 130 KB file that no agent can afford to
+open, and the whole point is lost.
+
 ## Branches and pull requests
 
 - **`main` is always deployable. Nothing is committed to it directly.** Every change lands through a

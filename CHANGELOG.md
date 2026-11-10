@@ -66,6 +66,19 @@ gives the superadmin somewhere to work.
 
 Verified: `npm test` 86 passed (9 files), `npm run typecheck` clean, `npm run build` succeeded.
 
+### The code map is now a router index, and using it is a rule
+
+`AI_INVENTORY.md` went from a single 131 KB document to a **6 KB router index plus 18 module slices**
+under `inventory/`, so a change starts by opening the one module it touches instead of walking the
+repository. The generator's default split threshold dropped from 160 KB to 40 KB for that reason, and
+the "how to use" block is now a mandatory protocol (index first, ranges not files, reuse before
+writing, read Impact before a signature change, never paste the map or a file into the prompt).
+
+`AGENTS.md` gains the same rules as a required order of work, plus the ownership map, and the
+pre-commit hook is now installed and versioned in `.githooks/` instead of being assumed: it had never
+been installed in this clone, which is why the map had gone stale and still listed the routes from
+before the users work.
+
 ### Users and impersonation
 
 The superadmin can now manage accounts and look through another role's eyes without knowing its
