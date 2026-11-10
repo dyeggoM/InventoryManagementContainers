@@ -96,7 +96,7 @@ namespace IMCAPI
                 throw new InvalidOperationException("Auth:Jwt:Key must contain at least 32 UTF-8 bytes.");
             var authEnforce = !bool.TryParse(builder.Configuration["Auth:Enforce"], out var configuredEnforce) || configuredEnforce;
 
-            builder.Services.AddIdentityCore<IdentityUser>()
+            builder.Services.AddIdentityCore<IdentityUser>(options => options.User.RequireUniqueEmail = true)
                 .AddRoles<IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationContext>()
                 .AddSignInManager()
@@ -117,10 +117,29 @@ namespace IMCAPI
                         NameClaimType = System.Security.Claims.ClaimTypes.Name,
                         RoleClaimType = System.Security.Claims.ClaimTypes.Role,
                     };
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnTokenValidated = async context =>
+                        {
+                            var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationContext>();
+                            var principal = context.Principal!;
+                            var subjectId = principal.FindFirst("sub")?.Value
+                                ?? principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                            var actorId = principal.FindFirst("act")?.Value;
+                            var stoppingImpersonation = string.Equals(context.Request.Path.Value?.TrimEnd('/'),
+                                "/api/auth/stop-impersonation", StringComparison.OrdinalIgnoreCase);
+                            var ids = (stoppingImpersonation && actorId is not null ? new[] { actorId }
+                                : new[] { subjectId, actorId })
+                                .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToArray();
+                            var inactive = await db.UserProfiles.AsNoTracking()
+                                .AnyAsync(profile => ids.Contains(profile.UserId) && !profile.IsActive);
+                            if (inactive) context.Fail("The user account is inactive.");
+                        }
+                    };
                 });
             builder.Services.AddAuthorization(options =>
             {
-                AddRolePolicy(options, "RequiereLectura", ["superadmin", "admin", "operador", "lector"], authEnforce);
+                AddRolePolicy(options, "RequiereLectura", ["superadmin", "admin", "operador", "lector"], authEnforce, allowImpersonationRead: true);
                 AddRolePolicy(options, "RequiereEscritura", ["superadmin", "admin", "operador"], authEnforce);
                 AddRolePolicy(options, "RequiereAdmin", ["superadmin", "admin"], authEnforce);
                 AddRolePolicy(options, "RequiereSuperadmin", ["superadmin"], authEnforce);
@@ -153,6 +172,7 @@ namespace IMCAPI
                     var userManager = serviceScope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
                     var roleManager = serviceScope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
                     DatabaseSeeder.SeedIdentityAsync(userManager, roleManager, app.Configuration).GetAwaiter().GetResult();
+                    DatabaseSeeder.EnsureUserProfilesAsync(context, userManager).GetAwaiter().GetResult();
 
                     // Older rows carry the whole image; move it to disk once.
                     var storage = serviceScope.ServiceProvider.GetRequiredService<AttachmentStorage>();
@@ -180,6 +200,20 @@ namespace IMCAPI
             app.UseHttpsRedirection();
 
             app.UseAuthentication();
+            app.Use(async (context, next) =>
+            {
+                var isImpersonating = context.User.HasClaim(claim => claim.Type == "impersonated_user_id");
+                var isStopImpersonation = string.Equals(context.Request.Path.Value?.TrimEnd('/'),
+                    "/api/auth/stop-impersonation", StringComparison.OrdinalIgnoreCase);
+                var isSafeMethod = HttpMethods.IsGet(context.Request.Method)
+                    || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method);
+                if (isImpersonating && !isSafeMethod && !isStopImpersonation)
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return;
+                }
+                await next();
+            });
             app.UseAuthorization();
 
 
@@ -188,10 +222,13 @@ namespace IMCAPI
             app.Run();
         }
         private static void AddRolePolicy(Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
-            string name, string[] roles, bool enforce)
+            string name, string[] roles, bool enforce, bool allowImpersonationRead = false)
         {
             options.AddPolicy(name, policy => policy.RequireAssertion(context =>
-                !enforce || roles.Any(context.User.IsInRole)));
+            {
+                var impersonating = context.User.HasClaim(claim => claim.Type == "impersonated_user_id");
+                return (!impersonating || allowImpersonationRead) && (!enforce || roles.Any(context.User.IsInRole));
+            }));
         }
     }
 }

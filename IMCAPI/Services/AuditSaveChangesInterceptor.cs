@@ -72,10 +72,15 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
             var http = accessor.HttpContext;
             var principal = http?.User;
             var now = DateTime.UtcNow;
-            var actorId = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal?.FindFirst("sub")?.Value;
-            var actorEmail = principal?.FindFirst(ClaimTypes.Email)?.Value ?? principal?.Identity?.Name;
-            var imp = principal?.FindFirst("impersonated_user_id")?.Value
+            var impersonated = principal?.FindFirst("impersonated_user_id")?.Value
                 ?? principal?.FindFirst("impersonatedUserId")?.Value;
+            var actorId = impersonated is null
+                ? principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal?.FindFirst("sub")?.Value
+                : principal?.FindFirst("act")?.Value;
+            var actorEmail = impersonated is null
+                ? principal?.FindFirst(ClaimTypes.Email)?.Value ?? principal?.Identity?.Name
+                : principal?.FindFirst("act_email")?.Value;
+            var imp = impersonated;
             var changes = new List<Change>(changed.Count);
             foreach (var entry in changed)
             {
@@ -108,9 +113,11 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                 }
                 var isRole = entry.Metadata.ClrType.IsGenericType
                     && entry.Metadata.ClrType.GetGenericTypeDefinition() == typeof(IdentityUserRole<>);
-                var isSoftDelete = entry.Entity is Base && entry.State == EntityState.Modified
-                    && Equals(entry.Property(nameof(Base.IsActive)).OriginalValue, true)
-                    && Equals(entry.Property(nameof(Base.IsActive)).CurrentValue, false);
+                var isSoftDelete = entry.State == EntityState.Modified &&
+                    (entry.Entity is Base && Equals(entry.Property(nameof(Base.IsActive)).OriginalValue, true)
+                        && Equals(entry.Property(nameof(Base.IsActive)).CurrentValue, false)
+                    || entry.Entity is UserProfile && Equals(entry.Property(nameof(UserProfile.IsActive)).OriginalValue, true)
+                        && Equals(entry.Property(nameof(UserProfile.IsActive)).CurrentValue, false));
                 var action = isRole ? "RoleChange" : isSoftDelete ? "SoftDelete" : entry.State switch
                 {
                     EntityState.Added => "Create", EntityState.Modified => "Update", EntityState.Deleted => "Delete",
@@ -263,18 +270,25 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
 public sealed class AuditLogWriter(ApplicationContext context, IHttpContextAccessor accessor)
 {
     public async Task WriteAsync(string action, string? entity = null, string? entityId = null,
-        string? actorUserId = null, string? actorEmail = null, CancellationToken cancellationToken = default)
+        string? actorUserId = null, string? actorEmail = null, CancellationToken cancellationToken = default,
+        string? impersonatedUserId = null, string? beforeJson = null, string? afterJson = null)
     {
         var http = accessor.HttpContext;
         var principal = http?.User;
+        var impersonating = principal?.FindFirst("impersonated_user_id")?.Value
+            ?? principal?.FindFirst("impersonatedUserId")?.Value;
         context.AuditLogs.Add(new AuditLog
         {
             TimestampUtc = DateTime.UtcNow,
-            ActorUserId = actorUserId ?? principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal?.FindFirst("sub")?.Value,
-            ActorEmail = actorEmail ?? principal?.FindFirst(ClaimTypes.Email)?.Value ?? principal?.Identity?.Name,
-            ImpersonatedUserId = principal?.FindFirst("impersonated_user_id")?.Value
-                ?? principal?.FindFirst("impersonatedUserId")?.Value,
+            ActorUserId = actorUserId ?? (impersonating is null
+                ? principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal?.FindFirst("sub")?.Value
+                : principal?.FindFirst("act")?.Value),
+            ActorEmail = actorEmail ?? (impersonating is null
+                ? principal?.FindFirst(ClaimTypes.Email)?.Value ?? principal?.Identity?.Name
+                : principal?.FindFirst("act_email")?.Value),
+            ImpersonatedUserId = impersonatedUserId ?? impersonating,
             Action = action, Entity = entity, EntityId = entityId,
+            BeforeJson = beforeJson, AfterJson = afterJson,
             IpAddress = http?.Connection.RemoteIpAddress?.ToString(), UserAgent = http?.Request.Headers.UserAgent.ToString(),
             RequestId = http?.TraceIdentifier ?? Activity.Current?.Id
         });

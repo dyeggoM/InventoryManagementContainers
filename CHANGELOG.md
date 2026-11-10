@@ -66,6 +66,32 @@ gives the superadmin somewhere to work.
 
 Verified: `npm test` 86 passed (9 files), `npm run typecheck` clean, `npm run build` succeeded.
 
+### Users and impersonation
+
+The superadmin can now manage accounts and look through another role's eyes without knowing its
+password.
+
+- **`UserController`** (`GET`, `POST`, `PUT /{id}/roles`, `DELETE /{id}`) under `RequiereSuperadmin`,
+  answering the shape the dashboard already expects; `UserProfile` carries `IsActive` and the last
+  access time.
+- **Hard rules, verified against a live instance**: a duplicate email answers `409`; the `superadmin`
+  role cannot be assigned through the API (`400`); the bootstrap superadmin cannot be deleted (`409`)
+  or demoted (`400`); nobody can grant themselves a role (`400`). `DELETE` deactivates the Identity
+  row instead of deleting it, so the audit history keeps naming a real account.
+- **Impersonation** (`POST /api/users/{id}/impersonate`): a 7-minute access token whose `sub` is the
+  impersonated account and whose `act` claims name the superadmin, with `scope=read`. With it, reads
+  answer `200`, every write answers `403`, `/api/users` answers `403` and impersonating again answers
+  `403`. `POST /api/auth/stop-impersonation` returns a normal token for the actor, which writes again
+  (`200`).
+- **Audited**: `RoleChange`, `ImpersonateStart` and `ImpersonateEnd` rows, all with the actor taken
+  from the token.
+
+Verified: `dotnet build` clean and `dotnet test` **74 passed**; the matrix above was executed against a
+fresh instance on port 5210 with its own database.
+
+Not done yet, and it is why the dashboard cannot log in as a freshly created account: **there is no
+way to set a password for a new user**. That lands with the next change.
+
 ## Pending — `security/auth-core`
 
 The API stopped being an open CRUD endpoint. **C-1** (critical, CWE-306), and with it **A-1**,
