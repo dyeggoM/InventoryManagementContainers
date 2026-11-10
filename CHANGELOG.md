@@ -40,10 +40,16 @@ themselves.
   walk was seeded with `{ id }` alone. The parent recursion now carries the ancestors it walked plus a
   depth bound, both guards use `IgnoreQueryFilters()` so a cycle through a soft-deleted row is refused
   instead of stored, and `parent` is rendered again (the first pass had silently nulled it).
-- **Tests: 48 green**, including a contract test that fails when an anonymous endpoint is not
+- **Tests: 57 green**, including a contract test that fails when an anonymous endpoint is not
   declared, login/refresh/revoke coverage, `401` without a token and `403` with the wrong role, the
   single-superadmin invariant, and three new C-2 tests — one of which persists a three-node cycle
   straight into the database, the scenario a controller guard cannot see.
+- **The authorization matrix is executed, not described** (`Testing/AuthMatrixTests.cs`): all 17
+  protected routes are called with no credential (`401`), with every role below their declared
+  minimum (`403`) and with the minimum role itself (authorized), plus token abuse (foreign signing
+  key, expired, tampered) and the refresh lifecycle (rotation, replay of the retired token, no
+  cookie, authenticated account with no role → `403`). Verified by mutation: widening one policy or
+  adding an `[AllowAnonymous]` breaks three tests at once.
 
 ## Pending — `security/auth-audit`
 

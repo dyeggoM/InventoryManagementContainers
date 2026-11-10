@@ -74,6 +74,24 @@ Conclusión: los dos hallazgos críticos del informe son reales y reproducibles,
 5. **Descargas y subidas** heredan el permiso del registro padre (`/file` no debe ser un IDOR).
 6. **Test de contrato en CI**: enumerar `EndpointDataSource` y comparar con la lista declarada.
 
+## Cómo se verifica hoy
+
+La matriz no es un documento: `Testing/AuthMatrixTests.cs` la ejecuta.
+
+- `EveryProtectedRoute_WithoutACredential_IsUnauthorized` — las 17 rutas protegidas responden `401`
+  sin credencial.
+- `EveryProtectedRoute_RejectsTheRolesBelowItsMinimum` — cada rol por debajo del mínimo declarado
+  recibe `403` (no basta con que el rol correcto entre).
+- `EveryProtectedRoute_AcceptsTheRoleAtItsMinimum` — el rol mínimo sí pasa la autorización.
+- `AnonymousEndpoints_MatchTheAllowAnonymousManifest` — una ruta anónima no declarada rompe la suite.
+- Abuso de token: firma con otra clave, token expirado y token manipulado → `401`.
+- Ciclo de vida del refresh: rotación, replay del token retirado, refresh sin cookie y cuenta
+  autenticada sin rol (`403`, no datos).
+
+Comprobado con mutaciones: cambiar la política de `GET /api/item` a `RequiereAdmin` hace fallar el
+test del rol mínimo; poner `[AllowAnonymous]` en `api/logs/{date}` hace fallar tres tests a la vez
+(`401`, `403` y el manifiesto).
+
 ## Decisiones tomadas (Diego, 2026-11-10)
 
 - **Transporte de credencial: JWT.** Access token corto + refresh token; el cliente ya lee
