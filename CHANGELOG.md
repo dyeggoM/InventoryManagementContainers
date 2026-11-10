@@ -6,6 +6,45 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `security/auth-core`
+
+The API stopped being an open CRUD endpoint. **C-1** (critical, CWE-306), and with it **A-1**,
+**A-2** and **A-3**, are closed: every route now answers `401` without a credential except the five
+declared in [endpoints.allow-anonymous.txt](endpoints.allow-anonymous.txt) and the auth endpoints
+themselves.
+
+- **JWT authentication wired, and wired in the right order.** `AddIdentityCore` over the existing
+  `IdentityDbContext` (the `AspNet*` tables were already in the initial migration, just empty) plus
+  `AddJwtBearer` validating issuer, audience, signature and lifetime, with the signing key required
+  to be at least 32 bytes at startup. `app.UseAuthentication()` now runs **before**
+  `app.UseAuthorization()` — before this, the authorization middleware had no scheme behind it, so no
+  `[Authorize]` could ever be satisfied.
+- **`POST /api/auth/login`, `/refresh`, `/logout`.** Access token of 15 minutes carrying the roles;
+  refresh token of 64 random bytes stored **hashed** (`SHA-256`) with rotation
+  (`ReplacedByTokenHash`), revocation on logout, and the cookie is `HttpOnly`, `SameSite=Lax` and
+  scoped to `/api/auth` so it never rides along on business requests. Login with a bad password
+  answers `401` and counts towards Identity's lockout.
+- **Roles and the single superadmin, by construction.** `superadmin`, `admin`, `operador` and `lector`
+  seeded at startup; the bootstrap superadmin comes from `Auth:Bootstrap:*` / `AUTH_BOOTSTRAP_*` (no
+  default password in source), and the app refuses to boot when more than one account carries the
+  role.
+- **`[Authorize]` per action, not per controller**, following
+  [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md): reads need `RequiereLectura`, writes
+  `RequiereEscritura`, deletes and the attribute catalogue `RequiereAdmin`, `api/logs/{date}`
+  `RequiereAdmin`. The three test endpoints and the read side of `/api/constants` stay anonymous on
+  purpose.
+- **Production stops leaking traces**: `UseExceptionHandler` outside Development (**M-2**), so the
+  developer exception page no longer hands out paths, SQL and versions.
+- **The `ParentId` cycle DoS is actually fixed now (C-2).** The first pass only survived two-node
+  cycles; the re-audit measured a `Stack overflow` (exit 134) on three or more, because the `Parent`
+  walk was seeded with `{ id }` alone. The parent recursion now carries the ancestors it walked plus a
+  depth bound, both guards use `IgnoreQueryFilters()` so a cycle through a soft-deleted row is refused
+  instead of stored, and `parent` is rendered again (the first pass had silently nulled it).
+- **Tests: 48 green**, including a contract test that fails when an anonymous endpoint is not
+  declared, login/refresh/revoke coverage, `401` without a token and `403` with the wrong role, the
+  single-superadmin invariant, and three new C-2 tests — one of which persists a three-node cycle
+  straight into the database, the scenario a controller guard cannot see.
+
 ## Pending — `security/auth-audit`
 
 The HTTP surface audited end to end and reproduced in a live run: **15 findings — 2 critical, 3 high,

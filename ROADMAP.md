@@ -40,21 +40,28 @@ qué debe exigir cada ruta es [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md)
   ejecución contra `127.0.0.1:5099`: mass assignment de `UpdatedBy` y DoS por ciclo de `ParentId`
   reproducidos, no teóricos.
 
-- [ ] **(b) Identity + JWT y `[Authorize]` por defecto** — `todo` · dueño: openai-coder.
-  Cierra **C-1** (CWE-306) y, con él, **A-1**, **A-2** y **A-3**. Registra la autenticación
-  (`AddAuthentication` + `AddJwtBearer`) y **`app.UseAuthentication()` antes de
-  `app.UseAuthorization()`** en `IMCAPI/Program.cs:117-124` — hoy sólo existe el segundo, sin ningún
-  esquema, así que ningún `[Authorize]` podría satisfacerse. Añade `POST /api/auth/login` emitiendo
-  el token que `imcui/src/services/api.ts:8` ya lee de `localStorage`, siembra los cuatro roles en
-  `DB/DatabaseSeeder.cs:17` (las tablas `AspNetUsers`/`AspNetRoles` existen desde la migración
-  inicial y están vacías), y activa `[Authorize]` por acción con `[AllowAnonymous]` sólo en las 5
-  rutas de `endpoints.allow-anonymous.txt`. El test de contrato del punto (a) es la red que impide
-  que la fase (b) deje una ruta abierta por descuido.
-  Fuera de alcance en esta fase: **B-4** (el cliente lee el token una sola vez, al importar el
-  módulo, `api.ts:8`); va con la UI de (c).
-  Decisiones de Diego (2026-11-10): **JWT** (access corto + refresh en cookie `HttpOnly` guardado
-  hasheado en servidor), **MFA para `superadmin` en la segunda iteración** (queda para después de
-  (c)), y **`Auth:Enforce` activo** desde el primer despliegue de esta fase.
+- [x] **(b) Identity + JWT y `[Authorize]` por defecto** — `done` (2026-11-10) · dueño: openai-coder.
+  Cierra **C-1** (CWE-306) y, con él, **A-1**, **A-2** y **A-3**: la API ya no responde datos de
+  negocio sin credencial. Entregado: `AddIdentityCore` + `AddJwtBearer` con validación de emisor,
+  audiencia, firma y vida (clave de ≥32 bytes exigida al arrancar), `app.UseAuthentication()` **antes**
+  de `UseAuthorization()` (`Program.cs`), políticas `RequiereLectura/Escritura/Admin/Superadmin`,
+  `POST /api/auth/login|refresh|logout` (`AuthController.cs`; refresh de 64 bytes aleatorios guardado
+  **hasheado** con SHA-256, rotación con `ReplacedByTokenHash`, revocación y cookie `HttpOnly`
+  `SameSite=Lax` limitada a `/api/auth`), entidad `RefreshToken` + migración
+  `20261110062651_AddRefreshTokens`, roles sembrados y **bootstrap del único superadmin** desde
+  `Auth:Bootstrap:*`/`AUTH_BOOTSTRAP_*` con invariante que impide arrancar con más de uno,
+  `UseExceptionHandler` fuera de Development, y `[Authorize]`/`[AllowAnonymous]` por acción según la
+  matriz (los tres endpoints de auth añadidos a `endpoints.allow-anonymous.txt`).
+  Verificación: `dotnet build` sin errores (queda un warning de nulabilidad preexistente en
+  `FileLoggerProvider.cs`), `dotnet test` **48/48**, y sonda en vivo sobre `127.0.0.1:5112`:
+  `GET /api/item`, `/api/attachment`, `/api/logs/*` y `POST /api/item` → **401** sin token;
+  `/api/item/test` y `/api/constants` → **200** sin token; login correcto → **200** con
+  `access_token` (15 min) y cookie `imc_refresh` `HttpOnly`; password mala → **401**; con token
+  válido → **200** en item, POST y logs (el superadmin de bootstrap).
+  Deuda declarada para la siguiente ronda: rate limiting en `/api/auth/*`, MFA de superadmin (segunda
+  iteración), **B-4** (el cliente lee el token una sola vez, `api.ts:8`) y que `Auth:Enforce=false`
+  desactiva las comprobaciones de rol en bloque — es herramienta de diagnóstico local, no un modo
+  para producción.
 
 - [ ] **(c) Dashboard superadmin: suplantación y CRUD de usuarios** — `todo` · dueños:
   openai-coder (API) + opencode-coder (UI) · depende de (b).
@@ -72,14 +79,22 @@ qué debe exigir cada ruta es [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md)
 
 ### Prioridad 1 de corrección: C-2 — DoS por ciclo de `ParentId` (CWE-674)
 
-- [x] **C-2** — `done` (2026-11-10) · dueño: openai-coder · **prioridad 1 de corrección**.
-  Resuelto con conjunto de visitados en los dos constructores de DTO y en `ApplyAttachmentCount`,
-  más validación de ciclo en `ItemController.Put` y un `Put` nuevo en `ConstantsController` (que
-  devuelve `400`). Verificado: `dotnet build IMCAPI/IMCAPI.csproj` sin errores, `dotnet test
-  Testing/Testing.csproj` **36/36 en verde** (incluye `PutItem_CannotSetAChildAsItsParent_AndTreeRemainsReadable`),
-  y reproducción en sandbox propio: `PUT` con `ParentId` de su propio hijo → `400`, `GET /api/item`
-  → `200` acto seguido, y un ciclo inyectado directamente en SQLite (base ya envenenada) → `200`,
-  el proceso sigue vivo. Historia original para contexto:
+- [x] **C-2** — `done` (2026-11-10, tras re-auditoría) · dueño: openai-coder + revisión de Unfiltered.
+  Resuelto en dos tiempos: el corte con conjunto de visitados en `Children` y en
+  `ApplyAttachmentCount`, la validación de ciclo en `ItemController.Put` y `ConstantsController.Put`,
+  y — detectado por la re-auditoría de Unfiltered sobre el primer intento — el arreglo del salto
+  `Parent`, que sólo propagaba `{ data.Id }` y dejaba caer el proceso con ciclos de **3 o más** nodos
+  (medido: `Stack overflow`, exit 134). Ahora el padre se construye con los ancestros ya recorridos y
+  un tope de profundidad, y los dos guardas usan `IgnoreQueryFilters()` para ver también las filas
+  inactivas (antes un ciclo a través de un registro borrado lógicamente se aceptaba con `204`).
+  Verificación: `dotnet test` **48/48** con tres tests nuevos — uno **persiste** un ciclo de 3
+  escribiendo directo en la BD (import, `UPDATE` de mantenimiento o base escrita antes del guarda), el
+  registro inactivo como eslabón del ciclo, y el contrato de que `parent` vuelve a venir poblado; más
+  sonda en vivo: ciclo de 3 en la BD → `GET /api/item` **200** en 0.01 s con el proceso vivo.
+  Deuda conocida: `ParentId` inexistente o `0` sigue dando **500** por FK (debería ser `400`), y la
+  validación está duplicada en los dos controladores (~55 líneas) — candidata a helper compartido.
+  Antes de desplegar sobre una base existente, correr:
+  `SELECT i.Id FROM Items i JOIN Items p ON p.Id = i.ParentId WHERE i.Id = p.ParentId AND i.Id <> i.ParentId`.
   Es el único hallazgo que tumba el proceso (`exit 134`, SIGABRT) y hoy se dispara con dos `PUT`
   anónimos: se pone el `ParentId` de un registro al de su propio hijo, EF hace *fix-up* de las dos
   direcciones y la navegación `Children` queda cerrada sobre sí misma. `GET /api/item` o
