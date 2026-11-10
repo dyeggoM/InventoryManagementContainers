@@ -6,6 +6,20 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `fix/ui-pwa-service-worker`
+
+The PWA registration imported `register-service-worker`, which is declared in `src-pwa/package.json`
+and installed by Quasar **lazily**, only when it builds PWA mode. Any checkout, worktree or CI run that
+type-checks before that first PWA build failed with *Cannot find module 'register-service-worker'*, and
+the dev server painted the error over the login screen.
+
+The registration is now written against `navigator.serviceWorker` (typed, no dependency), so the code
+that is type-checked is the code that runs, and it is wired through `sourceFiles.pwaRegisterServiceWorker`
+instead of sitting in the commented block. The unused `sw-offline` dispatch is gone.
+
+Verified: `npm test` 86 passed, `npm run typecheck` clean, `npm run build` and `npx quasar build -m pwa`
+exit 0 with the `sw-updated` event in the bundle.
+
 ## Pending — `feat/api-change-audit`
 
 The database now records **who changed what, with the before and after**, instead of only a
