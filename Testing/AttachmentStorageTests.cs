@@ -94,7 +94,12 @@ namespace Testing
             Assert.That(new FileInfo(absolute).Length, Is.GreaterThan(0));
 
             storage.Delete(stored.RelativePath);
-            Assert.That(File.Exists(absolute), Is.False);
+            Assert.Multiple(() =>
+            {
+                Assert.That(File.Exists(absolute), Is.False);
+                Assert.That(Directory.Exists(Path.GetDirectoryName(absolute)), Is.False,
+                    "the record's folder goes with its last file");
+            });
 
             // Deleting a path that is already gone must not throw.
             storage.Delete(stored.RelativePath);

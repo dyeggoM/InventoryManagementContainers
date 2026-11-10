@@ -156,7 +156,7 @@ const {
         row.id,
         row.type ?? '',
         row.fileName ?? '',
-        (row.uploadBase64 ?? '').length,
+        row.file ? 'picked' : '',
       ]),
     }),
   onSelect: async (entry) => {
@@ -190,18 +190,24 @@ const {
     return null;
   },
   beforeSave: (entry) => {
-    // Only attachments created in this form are sent; existing ones live in their own table.
-    entry.attachments = attachments.value
-      .filter((row) => row.id === 0)
-      .map((row) => ({
-        id: 0,
-        itemId: row.itemId,
-        type: row.type ?? null,
-        fileName: row.fileName ?? null,
-        // The API writes these bytes to disk and returns a compressed preview.
-        uploadBase64: row.uploadBase64 ?? null,
-        attributes: row.attributes ?? null,
-      }));
+    // Attachments live in their own table now: a JSON payload must not carry megabytes of base64
+    // for a photo that is written to disk as a file.
+    entry.attachments = [];
+  },
+  afterSave: async (id) => {
+    const pending = attachments.value.filter((row) => row.id === 0 && row.file);
+    if (!pending.length || id <= 0) return;
+
+    for (const row of pending) {
+      const file = row.file;
+      if (!file) continue;
+      try {
+        await attachmentsService.upload(id, file, row.type ?? null);
+      } catch (error) {
+        // One bad file must not lose the record that was just saved.
+        feedback.error(error, `Could not upload ${row.fileName || 'the file'}`);
+      }
+    }
   },
 });
 
@@ -275,7 +281,8 @@ function addAttachment() {
     // Photos are the common case on a phone, and the type decides which picker opens.
     type: attachmentTypes.value.includes('Photo') ? 'Photo' : null,
     fileName: null,
-    uploadBase64: null,
+    file: null,
+    previewUrl: null,
     attributes: null,
   });
 }

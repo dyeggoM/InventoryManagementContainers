@@ -30,6 +30,16 @@ export const attachmentsService = {
     return api.post<Attachment>('/attachment', attachment);
   },
 
+  /** Uploads the file as bytes: no base64, no third of the size in escaping. */
+  upload(itemId: number, file: File, type?: string | null): Promise<Attachment> {
+    const form = new FormData();
+    form.append('itemId', String(itemId));
+    if (type) form.append('type', type);
+    form.append('fileName', file.name);
+    form.append('file', file, file.name);
+    return api.postForm<Attachment>('/attachment/upload', form);
+  },
+
   //   update(id: number, item: Attachment): Promise<Attachment> {
   //     return api.put<Attachment>(`/attachment/${id}`, item);
   //   },

@@ -33,11 +33,12 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 
 - A `Photo` opens the camera (`Take a photo`, with a gallery option); every other type opens the file
   manager (`Select a file`). New rows default to Photo when the catalogue has it.
-- The original is stored on disk under `media/items/{itemId}/`, a 320px JPEG preview in the row
-  (quality 72), 20 MB limit.
+- Uploads are multipart: the file travels as bytes (no base64, no third of the size in escaping),
+  streamed to `media/items/{itemId}/`, with a 320px JPEG preview in the row (quality 72) and a 20 MB
+  cap. The picker shows the photo immediately through a local object URL.
 - “Open original” streams the file from `GET /api/attachment/{id}/file` (range requests supported) so
   a large photo opens in the phone's viewer instead of being decoded into the page.
-- Deleting an attachment or a record removes the files.
+- Deleting an attachment or a record removes the files from disk, not only the row.
 
 ## Configuration
 

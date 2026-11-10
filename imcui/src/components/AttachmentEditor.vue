@@ -100,8 +100,8 @@
 </template>
 
 <script setup lang="ts">
+import { onBeforeUnmount } from 'vue';
 import { attachmentsService } from '@services/attachment';
-import { fileToBase64 } from '@services/utilities';
 
 /** An attachment row that may still carry the file the user picked in this form. */
 export interface AttachmentRow {
@@ -112,8 +112,8 @@ export interface AttachmentRow {
   filePath?: string | null;
   /** Compressed preview returned by the API. */
   thumbnailBase64?: string | null;
-  /** The picked file as a data URL; the API writes it to disk on save. */
-  uploadBase64?: string | null;
+  /** A local object URL for a file picked in this form, so the preview is instant. */
+  previewUrl?: string | null;
   attributes?: string | null;
   file?: File | null;
 }
@@ -130,6 +130,10 @@ const emit = defineEmits<{
   remove: [index: number];
 }>();
 
+onBeforeUnmount(() => {
+  for (const row of rows.value) releasePreview(row);
+});
+
 function fileUrl(id: number): string {
   return attachmentsService.fileUrl(id);
 }
@@ -140,7 +144,7 @@ function isPhoto(row: AttachmentRow): boolean {
 }
 
 function preview(row: AttachmentRow): string | null {
-  return row.thumbnailBase64 || row.uploadBase64 || null;
+  return row.thumbnailBase64 || row.previewUrl || null;
 }
 
 function typeIcon(row: AttachmentRow): string {
@@ -165,16 +169,28 @@ function pickFromGallery(row: AttachmentRow) {
   input.click();
 }
 
-async function onFile(row: AttachmentRow, file: File | null) {
+/** Frees an object URL so a phone with a dozen photos does not leak them. */
+function releasePreview(row: AttachmentRow) {
+  if (row.previewUrl) {
+    URL.revokeObjectURL(row.previewUrl);
+    row.previewUrl = null;
+  }
+}
+
+function onFile(row: AttachmentRow, file: File | null) {
+  releasePreview(row);
   row.file = file;
+
   if (!file) {
     row.fileName = '';
-    row.uploadBase64 = '';
     return;
   }
+
   row.fileName = file.name;
-  // The API compresses this into a thumbnail and writes the original to disk.
-  row.uploadBase64 = await fileToBase64(file);
+  // The browser can show the picked photo straight away; the bytes themselves only travel on save.
+  if (file.type.startsWith('image/')) {
+    row.previewUrl = URL.createObjectURL(file);
+  }
 }
 </script>
 

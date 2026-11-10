@@ -120,6 +120,16 @@ public sealed class AttachmentStorage
             {
                 File.Delete(absolute);
             }
+
+            // A record's folder is only a container: once its last file is gone the folder goes too,
+            // instead of leaving an empty directory per deleted record.
+            var folder = Path.GetDirectoryName(absolute);
+            if (folder is not null
+                && Directory.Exists(folder)
+                && !Directory.EnumerateFileSystemEntries(folder).Any())
+            {
+                Directory.Delete(folder);
+            }
         }
         catch (IOException)
         {

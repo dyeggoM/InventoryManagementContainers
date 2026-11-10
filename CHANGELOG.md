@@ -6,6 +6,23 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/multipart`
+
+Photos travel as bytes, not as base64 inside JSON.
+
+- **`POST /api/attachment/upload` takes multipart form data** (`itemId`, `type`, `fileName`, `file`)
+  and streams the file to disk: a third smaller than the base64 payload and no encoded copy in
+  memory on the phone. Rejects a missing file, a bad record id and anything over the 20 MB cap.
+- **The item payload no longer carries files.** The form saves the record first, then uploads the
+  picked files against the id it got back (`afterSave` in `useTreeEditor`), so a new record and its
+  first photo work in one pass. The sheet stays busy until the uploads finish; a failed upload is
+  reported and does not undo the record.
+- **The preview is local until it is saved.** A picked photo is shown through an object URL instead
+  of a base64 copy — no encoding, no megabyte string in the form, and the URL is released when the
+  row goes away or the sheet closes.
+- **Deleting a file prunes its folder** when the last one is gone, so deleting records leaves no
+  empty directories behind.
+
 ## Pending — `feat/tests` (stacked on `feat/pwa`)
 
 The suite stops lying, and grows teeth.
@@ -25,6 +42,19 @@ The suite stops lying, and grows teeth.
   typed rows (money keypad, prose textarea, date picker, text kept verbatim, custom keys, filter).
 - `AttachmentStorage` takes an optional `Media:Root` so tests (and a deployment) can keep files out
   of the project folder.
+- **Deleting a record deletes its files.** The API soft-deleted the record and left the attachment
+  rows and their files behind, although the confirm dialog says “Its attachments are deleted with
+  it.” `ItemController.Delete` now removes the files and the rows first; a test proves the file is
+  gone from disk and the list endpoint returns `204`.
+- **A review pass over the suite**: the search logic moved out of the component into
+  `services/search.ts` so it can be tested at all (14 cases: key/value matching, case and punctuation
+  insensitivity, malformed JSON, parents kept for context, the count), and the API gained 8 cases it
+  was missing — 404 on an unknown id, `400` on a mismatched PUT, range requests on the file endpoint,
+  attachments by item (`204` when empty), the group endpoint, a label over the column length, an
+  invalid upload, and the delete cascade. UI cases added for the attachment editor (camera vs file
+  manager by type, preview vs icon, remove/add, the saved-file link) and for the tree editor's save
+  paths (update vs create, the sheet closing only on success, a failed load keeping the page usable,
+  a failed delete keeping the record, and the page's own snapshot counting as dirty).
 
 ## Pending — `feat/pwa` (stacked on `feat/search-values`)
 
