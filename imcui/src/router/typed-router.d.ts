@@ -38,6 +38,7 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | '//(index)'
       | '//configuration'
+      | '//dashboard'
       | '//inventory'
     >,
     '//(index)': RouteRecordInfo<
@@ -54,6 +55,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '//dashboard': RouteRecordInfo<
+      '//dashboard',
+      '/dashboard',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '//inventory': RouteRecordInfo<
       '//inventory',
       '/inventory',
@@ -66,6 +74,13 @@ declare module 'vue-router/auto-routes' {
       '/:path(.*)',
       { path: ParamValue<true> },
       { path: ParamValue<false> },
+      | never
+    >,
+    '/login': RouteRecordInfo<
+      '/login',
+      '/login',
+      Record<never, never>,
+      Record<never, never>,
       | never
     >,
   }
@@ -86,6 +101,7 @@ declare module 'vue-router/auto-routes' {
         | '/'
         | '//(index)'
         | '//configuration'
+        | '//dashboard'
         | '//inventory'
       views:
         | 'default'
@@ -108,6 +124,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/index/dashboard.vue': {
+      routes:
+        | '//dashboard'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/index/inventory.vue': {
       routes:
         | '//inventory'
@@ -123,6 +147,14 @@ declare module 'vue-router/auto-routes' {
         | never
       pathParamNames:
         | 'path'
+    }
+    'src/pages/login.vue': {
+      routes:
+        | '/login'
+      views:
+        | never
+      pathParamNames:
+        | never
     }
   }
 
