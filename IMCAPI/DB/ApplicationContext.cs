@@ -13,6 +13,7 @@ namespace IMCAPI.DB
 
         public virtual DbSet<Constants> Constants { get; set; }
         public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
+        public virtual DbSet<AuditLog> AuditLogs { get; set; }
 
         public ApplicationContext(DbContextOptions<ApplicationContext> options)
             : base(options)
@@ -39,6 +40,23 @@ namespace IMCAPI.DB
             modelBuilder.Entity<Item>().ToTable("Items");
             modelBuilder.Entity<Attachment>().ToTable("Attachments");
             modelBuilder.Entity<Constants>().ToTable("Constants");
+
+            modelBuilder.Entity<AuditLog>(entity =>
+            {
+                entity.ToTable("AuditLogs");
+                entity.HasKey(log => log.Id);
+                entity.HasIndex(log => new { log.Entity, log.EntityId });
+                entity.HasIndex(log => log.TimestampUtc);
+                entity.Property(log => log.Action).HasMaxLength(32).IsRequired();
+                entity.Property(log => log.Entity).HasMaxLength(256);
+                entity.Property(log => log.EntityId).HasMaxLength(512);
+                entity.Property(log => log.ActorUserId).HasMaxLength(450);
+                entity.Property(log => log.ActorEmail).HasMaxLength(320);
+                entity.Property(log => log.ImpersonatedUserId).HasMaxLength(450);
+                entity.Property(log => log.IpAddress).HasMaxLength(64);
+                entity.Property(log => log.UserAgent).HasMaxLength(2048);
+                entity.Property(log => log.RequestId).HasMaxLength(128);
+            });
 
             ConfigureItem(modelBuilder);
 

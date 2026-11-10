@@ -6,6 +6,40 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/api-change-audit`
+
+The database now records **who changed what, with the before and after**, instead of only a
+last-touched-by string the client could forge.
+
+- **`AuditLog` table + migration** (`TimestampUtc`, actor id and email, impersonated user, action,
+  entity, entity id, `BeforeJson`, `AfterJson`, IP, user agent, request id) with indexes on
+  `(Entity, EntityId)` and `TimestampUtc`.
+- **One `SaveChangesInterceptor` is the only writer**, hooked at the persistence layer so no
+  controller can skip it. It serialises the changed values before and after, takes the actor from the
+  token (never from the body) and the impersonated user from the actor claim when there is one, and
+  redacts `PasswordHash`, `SecurityStamp`, tokens and token hashes before anything is stored. Audit
+  rows are inserted through parameterised SQL from `SavedChanges`, which is what keeps the interceptor
+  from auditing itself; modifying or deleting an audit row through EF throws.
+- **`CreatedAt`/`CreatedBy` on the base entity**, written server-side. The client cannot set `Id`,
+  `CreatedAt`, `CreatedBy`, `UpdatedAt` or `UpdatedBy` any more: `POST` with `id: 999` and forged
+  metadata stores `id: 1` and the authenticated actor (verified).
+- **Explicit rows** for login, failed login, logout, reuse of an already-rotated refresh token and
+  role changes.
+- **Soft deletes are their own action** (`SoftDelete`) so a delete is findable with
+  `GET /api/audit?action=SoftDelete` instead of hiding as an `Update`.
+- **`GET /api/audit`** with filters (actor, entity, entity id, action, from, to) and pagination,
+  `RequiereSuperadmin`, `ProblemDetails` on invalid filters, and **no write route at all** (`POST`,
+  `PUT`, `DELETE` answer 405).
+- **The update path reads the real row before writing it.** `UpdateAsync` used to attach the entity
+  that came from the request, which has no original values: that made `BeforeJson` and `AfterJson`
+  identical and the audit useless. It now loads the tracked row, copies the client's fields and saves,
+  so the audit can answer what changed.
+- **CORS allows credentials**, which is what lets the PWA's `HttpOnly` refresh cookie survive a
+  cross-origin call.
+
+Verified: `dotnet build` clean, `dotnet test` **70 passed**, and against a live instance an update
+whose audit row reads `Label: "forged-meta" → "renamed-by-verify"`, a `SoftDelete` row found by
+action, forged audit fields ignored, and `405` on every write attempt against the audit route.
 ## Pending — `feat/ui-auth-dashboard`
 
 The API started refusing anonymous requests, and the PWA had no way to answer: it read the token once

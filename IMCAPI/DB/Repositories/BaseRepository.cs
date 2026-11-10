@@ -134,6 +134,7 @@ namespace IMCAPI.DB.Repositories
         /// <returns></returns>
         public virtual async Task Add(T entity)
         {
+            entity.Id = 0;
             entity.UpdatedAt = DateTime.UtcNow;
             await _entities.AddAsync(entity);
             await _context.SaveChangesAsync();
@@ -145,11 +146,13 @@ namespace IMCAPI.DB.Repositories
         /// <returns></returns>
         public virtual async Task AddRange(IEnumerable<T> entities)
         {
-            foreach (var item in entities)
+            var entityList = entities.ToList();
+            foreach (var item in entityList)
             {
+                item.Id = 0;
                 item.UpdatedAt = DateTime.UtcNow;
             }
-            await _entities.AddRangeAsync(entities);
+            await _entities.AddRangeAsync(entityList);
             await _context.SaveChangesAsync();
         }
 
@@ -182,7 +185,6 @@ namespace IMCAPI.DB.Repositories
         public virtual async Task DeleteRange(IEnumerable<int> ids)
         {
             var deleteEntities = new List<T>();
-            var softDeleteEntities = new List<T>();
             foreach (var item in ids)
             {
                 T? result = await GetById(item);
@@ -191,14 +193,12 @@ namespace IMCAPI.DB.Repositories
                 {
                     result.UpdatedAt = DateTime.UtcNow;
                     result.IsActive = false;
-                    softDeleteEntities.Add(result);
                 }
                 else
                 {
                     deleteEntities.Add(result);
                 }
             }
-            _entities.UpdateRange(softDeleteEntities);
             _entities.RemoveRange(deleteEntities);
             await _context.SaveChangesAsync();
         }
@@ -209,8 +209,9 @@ namespace IMCAPI.DB.Repositories
         /// <param name="entity">Entity to update.</param>
         public virtual void Update(T entity)
         {
-            entity.UpdatedAt = DateTime.UtcNow;
-            _entities.Update(entity);
+            var persisted = _entities.FirstOrDefault(current => current.Id == entity.Id);
+            if (persisted is null) return;
+            CopyClientValues(entity, persisted);
             _context.SaveChanges();
         }
         /// <summary>
@@ -221,11 +222,9 @@ namespace IMCAPI.DB.Repositories
         /// <returns></returns>
         public virtual async Task UpdateAsync(int id, T entity)
         {
-            var result = await _entities.AsNoTracking().FirstOrDefaultAsync(x=>x.Id == id);
-            if (result == null)
-                return;
-            entity.UpdatedAt = DateTime.UtcNow;
-            _entities.Update(entity);
+            var persisted = await _entities.FirstOrDefaultAsync(current => current.Id == id);
+            if (persisted is null) return;
+            CopyClientValues(entity, persisted);
             await _context.SaveChangesAsync();
         }
         /// <summary>
@@ -236,23 +235,31 @@ namespace IMCAPI.DB.Repositories
         /// <returns></returns>
         public virtual async Task UpdateRangeAsync(IEnumerable<int> ids, IEnumerable<T> entities)
         {
-            var entityList = entities.ToList();
-            foreach (var id in ids)
+            var byId = entities.GroupBy(entity => entity.Id).ToDictionary(group => group.Key, group => group.First());
+            foreach (var id in ids.Distinct())
             {
-                var result = await _entities.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
-                if (result == null)
-                {
-                    var entity = entities.FirstOrDefault(x => x.Id.Equals(id));
-                    if(entity != null)
-                        entityList.Remove(entity);
-                }
+                if (!byId.TryGetValue(id, out var source)) continue;
+                var persisted = await _entities.FirstOrDefaultAsync(current => current.Id == id);
+                if (persisted is not null) CopyClientValues(source, persisted);
             }
-            foreach (var entity in entityList)
-            {
-                entity.UpdatedAt= DateTime.UtcNow;
-            }
-            _entities.UpdateRange(entityList);
             await _context.SaveChangesAsync();
+        }
+
+        private static readonly HashSet<string> ServerControlledProperties = new(StringComparer.Ordinal)
+        {
+            nameof(Base.Id), nameof(Base.IsActive), nameof(Base.CreatedAt), nameof(Base.CreatedBy),
+            nameof(Base.UpdatedAt), nameof(Base.UpdatedBy)
+        };
+
+        private void CopyClientValues(T source, T persisted)
+        {
+            var sourceValues = _context.Entry(source).CurrentValues;
+            var persistedValues = _context.Entry(persisted).CurrentValues;
+            foreach (var property in persistedValues.Properties)
+            {
+                if (!ServerControlledProperties.Contains(property.Name))
+                    persistedValues[property.Name] = sourceValues[property.Name];
+            }
         }
     }
 }

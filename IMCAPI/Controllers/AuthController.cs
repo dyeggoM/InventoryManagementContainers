@@ -18,25 +18,35 @@ public sealed class AuthController : ControllerBase
     private readonly ApplicationContext _context;
     private readonly AuthTokenService _tokens;
     private readonly IHostEnvironment _environment;
+    private readonly AuditLogWriter _audit;
 
     public AuthController(SignInManager<IdentityUser> signIn, UserManager<IdentityUser> users,
-        ApplicationContext context, AuthTokenService tokens, IHostEnvironment environment)
+        ApplicationContext context, AuthTokenService tokens, IHostEnvironment environment, AuditLogWriter audit)
     {
         _signIn = signIn;
         _users = users;
         _context = context;
         _tokens = tokens;
         _environment = environment;
+        _audit = audit;
     }
 
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrEmpty(request.Password)) return Unauthorized();
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrEmpty(request.Password))
+        {
+            await _audit.WriteAsync("LoginFailed", "IdentityUser", actorEmail: request.Email);
+            return Unauthorized();
+        }
         var user = await _users.FindByEmailAsync(request.Email);
         if (user is null || !(await _signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true)).Succeeded)
+        {
+            await _audit.WriteAsync("LoginFailed", "IdentityUser", user?.Id, actorEmail: request.Email);
             return Unauthorized();
+        }
+        await _audit.WriteAsync("Login", "IdentityUser", user.Id, user.Id, user.Email);
 
         var refresh = AuthTokenService.NewRefreshToken();
         var now = DateTime.UtcNow;
@@ -62,6 +72,14 @@ public sealed class AuthController : ControllerBase
         var hash = AuthTokenService.HashRefreshToken(refresh);
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var stored = await _context.RefreshTokens.SingleOrDefaultAsync(token => token.TokenHash == hash);
+        if (stored?.RevokedAtUtc is not null && stored.ReplacedByTokenHash is not null)
+        {
+            var previousUser = await _users.FindByIdAsync(stored.UserId);
+            await _audit.WriteAsync("RefreshReuse", "RefreshToken", stored.Id.ToString(), stored.UserId, previousUser?.Email);
+            await transaction.CommitAsync();
+            DeleteRefreshCookie();
+            return Unauthorized();
+        }
         if (stored is null || stored.RevokedAtUtc is not null || stored.ExpiresAtUtc <= now)
         {
             DeleteRefreshCookie();
@@ -100,17 +118,22 @@ public sealed class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
+        string? actorId = null;
+        string? actorEmail = null;
         if (Request.Cookies.TryGetValue(RefreshCookie, out var refresh) && !string.IsNullOrWhiteSpace(refresh))
         {
             var hash = AuthTokenService.HashRefreshToken(refresh);
             var stored = await _context.RefreshTokens.SingleOrDefaultAsync(token => token.TokenHash == hash);
             if (stored is not null && stored.RevokedAtUtc is null)
             {
+                actorId = stored.UserId;
+                actorEmail = (await _users.FindByIdAsync(stored.UserId))?.Email;
                 stored.RevokedAtUtc = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
             }
         }
         DeleteRefreshCookie();
+        await _audit.WriteAsync("Logout", "IdentityUser", actorId, actorId, actorEmail);
         return NoContent();
     }
 

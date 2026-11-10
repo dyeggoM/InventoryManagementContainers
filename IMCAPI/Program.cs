@@ -29,7 +29,10 @@ namespace IMCAPI
                         if (builder.Environment.IsDevelopment())
                         {
                             // A dev box is reached from other machines (LAN IP, dev-server port), so
-                            // pinning one origin only produces opaque browser failures.
+                            // pinning one origin only produces opaque browser failures. Credentials
+                            // are allowed because the refresh token travels in an HttpOnly cookie:
+                            // without AllowCredentials the browser throws away that Set-Cookie on a
+                            // cross-origin call, and the silent refresh the PWA relies on never works.
                             p.SetIsOriginAllowed(_ => true);
                         }
                         else
@@ -38,7 +41,9 @@ namespace IMCAPI
                         }
 
                         p.WithMethods("POST", "PUT", "GET", "DELETE")
-                         .AllowAnyHeader();
+                         .AllowAnyHeader()
+                         .AllowCredentials();
+
                     }));
             #endregion
 
@@ -77,7 +82,11 @@ namespace IMCAPI
 
             #region DB
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-            builder.Services.AddDbContext<ApplicationContext>(options => options.UseSqlite(connectionString));
+            builder.Services.AddHttpContextAccessor();
+            builder.Services.AddSingleton<AuditSaveChangesInterceptor>();
+            builder.Services.AddDbContext<ApplicationContext>((services, options) =>
+                options.UseSqlite(connectionString)
+                    .AddInterceptors(services.GetRequiredService<AuditSaveChangesInterceptor>()));
 
             var jwtKey = builder.Configuration["Auth:Jwt:Key"] ?? Environment.GetEnvironmentVariable("AUTH_JWT_KEY")
                 ?? throw new InvalidOperationException("Configure Auth:Jwt:Key or AUTH_JWT_KEY.");
@@ -118,6 +127,7 @@ namespace IMCAPI
             });
             builder.Services.AddProblemDetails();
             builder.Services.AddScoped<AuthTokenService>();
+            builder.Services.AddScoped<AuditLogWriter>();
 
 
             #endregion
