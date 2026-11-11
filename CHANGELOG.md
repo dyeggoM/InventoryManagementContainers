@@ -104,20 +104,6 @@ covering the upload guards on both routes and a forced insert failure, the exten
 log path and its file-name mismatch, token-family revocation and the two deletes. Each finding's state
 is tracked in `SECURITY_MATRIX.md` and the gate (`security_matrix.py check`) reports it.
 
-**The checks run themselves**
-- `.github/workflows/ci.yml`: on every pull request and on `main`, the API job restores, builds
-  `IMCAPI/IMCAPI.csproj` and runs `dotnet test Testing/Testing.csproj`; the UI job runs `npm ci`,
-  `npm run test`, `npm run typecheck` and `npm run lint:check`. It builds the project files, not
-  `IMCAPI.sln`, because the solution references an `imcui.esproj` that is not committed. The two
-  `AUTH_*` variables the suite needs are set by `Testing/ApiFactory.cs`, so CI carries no secret.
-
-**Every changed file gets a security review**
-- `SECURITY_MATRIX.md` and `.security/` (ignored): the incremental scanner's ledger. This round's 28
-  touched paths were inspected by hand — auth, impersonation, passwords, rate limiting and the archive
-  UI — with **0 unresolved findings**, and the integration review is recorded as passed. The ledger
-  keys on the commit it reviewed, so it will be re-recorded against the real commit when this branch
-  is committed.
-
 **Database debt closed**
 - `AuditLogs.Action` goes from 32 to 64 characters and `EntityId` from 512 to 1024. SQLite stores them
   as `TEXT` and never complained, which is exactly why it would have broken only after a move to SQL

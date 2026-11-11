@@ -141,9 +141,7 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   in what state each finding is (`confirmed` → `in_remediation` → `verified_fixed`).
 - `ROADMAP.md` — what is deliberately not built yet.
 - `CHANGELOG.md` — every pull request and what it changed; this file — the resulting capability list.
-- Checks used before each commit: `vue-tsc`, `eslint`, `dotnet build`, `dotnet test`, `npm test` — and
-  the same set runs on every pull request in `.github/workflows/ci.yml`, so a branch cannot merge on a
-  claim.
+- Checks used before each commit: `vue-tsc`, `eslint`, `dotnet build`, `dotnet test`, `npm test`.
 - **API tests** (101) run the app itself over a throwaway database and media folder: the authorization
   matrix route by route, token abuse, the tree shape, the write paths, attachments written and served
   back byte-for-byte, archival deletion with restore, the audit redaction, user administration, the
