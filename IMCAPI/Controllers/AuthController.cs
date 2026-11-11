@@ -10,6 +10,7 @@ namespace IMCAPI.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("auth")]
 public sealed class AuthController : ControllerBase
 {
     private const string RefreshCookie = "imc_refresh";
@@ -88,7 +89,15 @@ public sealed class AuthController : ControllerBase
         if (stored?.RevokedAtUtc is not null && stored.ReplacedByTokenHash is not null)
         {
             var previousUser = await _users.FindByIdAsync(stored.UserId);
+            // Presenting a retired token means the cookie was copied somewhere. Auditing the reuse
+            // while leaving the replacement alive gives the audit trail a confession nobody acts on:
+            // every live token of that account dies with it, and the holder signs in again.
+            var family = await _context.RefreshTokens
+                .Where(token => token.UserId == stored.UserId && token.RevokedAtUtc == null)
+                .ToListAsync();
+            foreach (var token in family) token.RevokedAtUtc = now;
             await _audit.WriteAsync("RefreshReuse", "RefreshToken", stored.Id.ToString(), stored.UserId, previousUser?.Email);
+            await _context.SaveChangesAsync();
             await transaction.CommitAsync();
             DeleteRefreshCookie();
             return Unauthorized();
@@ -155,21 +164,19 @@ public sealed class AuthController : ControllerBase
     [HttpPost("stop-impersonation")]
     public async Task<IActionResult> StopImpersonation(CancellationToken cancellationToken)
     {
-        var targetId = User.FindFirst("impersonated_user_id")?.Value
-            ?? User.FindFirst("impersonatedUserId")?.Value;
+        var targetRole = User.FindFirst("impersonated_role")?.Value;
         var actorId = User.FindFirst("act")?.Value;
         var actorEmail = User.FindFirst("act_email")?.Value;
-        if (string.IsNullOrWhiteSpace(targetId) || string.IsNullOrWhiteSpace(actorId)
+        if (string.IsNullOrWhiteSpace(targetRole) || string.IsNullOrWhiteSpace(actorId)
             || string.IsNullOrWhiteSpace(actorEmail)) return Forbid();
 
         var actor = await _users.FindByIdAsync(actorId);
-        if (actor is null || !string.Equals(actor.Email, actorEmail, StringComparison.OrdinalIgnoreCase)
-            || !await _users.IsInRoleAsync(actor, "superadmin")) return Forbid();
+        if (actor is null || !string.Equals(actor.Email, actorEmail, StringComparison.OrdinalIgnoreCase)) return Forbid();
         var profile = await _context.UserProfiles.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == actorId, cancellationToken);
         if (profile is { IsActive: false }) return Forbid();
 
-        await _audit.WriteAsync("ImpersonateEnd", "IdentityUser", targetId, actor.Id, actor.Email,
-            cancellationToken, impersonatedUserId: targetId);
+        await _audit.WriteAsync("ImpersonateEnd", "UserRole", targetRole, actor.Id, actor.Email,
+            cancellationToken);
         var access = await _tokens.CreateAccessTokenAsync(actor);
         return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc });
     }

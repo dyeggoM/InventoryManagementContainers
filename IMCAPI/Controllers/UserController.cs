@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Cryptography;
 using IMCAPI.DB;
 using IMCAPI.DB.Entities;
 using IMCAPI.Services;
@@ -14,7 +15,6 @@ namespace IMCAPI.Controllers;
 
 [ApiController]
 [Route("api/users")]
-[Authorize(Policy = "RequiereSuperadmin")]
 public sealed class UserController : ControllerBase
 {
     private static readonly string[] AssignableRoles = ["admin", "operador", "lector"];
@@ -36,6 +36,7 @@ public sealed class UserController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = "RequiereSuperadmin")]
     public async Task<IActionResult> GetUsers(CancellationToken cancellationToken)
     {
         var users = await _users.Users.OrderBy(user => user.Email).ToListAsync(cancellationToken);
@@ -51,6 +52,7 @@ public sealed class UserController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "RequiereSuperadmin")]
     public async Task<IActionResult> CreateUser(CreateUserRequest request, CancellationToken cancellationToken)
     {
         var email = request.Email.Trim();
@@ -62,7 +64,8 @@ public sealed class UserController : ControllerBase
 
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         var user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = false };
-        var created = await _users.CreateAsync(user);
+        var initialPassword = request.Password ?? GeneratePassword();
+        var created = await _users.CreateAsync(user, initialPassword);
         if (!created.Succeeded) return BadRequest(new { errors = created.Errors.Select(item => item.Description) });
 
         _context.UserProfiles.Add(new UserProfile { UserId = user.Id, IsActive = true });
@@ -73,10 +76,13 @@ public sealed class UserController : ControllerBase
             if (!assigned.Succeeded) return BadRequest(new { errors = assigned.Errors.Select(item => item.Description) });
         }
         await transaction.CommitAsync(cancellationToken);
-        return Created($"/api/users/{user.Id}", await ToSummaryAsync(user));
+        var summary = await ToSummaryAsync(user);
+        return Created($"/api/users/{user.Id}", new CreatedUser(summary.Id, summary.Email, summary.Roles,
+            summary.IsActive, summary.LastAccessUtc, request.Password is null ? initialPassword : null));
     }
 
     [HttpPut("{id}/roles")]
+    [Authorize(Policy = "RequiereSuperadmin")]
     public async Task<IActionResult> UpdateRoles(string id, UpdateRolesRequest request, CancellationToken cancellationToken)
     {
         var roleValidation = await ValidateRolesAsync(request.Roles);
@@ -110,6 +116,11 @@ public sealed class UserController : ControllerBase
             var result = await _users.AddToRolesAsync(user, added);
             if (!result.Succeeded) return BadRequest(new { errors = result.Errors.Select(item => item.Description) });
         }
+        // A role change has to reach the sessions that are already open, or a demotion only takes
+        // effect once the holder happens to re-login. Rotating the stamp is what the token pipeline
+        // compares, so the token minted with the old roles answers 401 from here on.
+        var stamp = await _users.UpdateSecurityStampAsync(user);
+        if (!stamp.Succeeded) return BadRequest(new { errors = stamp.Errors.Select(item => item.Description) });
         await _audit.WriteAsync("RoleChange", "IdentityUser", id,
             beforeJson: JsonSerializer.Serialize(currentRoles, AuditJson),
             afterJson: JsonSerializer.Serialize(nextRoles, AuditJson), cancellationToken: cancellationToken);
@@ -118,6 +129,7 @@ public sealed class UserController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Policy = "RequiereSuperadmin")]
     public async Task<IActionResult> DeactivateUser(string id, CancellationToken cancellationToken)
     {
         var user = await _users.FindByIdAsync(id);
@@ -146,23 +158,43 @@ public sealed class UserController : ControllerBase
         return NoContent();
     }
 
-    [HttpPost("{id}/impersonate")]
-    public async Task<IActionResult> Impersonate(string id, CancellationToken cancellationToken)
+    [HttpPost("impersonate")]
+    [Authorize]
+    public async Task<IActionResult> Impersonate(ImpersonateRequest request, CancellationToken cancellationToken)
     {
+        if (User.Identity?.IsAuthenticated != true) return Unauthorized();
+        if (User.HasClaim(claim => claim.Type == "act")) return Forbid();
+        var role = request.Role?.Trim().ToLowerInvariant();
+        if (role is not ("admin" or "operador" or "lector")) return BadRequest(new { error = "Invalid target role." });
         var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         var actor = actorId is null ? null : await _users.FindByIdAsync(actorId);
-        if (actor is null || !await _users.IsInRoleAsync(actor, "superadmin")) return Forbid();
-        var target = await _users.FindByIdAsync(id);
-        if (target is null) return NotFound();
-        if (await _users.IsInRoleAsync(target, "superadmin"))
-            return Conflict(new { error = "The superadmin account cannot be impersonated." });
-        var profile = await _context.UserProfiles.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == id, cancellationToken);
-        if (profile is { IsActive: false }) return Conflict(new { error = "An inactive account cannot be impersonated." });
+        if (actor is null) return Forbid();
+        var callerRole = new[] { "superadmin", "admin", "operador", "lector" }
+            .FirstOrDefault(candidate => User.IsInRole(candidate));
+        if (callerRole is null || callerRole == "lector") return Forbid();
+        var hierarchy = new[] { "superadmin", "admin", "operador", "lector" };
+        if (Array.IndexOf(hierarchy, role) <= Array.IndexOf(hierarchy, callerRole)) return BadRequest(new { error = "Target role must be below caller role." });
+        await _audit.WriteAsync("ImpersonateStart", "UserRole", role, actor.Id, actor.Email, cancellationToken);
+        var access = await _tokens.CreateImpersonationTokenAsync(actor, role);
+        return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc, role, scope = "read", impersonated_by = new { id = actor.Id, email = actor.Email } });
+    }
 
-        await _audit.WriteAsync("ImpersonateStart", "IdentityUser", id, actor.Id, actor.Email,
-            cancellationToken, impersonatedUserId: id);
-        var access = await _tokens.CreateImpersonationTokenAsync(target, actor);
-        return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc });
+    [HttpPost("{id}/password")]
+    [Authorize(Policy = "RequiereSuperadmin")]
+    public async Task<IActionResult> ResetPassword(string id, PasswordRequest? request, CancellationToken cancellationToken)
+    {
+        var user = await _users.FindByIdAsync(id);
+        if (user is null) return NotFound();
+        var password = request?.Password ?? GeneratePassword();
+        var reset = await _users.GeneratePasswordResetTokenAsync(user);
+        var result = await _users.ResetPasswordAsync(user, reset, password);
+        if (!result.Succeeded) return BadRequest(new { errors = result.Errors.Select(error => error.Description) });
+        var now = DateTime.UtcNow;
+        var active = await _context.RefreshTokens.Where(token => token.UserId == id && token.RevokedAtUtc == null).ToListAsync(cancellationToken);
+        foreach (var token in active) token.RevokedAtUtc = now;
+        await _context.SaveChangesAsync(cancellationToken);
+        await _audit.WriteAsync("PasswordReset", "IdentityUser", id, cancellationToken: cancellationToken);
+        return Ok(new { initialPassword = request?.Password is null ? password : null });
     }
 
     private async Task<(string[] Roles, string? Error)> ValidateRolesAsync(string[]? requested)
@@ -188,7 +220,37 @@ public sealed class UserController : ControllerBase
             profile?.IsActive ?? true, profile?.LastAccessUtc);
     }
 
-    public sealed record CreateUserRequest([Required, EmailAddress] string Email, [Required] string[] Roles);
+    private static string GeneratePassword()
+    {
+        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower = "abcdefghijkmnopqrstuvwxyz";
+        const string digits = "23456789";
+        const string symbols = "!@#$%&*?";
+        const string all = upper + lower + digits + symbols;
+        var characters = new char[24];
+        // One character from every class first: Identity rejects a password that misses one, and a
+        // purely random draw over the whole alphabet misses a symbol roughly one run in eight.
+        characters[0] = Pick(upper);
+        characters[1] = Pick(lower);
+        characters[2] = Pick(digits);
+        characters[3] = Pick(symbols);
+        for (var index = 4; index < characters.Length; index++) characters[index] = Pick(all);
+        for (var index = characters.Length - 1; index > 0; index--)
+        {
+            var swap = RandomNumberGenerator.GetInt32(index + 1);
+            (characters[index], characters[swap]) = (characters[swap], characters[index]);
+        }
+        return new string(characters);
+
+        static char Pick(string alphabet) => alphabet[RandomNumberGenerator.GetInt32(alphabet.Length)];
+    }
+
+    public sealed record CreateUserRequest([Required, EmailAddress] string Email, [Required] string[] Roles, string? Password = null);
+    public sealed record PasswordRequest(string? Password = null);
+    public sealed record ImpersonateRequest(string? Role);
+    public sealed record CreatedUser(string Id, string Email, IList<string> Roles, bool IsActive,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? LastAccessUtc,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? InitialPassword);
     public sealed record UpdateRolesRequest([Required] string[] Roles);
     public sealed record UserSummary(string Id, string Email, IList<string> Roles, bool IsActive,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? LastAccessUtc);
