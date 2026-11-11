@@ -242,8 +242,11 @@ namespace IMCAPI.Controllers
                 query = query.Where(row => row.DeletedById == actor || row.DeletedBy == actor || row.DeletedBy!.Contains(actor));
             if (!string.IsNullOrWhiteSpace(label)) query = query.Where(row => row.Label.Contains(label));
             var totalCount = await query.CountAsync(cancellationToken);
+            // `(page - 1) * pageSize` overflows int for a large enough page and silently wrapped back to
+            // the first one; compute it wide and clamp instead of trusting the arithmetic.
+            var offset = Math.Min((long)(page - 1) * pageSize, int.MaxValue);
             var items = await query.OrderByDescending(row => row.DeletedAtUtc).ThenByDescending(row => row.ArchiveId)
-                .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+                .Skip((int)offset).Take(pageSize).ToListAsync(cancellationToken);
             return Ok(new { items, page, pageSize, total = totalCount });
         }
 
@@ -262,6 +265,15 @@ namespace IMCAPI.Controllers
             if (parentId is not null && !await _context.Items.IgnoreQueryFilters()
                     .AnyAsync(item => item.Id == parentId.Value, cancellationToken))
                 parentId = null;
+            // The row was a leaf when it was archived, but its parent may have been moved deeper in the
+            // meantime: restoring it must obey the same depth bound that create and update enforce.
+            if (parentId is not null)
+            {
+                var hierarchy = await AnalyzeParentChain(archive.ItemId, parentId.Value);
+                if (hierarchy.Cycle) return InvalidHierarchy("The restore would create a cycle.");
+                var attemptedLevel = hierarchy.ParentLevel + 1;
+                if (attemptedLevel > _maxDepth) return DepthExceeded(attemptedLevel);
+            }
 
             var restored = new Item
             {
@@ -327,21 +339,44 @@ namespace IMCAPI.Controllers
     {
         IRepository<Attachment> _repository;
         private readonly AttachmentStorage _storage;
+        private readonly ApplicationContext _context;
 
-        public AttachmentController(IRepository<Attachment> repository, ILogger<BaseController<Attachment>> logger, AttachmentStorage storage) : base(repository, logger)
+        public AttachmentController(IRepository<Attachment> repository, ILogger<BaseController<Attachment>> logger,
+            AttachmentStorage storage, ApplicationContext context) : base(repository, logger)
         {
             _repository = repository;
             _storage = storage;
+            _context = context;
         }
 
         [HttpPost]
         [Authorize(Policy = "RequiereEscritura")]
         public override async Task<IActionResult> Post(Attachment data)
         {
+            // The JSON route writes the bytes before the row for the same reason the multipart one
+            // did, so it needs the same two guards: the record has to exist, and a failed insert has
+            // to take its file with it.
+            if (data.ItemId <= 0) return BadRequest("An attachment needs the record it belongs to");
+            if (!await _context.Items.AnyAsync(item => item.Id == data.ItemId))
+                return BadRequest($"Record {data.ItemId} does not exist.");
+            data.Type ??= "Photo";
+
             var error = await _storage.ApplyUploadAsync(data);
             if (error is not null) return BadRequest(error);
 
-            return await base.Post(data);
+            try
+            {
+                // Not `base.Post`: that helper catches the exception and answers 500, which made the
+                // cleanup unreachable and left the file behind. The insert is done here so a failure
+                // can remove what it just wrote before the 500 goes out.
+                await _repository.Add(data);
+                return Ok(data);
+            }
+            catch
+            {
+                _storage.Delete(data.FilePath);
+                return StatusCode(StatusCodes.Status500InternalServerError);
+            }
         }
 
         /// <summary>
@@ -358,6 +393,12 @@ namespace IMCAPI.Controllers
             if (file is null || file.Length == 0) return BadRequest("Choose a file to upload");
             if (file.Length > AttachmentStorage.MaxBytes)
                 return BadRequest($"The file is larger than {AttachmentStorage.MaxBytes / (1024 * 1024)} MB");
+
+            // The bytes are written to disk before the row exists, so a record id that does not exist
+            // used to answer 500 and leave a file behind that no route could name or delete. Look the
+            // record up first, and clean the file up if the insert still fails.
+            if (!await _context.Items.AnyAsync(item => item.Id == itemId))
+                return BadRequest($"Record {itemId} does not exist.");
 
             byte[] bytes;
             await using (var buffer = new MemoryStream())
@@ -377,7 +418,16 @@ namespace IMCAPI.Controllers
                 ThumbnailBase64 = stored.ThumbnailBase64,
             };
 
-            await _repository.Add(attachment);
+            try
+            {
+                await _repository.Add(attachment);
+            }
+            catch
+            {
+                _storage.Delete(stored.RelativePath);
+                throw;
+            }
+
             return Ok(attachment);
         }
 

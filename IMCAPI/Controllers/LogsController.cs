@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Globalization;
 using System.Net;
 using System.Reflection;
 
@@ -26,9 +27,24 @@ namespace IMCAPI.Controllers
             {
                 _logger.Log(LogLevel.Information, $"Inicio: {methodName}");
 
-                var directoryPath = Path.Combine(_env.ContentRootPath, "Logs");
-                var fileName = $"{date}_Logs.txt";
-                var filePath = Path.Combine(directoryPath, fileName);
+                // The segment is part of a path, so it is parsed, not trusted: a date shaped like a
+                // path (`..`, an encoded separator, a drive letter) must never reach Path.Combine.
+                if (!DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var parsed))
+                {
+                    return BadRequest("The date must be formatted yyyy-MM-dd.");
+                }
+
+                var directoryPath = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "Logs"));
+                // The writer names its files `yyyyMMdd_Logs.txt` (FileLoggerProvider). Building the name
+                // from the raw segment asked for `yyyy-MM-dd_Logs.txt`, a file that never exists, so
+                // every well-formed date answered 404 while the log sat next to it.
+                var fileName = $"{parsed:yyyyMMdd}_Logs.txt";
+                var filePath = Path.GetFullPath(Path.Combine(directoryPath, fileName));
+                if (!filePath.StartsWith(directoryPath + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                {
+                    return BadRequest("The date does not name a log file.");
+                }
 
                 if (!System.IO.File.Exists(filePath))
                 {

@@ -163,7 +163,10 @@ namespace IMCAPI.DB.Repositories
         /// <returns></returns>
         public virtual async Task Delete(int id)
         {
-            T? entity = await GetById(id);
+            // GetById is filtered by HasQueryFilter(IsActive), so an inactive row came back null and
+            // the physical-delete branch below could never be reached: a soft-deleted row was stuck
+            // forever. The lookup has to see the row the caller is asking about.
+            T? entity = await _entities.IgnoreQueryFilters().FirstOrDefaultAsync(row => row.Id == id);
             if (entity == null) return;
             if( entity.IsActive)
             {
@@ -174,7 +177,18 @@ namespace IMCAPI.DB.Repositories
             else
             {
                 _entities.Remove(entity);
-                await _context.SaveChangesAsync();
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateException)
+                {
+                    // Rows still pointing at this one (a constant with live children) block the hard
+                    // delete; the database is right and the caller asked for a delete that already
+                    // happened. Detach and leave it soft-deleted instead of turning a second DELETE
+                    // into a 500 the UI cannot explain.
+                    _context.Entry(entity).State = EntityState.Unchanged;
+                }
             }
         }
         /// <summary>
@@ -187,7 +201,7 @@ namespace IMCAPI.DB.Repositories
             var deleteEntities = new List<T>();
             foreach (var item in ids)
             {
-                T? result = await GetById(item);
+                T? result = await _entities.IgnoreQueryFilters().FirstOrDefaultAsync(row => row.Id == item);
                 if (result == null) continue;
                 if (result.IsActive)
                 {
@@ -200,7 +214,16 @@ namespace IMCAPI.DB.Repositories
                 }
             }
             _entities.RemoveRange(deleteEntities);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // Same rule as Delete: a row the database refuses to drop (children still point at
+                // it) stays soft-deleted instead of failing the whole batch with a 500.
+                foreach (var entity in deleteEntities) _context.Entry(entity).State = EntityState.Unchanged;
+            }
         }
 
         /// <summary>
