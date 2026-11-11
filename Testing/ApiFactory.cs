@@ -23,6 +23,15 @@ public sealed class ApiFactory : WebApplicationFactory<IMCAPI.Program>
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "imc-api-tests", Guid.NewGuid().ToString("N"));
 
+    private readonly int? _authPermitLimit;
+
+    /// <param name="authPermitLimit">
+    /// How many `/api/auth` calls one address may make per window. Left null the suite is effectively
+    /// unlimited, because a hundred logins must not trip a production guard; the rate-limit tests
+    /// pass a small number to walk the window.
+    /// </param>
+    public ApiFactory(int? authPermitLimit = null) => _authPermitLimit = authPermitLimit;
+
     public string DatabasePath => Path.Combine(_root, "test.db");
 
     public string MediaRoot => Path.Combine(_root, "media-store");
@@ -51,6 +60,10 @@ public sealed class ApiFactory : WebApplicationFactory<IMCAPI.Program>
                 ["Auth:Enforce"] = "true",
                 ["Auth:Bootstrap:Email"] = "bootstrap@example.test",
                 ["Auth:Bootstrap:Password"] = "AuthTest!Secure123",
+                // The limiter is a production guard; a suite that logs in a hundred times must not
+                // trip it. The test that exercises it raises its own factory with a tiny window.
+                ["Auth:RateLimit:PermitLimit"] = (_authPermitLimit ?? 100000).ToString(),
+                ["Auth:RateLimit:WindowSeconds"] = "60",
             });
         });
     }

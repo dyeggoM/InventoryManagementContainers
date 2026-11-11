@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using IMCAPI.DB;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 
@@ -259,6 +260,43 @@ public sealed class AuthMatrixTests
         request.Headers.Add("Cookie", firstCookie);
         Assert.That((await replayer.SendAsync(request)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
             "a rotated refresh token must not mint a new session");
+    }
+
+    [Test]
+    public async Task Refresh_TakesItsDatesFromTheServer_NotFromTheBody()
+    {
+        // The route has no body parameter at all: this pins that, so a later refactor cannot start
+        // reading a lifetime out of the request and let a client extend its own session.
+        using var client = _factory.CreateClient();
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { email = "admin@example.test", password = Password });
+        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var before = DateTime.UtcNow;
+
+        var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            createdAtUtc = before.AddYears(-5),
+            expiresAtUtc = before.AddYears(10),
+            expiresInDays = 3650,
+        });
+        Assert.That(refresh.StatusCode, Is.EqualTo(HttpStatusCode.OK), await refresh.Content.ReadAsStringAsync());
+        var payload = await refresh.Content.ReadFromJsonAsync<JsonElement>();
+        var accessExpiry = payload.GetProperty("expires_at_utc").GetDateTime();
+        Assert.That(accessExpiry, Is.InRange(before.AddMinutes(14), before.AddMinutes(16)),
+            "the access token lifetime is the server's 15 minutes, not the client's 10 years");
+
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+        var user = await users.FindByEmailAsync("admin@example.test");
+        var stored = await context.RefreshTokens.Where(row => row.UserId == user!.Id)
+            .OrderByDescending(row => row.CreatedAtUtc).FirstAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.CreatedAtUtc, Is.InRange(before.AddSeconds(-5), before.AddMinutes(1)));
+            Assert.That(stored.ExpiresAtUtc, Is.InRange(before.AddDays(7).AddMinutes(-1), before.AddDays(7).AddMinutes(1)),
+                "the refresh lifetime is the server's 7 days");
+            Assert.That(stored.RevokedAtUtc, Is.Null);
+        });
     }
 
     [Test]
