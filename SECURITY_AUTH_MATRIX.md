@@ -1,11 +1,21 @@
 # Matriz de autenticación y autorización — IMCAPI
 
-Estado actual: **ningún endpoint exige autenticación**. Este documento es la decisión de qué debe
-exigir cada ruta y con qué rol mínimo; el análisis completo está en
+Estado actual (2026-11-11): **toda la API exige credencial** salvo las cinco rutas declaradas como
+anónimas. La columna *Hoy* es lo que hacía la API en la auditoría del 2026-11-10, antes de la Fase 2 —
+se conserva como registro; la columna *Decisión* es lo que el código implementa hoy y lo que
+`Testing/AuthMatrixTests.cs` ejecuta. El análisis completo está en
 [`docs/security/2026-11-10-audit.md`](docs/security/2026-11-10-audit.md).
+
+El registro de revisión incremental (qué se inspeccionó, qué se encontró) vive en
+[`SECURITY_MATRIX.md`](SECURITY_MATRIX.md), que genera `.security/security.db`. Esta tabla es la
+decisión de autorización; ese registro es la evidencia de que se revisó.
 
 Convención: `REQUIERE_AUTH (rol mínimo)` | `PUEDE_SER_ANONIMO` | `A_REVISAR`.
 Roles: `superadmin` > `admin` > `operador` > `lector`.
+
+Impersonation is role-based and strictly downward: `superadmin` → `admin | operador | lector`,
+`admin` → `operador | lector`, `operador` → `lector`, `lector` → none. `superadmin` is never
+a valid target. Password reset is restricted to `superadmin`.
 
 ## Matriz
 
@@ -36,10 +46,27 @@ Roles: `superadmin` > `admin` > `operador` > `lector`.
 | 21 | `POST /api/constants` | `Controllers/BaseController.cs:143` | anónimo | `REQUIERE_AUTH (admin)` |
 | 22 | `DELETE /api/constants/{id:int}` | `Controllers/BaseController.cs:169` | anónimo | `REQUIERE_AUTH (admin)` |
 | 23 | `GET /api/logs/{date}` | `Controllers/LogsController.cs:19` | anónimo | `REQUIERE_AUTH (admin)` + `date` validada |
+| 24 | `POST /api/users/impersonate` | `Controllers/UserController.cs:150` | — | `REQUIERE_AUTH`; role hierarchy above |
+| 25 | `POST /api/users/{id}/password` | `Controllers/UserController.cs:177` | — | `REQUIERE_AUTH (superadmin)` |
+| 26 | `GET /api/users` | `Controllers/UserController.cs:38` | — (nueva) | `REQUIERE_AUTH (superadmin)` |
+| 27 | `POST /api/users` | `Controllers/UserController.cs:54` | — (nueva) | `REQUIERE_AUTH (superadmin)` |
+| 28 | `PUT /api/users/{id}/roles` | `Controllers/UserController.cs:84` | — (nueva) | `REQUIERE_AUTH (superadmin)` |
+| 29 | `DELETE /api/users/{id}` | `Controllers/UserController.cs:126` | — (nueva) | `REQUIERE_AUTH (superadmin)`; desactiva, no borra |
+| 30 | `GET /api/audit` | `Controllers/AuditController.cs:18` | — (nueva) | `REQUIERE_AUTH (superadmin)`; sin ruta de escritura (`405`) |
+| 31 | `POST /api/auth/login` | `Controllers/AuthController.cs:35` | — (nueva) | `PUEDE_SER_ANONIMO` — es la puerta |
+| 32 | `POST /api/auth/refresh` | `Controllers/AuthController.cs:80` | — (nueva) | `PUEDE_SER_ANONIMO` — exige cookie |
+| 33 | `POST /api/auth/logout` | `Controllers/AuthController.cs:132` | — (nueva) | `PUEDE_SER_ANONIMO` — revoca |
+| 34 | `POST /api/auth/stop-impersonation` | `Controllers/AuthController.cs:155` | — (nueva) | `REQUIERE_AUTH` + claim `act` |
 
-Resumen: **18 requieren autenticación, 5 pueden quedar anónimas** (3 `test` + catálogo `constants`
-de lectura), `logs` pasa de `A_REVISAR` a `REQUIERE_AUTH (admin)` porque sirve rutas internas y
-trazas.
+Resumen: **25 rutas requieren autenticación** y 8 pueden responder sin credencial (las 5 del catálogo
+original más `login`, `refresh` y `logout`, que existen para poder autenticarse). `logs` pasa de
+`A_REVISAR` a `REQUIERE_AUTH (admin)` porque sirve rutas internas y trazas.
+
+La suplantación no es una excepción a esta tabla: el token que emite `POST /api/users/impersonate`
+lleva el rol destino como único rol, `scope=read` y los claims `act`/`act_email`, y un middleware
+(`Program.cs`) responde `403` a cualquier método que no sea seguro (sólo `GET`/`HEAD`/`OPTIONS`) y a
+`/api/auth/login` mientras ese claim esté presente. Restaurar del archivo es una escritura, así que
+también queda bloqueada.
 
 Las 5 rutas anónimas están declaradas, una por línea, en
 [`endpoints.allow-anonymous.txt`](endpoints.allow-anonymous.txt). Ese archivo es la fuente del test
@@ -80,8 +107,8 @@ Conclusión: los dos hallazgos críticos del informe son reales y reproducibles,
 
 La matriz no es un documento: `Testing/AuthMatrixTests.cs` la ejecuta.
 
-- `EveryProtectedRoute_WithoutACredential_IsUnauthorized` — las 17 rutas protegidas responden `401`
-  sin credencial.
+- `EveryProtectedRoute_WithoutACredential_IsUnauthorized` — cada ruta protegida responde `401` sin
+  credencial.
 - `EveryProtectedRoute_RejectsTheRolesBelowItsMinimum` — cada rol por debajo del mínimo declarado
   recibe `403` (no basta con que el rol correcto entre).
 - `EveryProtectedRoute_AcceptsTheRoleAtItsMinimum` — el rol mínimo sí pasa la autorización.

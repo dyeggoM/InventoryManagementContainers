@@ -15,9 +15,13 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - Rows show a child count while collapsed and a paperclip when the record carries files.
 - Delete from an overflow menu that names what it deletes, with confirmation. A record with children
   is refused (`409` with a message that says how many), so the tree never loses a branch by accident;
-  a record without them is moved to the archive instead of disappearing. Restoring and listing the
-  archive exists in the API only (`PATCH /api/item/{id}/activate`, `GET /api/item/archive`), not yet
-  in the UI.
+  a record without them is moved to the archive instead of disappearing.
+- **The archive is a screen, not a database table** (`components/dashboard/ArchivePanel.vue`): the
+  superadmin filters by label, by who deleted it and by a date range, pages through the server's
+  total, and restores a record with a confirmation. A restored row is marked and cannot be restored
+  twice, a record already restored answers "ya fue restaurado" instead of an error, and a restore
+  obeys the same depth bound as creating a record — a record archived at level twelve cannot come
+  back at level thirteen.
 - Empty states everywhere: no records yet, nothing matches, and “Select an item to edit it”.
 
 ## Attributes
@@ -79,6 +83,9 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   `lector`. Reads need any role, records and attachments are written by `operador` and up, deletes and
   the configuration tree by `admin`, users, audit and impersonation by `superadmin`. The table is
   [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md) and `Testing/AuthMatrixTests.cs` executes it.
+- **The login door is throttled**: a fixed window per client address (`Auth:RateLimit:PermitLimit`,
+  ten a minute by default) answers `429` instead of checking another password, so a credential-stuffing
+  script cannot use the form as an oracle. Business routes are outside that window.
 - **Login screen** (`pages/login.vue`) with the server's message on failure and a return to the route
   the user was trying to open. The access token lives 15 minutes; on a `401` the client refreshes once
   (`POST /api/auth/refresh`, `HttpOnly` cookie, rotation) and otherwise sends the user back to the
@@ -88,10 +95,22 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   `admin`/`superadmin` screens are unreachable by URL for the roles below them.
 - **Superadmin dashboard** with three panels: accounts (list, create, change roles, deactivate),
   audit (actor/entity/action/date filters, before/after viewer, CSV export) and impersonation.
-- **Impersonation is read-only and visible**: `POST /api/users/{id}/impersonate` returns a 7-minute
-  token whose `sub` is the other account and whose `act` claim names the superadmin, every write
-  answers `403`, a permanent banner sits over the app, and starting/stopping it writes
-  `ImpersonateStart`/`ImpersonateEnd` to the audit trail.
+- **Impersonation is by role, never by account**: `POST /api/users/impersonate` takes a role, and
+  only a role strictly below the caller's own — `superadmin` may enter as `admin`, `operador` or
+  `lector`, `admin` as `operador` or `lector`, `operador` as `lector`, and `lector` may not
+  impersonate at all. Nobody ever signs in as a specific colleague, and `superadmin` is not a target.
+- **The borrowed session is read-only, short and visible**: a 7-minute token that names the real
+  caller in `sub` plus `act`/`impersonated_role`, every write (including a restore) answers `403`, a
+  permanent banner sits over the app, and the start writes `ImpersonateStart` to the audit trail.
+  It is deliberately not renewable: when it expires the session returns as the caller, with the
+  banner gone. *Salir* goes through `POST /api/auth/stop-impersonation`, which writes the
+  `ImpersonateEnd` row and hands back a fresh token for the caller; if that call cannot be made the
+  app returns to the token it kept aside, or ends the session when there is none, rather than
+  leaving a borrowed token in place.
+- **Passwords are managed from the app**: creating an account accepts a password or generates a
+  24-character one and shows it once; *Restablecer contraseña* does the same for an existing account,
+  revokes its refresh tokens and invalidates the access tokens already issued (the token carries the
+  account's security stamp, and the pipeline compares it).
 
 ## Audit trail
 
@@ -115,15 +134,19 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 
 ## Repository tooling
 
-- `AI_INVENTORY.md` — a router index of both projects (790 symbols across 88 files, call edges,
+- `AI_INVENTORY.md` — a router index of both projects (906 symbols across 95 files, call edges,
   `path:line` anchors) plus one slice per module under `inventory/`, committed with the code and
   refreshed by `.githooks/pre-commit` from the staged files.
+- `SECURITY_MATRIX.md` — the scanner's ledger: which changed files were reviewed, what was found and
+  in what state each finding is (`confirmed` → `in_remediation` → `verified_fixed`).
 - `ROADMAP.md` — what is deliberately not built yet.
 - `CHANGELOG.md` — every pull request and what it changed; this file — the resulting capability list.
-- Checks used before each commit: `vue-tsc`, `eslint`, `dotnet build`, `dotnet test`, `npm test`.
-- **API tests** (85) run the app itself over a throwaway database and media folder: the authorization
+- Checks used before each commit: `vue-tsc`, `eslint`, `dotnet build`, `dotnet test`, `npm test` — and
+  the same set runs on every pull request in `.github/workflows/ci.yml`, so a branch cannot merge on a
+  claim.
+- **API tests** (101) run the app itself over a throwaway database and media folder: the authorization
   matrix route by route, token abuse, the tree shape, the write paths, attachments written and served
-  back byte-for-byte, archival deletion with restore, the audit redaction, user administration and the
-  impersonation contract.
-- **UI tests** (86) cover the tree editor's state machine, the attribute and attachment editors, the
-  auth store and role-aware router guards, and the audit/user service clients.
+  back byte-for-byte, archival deletion with restore, the audit redaction, user administration, the
+  role-impersonation hierarchy, password creation/reset and the refresh contract.
+- **UI tests** (131) cover the tree editor's state machine, the attribute and attachment editors, the
+  auth store and role-aware router guards, and the audit, user and archive panels.

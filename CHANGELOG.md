@@ -6,6 +6,142 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `wip/round-20261111`
+
+**Impersonation is by role, and only downwards.** The superadmin picks a role, not an account, which
+is the rule the app needed to be honest about: nobody signs in "as" a colleague.
+
+- `POST /api/users/impersonate` takes `{ "role": "operador" }` and replaces the account-based route.
+  `superadmin` may enter as `admin`, `operador` or `lector`; `admin` as `operador` or `lector`;
+  `operador` as `lector`; `lector` may not impersonate at all. `superadmin` is never a valid target,
+  and a role at or above the caller's own answers `400`.
+- The token keeps the **actor's real id** in `sub` and carries the target role as its only role claim,
+  plus `act`, `act_email`, `impersonated_role` and `scope=read`. Seven minutes, and deliberately not
+  renewable: the refresh cookie belongs to the caller's own session, so when the borrowed token
+  expires the session comes back as itself and the banner clears, instead of the expired token being
+  re-installed and bouncing the user to the login form.
+- Read-only is enforced in `Program.cs` for every unsafe method, including the archive restore, and an
+  impersonation token cannot impersonate again. `ImpersonateStart`/`ImpersonateEnd` are audited with
+  the actor taken from the token; no audit row ever names the target as the author.
+- The dashboard's impersonation panel is a role picker limited to the roles below the caller, and the
+  store refuses a role at or above the caller's own before the request leaves the browser.
+
+**An account created in the app can log in.** It could not before: `CreateUser` made an Identity row
+with no password, so every account the dashboard created was unusable.
+
+- `POST /api/users` accepts an optional `password`; without one the server generates a 24-character
+  password (one character from each required class, shuffled with `RandomNumberGenerator`) and returns
+  it **once** as `initialPassword`. A password the caller chose is never echoed back.
+- `POST /api/users/{id}/password` (superadmin, optional body) sets or resets a password, returns the
+  generated value once, revokes that account's refresh tokens and writes a `PasswordReset` audit row.
+- The interface surfaces both: an optional field in the create dialog, a one-time dialog with the
+  generated password, and a *Restablecer contraseña* action per row.
+
+**The audit trail is the archive's companion, and both now have the UI they were missing.**
+
+- New **Archivo** tab: filter by label, deleter and date range, paginate over the server's total,
+  and restore a record with confirmation; a row already restored is marked and cannot be restored
+  again, and a `404` is reported as "ya fue restaurado" instead of an error screen.
+- Restoring a record now obeys the same depth bound as create and update. It used to re-insert the
+  row without checking, so a record archived at level 12 could come back at level 13 once its parent
+  had been moved deeper — measured today, and closed with the same `AnalyzeParentChain` guard the
+  update path uses.
+
+**The login door has a brake.** Until now the only limit on `POST /api/auth/login` was Identity's
+lockout, and `refresh`/`logout` had none.
+
+- A fixed window per client address, configured with `Auth:RateLimit:PermitLimit` (default 10) and
+  `Auth:RateLimit:WindowSeconds` (default 60), answers `429` once spent. It covers the `/api/auth`
+  controller only: reading the inventory is not inside that window.
+- Non-browser clients may now send `POST /api/auth/refresh` with a borrowed bearer without the
+  impersonation write-block answering `403` — the refresh trades the cookie for the caller's own
+  token, which is the whole point of the route.
+
+- Leaving an impersonation now goes through `POST /api/auth/stop-impersonation` instead of swapping
+  the token in the browser, so the audit trail records the end of every impersonation, not just the
+  ones an API client closed. A refused or unreachable call still returns the caller to their own
+  token, or ends the session when there is none — the banner never outlives the borrowed token.
+
+**Security — the seven findings the scanner recorded are closed**
+- **A file can no longer be written for a record that does not exist.** `POST /api/attachment/upload`
+  checks the record first, and if the insert fails anyway the file it just wrote is removed. It used
+  to answer `500` and leave an orphan under `media/items/{id}/` that no route could name or delete.
+- **The extension saved to disk is an allow-list.** A client-supplied `.html`, `.svg` or double
+  extension is re-detected from the content instead of being kept, which is what stops this from
+  becoming stored XSS the day the media folder is served.
+- **Reusing a refresh token kills the whole family.** The reuse was audited and then the replacement
+  token stayed alive, so a copied cookie kept rotating a working session. Every live token of the
+  account is revoked now, and the honest client signs in again.
+- **`GET /api/logs/{date}` parses the segment** (`yyyy-MM-dd`) and refuses a path that resolves outside
+  the `Logs` directory; an encoded separator or a drive letter never reaches `Path.Combine`.
+- **`BaseRepository.Delete` can reach the row it was asked about.** The lookup ran through
+  `HasQueryFilter(IsActive)`, so a soft-deleted `Constant` or `Attachment` could never be physically
+  removed and the second delete silently did nothing.
+- **A control that gets switched off now says so.** Outside Development the API refuses to start when
+  `CORS:AllowedCors` is empty (the policy allows credentials, so "any origin" is not a default a
+  deployment may take) or when `Auth:Enforce=false`; in Development both log a warning naming the risk.
+
+- **The JSON attachment route got the same two guards** as the multipart one. The independent
+  validation found the orphan-file bug alive on `POST /api/attachment` (`uploadBase64`), which is the
+  route the form used before the multipart work landed.
+- **`GET /api/logs/{date}` reads the files the logger actually writes.** The reader asked for
+  `yyyy-MM-dd_Logs.txt` while `FileLoggerProvider` writes `yyyyMMdd_Logs.txt`, so every well-formed
+  date answered 404 with the log sitting next to it. Found by the same validation pass.
+- **The hard delete no longer 500s on a row that still has children.** A constant with live children
+  cannot be removed by the database (`Restrict`), and the unfiltered lookup that made a second delete
+  reach the row turned that into a 500 the UI could not explain: the row now stays soft-deleted and
+  the call answers `204`, which is what "already deleted" means.
+
+- **The failed-insert cleanup is reachable.** `base.Post` swallows the exception and answers `500`, so
+  the cleanup around it never ran and the orphan came back the moment an insert failed. The JSON route
+  now does the insert itself, removes the file and then answers `500`; `DeleteRange` got the same
+  guard as `Delete`, and the thumbnail is computed before the write so a throw cannot leave a file
+  behind either. A test renames the table out from under the insert and asserts the media folder is
+  empty afterwards.
+
+Verified: `dotnet test` **101 passed**, including `Testing/SecurityRegressionTests.cs` — nine tests
+covering the upload guards on both routes and a forced insert failure, the extension allow-list, the
+log path and its file-name mismatch, token-family revocation and the two deletes. Each finding's state
+is tracked in `SECURITY_MATRIX.md` and the gate (`security_matrix.py check`) reports it.
+
+**The checks run themselves**
+- `.github/workflows/ci.yml`: on every pull request and on `main`, the API job restores, builds
+  `IMCAPI/IMCAPI.csproj` and runs `dotnet test Testing/Testing.csproj`; the UI job runs `npm ci`,
+  `npm run test`, `npm run typecheck` and `npm run lint:check`. It builds the project files, not
+  `IMCAPI.sln`, because the solution references an `imcui.esproj` that is not committed. The two
+  `AUTH_*` variables the suite needs are set by `Testing/ApiFactory.cs`, so CI carries no secret.
+
+**Every changed file gets a security review**
+- `SECURITY_MATRIX.md` and `.security/` (ignored): the incremental scanner's ledger. This round's 28
+  touched paths were inspected by hand — auth, impersonation, passwords, rate limiting and the archive
+  UI — with **0 unresolved findings**, and the integration review is recorded as passed. The ledger
+  keys on the commit it reviewed, so it will be re-recorded against the real commit when this branch
+  is committed.
+
+**Database debt closed**
+- `AuditLogs.Action` goes from 32 to 64 characters and `EntityId` from 512 to 1024. SQLite stores them
+  as `TEXT` and never complained, which is exactly why it would have broken only after a move to SQL
+  Server — one action name over 32 characters away. The migration records the model change and states
+  that the width is metadata-only here.
+- `ItemsArchive.Label` gained an index: the archive screen filters by label and the table only grows.
+
+**Fixed**
+- A password reset now invalidates the access tokens already issued: the token carries `sstamp` and
+  the pipeline compares it with the account's current security stamp, so a reset actually ends the
+  session (measured: the old bearer token answers `401` immediately after the reset).
+- A role change now reaches the sessions already open: `PUT /api/users/{id}/roles` rotates the
+  account's security stamp, so the token minted with the old roles answers `401` instead of carrying
+  them until it expires (measured: a promoted `lector` token stops working at once, and the next
+  login writes).
+- `GET /api/item/archive` computed its page offset in `int`, so a large `page` wrapped and silently
+  served the first page; the offset is now computed wide and clamped.
+- `npm run lint:check` exited 2 on a clean checkout because its prettier half resolves
+  `--ignore-path .gitignore` against `imcui/`, which had none, and walked the built bundle. The
+  documented check now passes (`imcui/.gitignore` added, exit `0`).
+
+Verified: `dotnet build IMCAPI/IMCAPI.csproj` 0 errors, `dotnet test` **89 passed**, `npm run test`
+**129 passed**, `npm run typecheck` clean, `npm run lint:check` exit `0`.
+
 ## #22 — Roadmap notes: impersonation by role, audit widths, refresh dates · merged 2026-11-11
 
 Documentation only. `ROADMAP.md` records the constraints that still have to be honoured before (c),

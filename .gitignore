@@ -123,6 +123,9 @@ ai_inventory.json
 INVENTORY.md
 inventory/
 
+# The security scanner keeps its own SQLite ledger; SECURITY_MATRIX.md is the committed view.
+.security/
+
 ############################################
 # TEMPORARY FILES
 ############################################
