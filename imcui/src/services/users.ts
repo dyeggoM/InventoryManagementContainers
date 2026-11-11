@@ -3,10 +3,10 @@ import { normalizeRoles, type Role } from './roles';
 import { asText } from './utilities';
 
 /**
- * The user management contract the dashboard is built against. The API does not expose these
- * routes yet: `GET/POST /api/users`, `PUT /api/users/{id}/roles`, `DELETE /api/users/{id}` are
- * agreed but unwritten, so every call is expected to answer 404 for now — the panel shows
- * "API pendiente" (see `isApiPending`) instead of an empty table that looks like a bug.
+ * The user management contract the dashboard is built against: `GET/POST /api/users`,
+ * `PUT /api/users/{id}/roles`, `POST /api/users/{id}/password` and `DELETE /api/users/{id}`.
+ * A route the API has not deployed still answers 404, and the panels show "API pendiente" (see
+ * `isApiPending`) instead of an empty table that looks like a bug.
  */
 export interface ManagedUser {
   id: string;
@@ -19,8 +19,31 @@ export interface ManagedUser {
 
 export interface CreateUserRequest {
   email: string;
-  password: string;
+  /**
+   * Optional: without it the API generates a temporary one and returns it once, in
+   * `initialPassword`, so the caller can hand it over.
+   */
+  password?: string;
   roles: Role[];
+}
+
+/** `POST /api/users` answers the created account plus the password, once, when it generated one. */
+export interface CreatedUser extends ManagedUser {
+  initialPassword: string | null;
+}
+
+/** What `POST /api/users/impersonate` answers: a short-lived, read-only token for one role. */
+export interface ImpersonationSession {
+  access_token: string;
+  expires_at_utc?: string | null;
+  role: Role;
+  scope: string;
+  impersonated_by?: { id: string; email: string } | null;
+}
+
+/** The one-time password a reset may generate; null when the caller supplied its own. */
+export interface PasswordResetResult {
+  initialPassword: string | null;
 }
 
 /** The list arrives as-is or wrapped in `{ items }`; both are accepted, the UI wants an array. */
@@ -45,6 +68,12 @@ function toUser(raw: Record<string, unknown>): ManagedUser {
   };
 }
 
+/** The API writes `null` for "you supplied the password": only a string is shown to the user. */
+function initialPasswordOf(raw: Record<string, unknown>): string | null {
+  const value = raw.initialPassword;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 export const usersService = {
   async list(): Promise<ManagedUser[]> {
     const response = await api.get<ManagedUser[] | UserListResponse>('/users');
@@ -52,13 +81,48 @@ export const usersService = {
     return rows.map((row) => toUser(row as unknown as Record<string, unknown>));
   },
 
-  create(request: CreateUserRequest): Promise<ManagedUser> {
-    return api.post<ManagedUser>('/users', request);
+  async create(request: CreateUserRequest): Promise<CreatedUser> {
+    const created = await api.post<Record<string, unknown>>('/users', request);
+    return { ...toUser(created), initialPassword: initialPasswordOf(created) };
   },
 
   /** Replaces the whole role set: a user with two roles keeps them both. */
   updateRoles(id: string, roles: Role[]): Promise<ManagedUser> {
     return api.put<ManagedUser>(`/users/${encodeURIComponent(id)}/roles`, { roles });
+  },
+
+  /**
+   * Sets or resets a password (superadmin only). Without one the API generates it and answers
+   * `initialPassword` once; either way the account's refresh tokens are revoked, so it has to sign
+   * in again.
+   */
+  async resetPassword(id: string, password?: string): Promise<PasswordResetResult> {
+    const body = password ? { password } : {};
+    const response = await api.post<Record<string, unknown>>(
+      `/users/${encodeURIComponent(id)}/password`,
+      body,
+    );
+    return { initialPassword: initialPasswordOf(response ?? {}) };
+  },
+
+  /**
+   * Borrows a role, never an account: the API answers a read-only token whose role sits strictly
+   * below the caller's, and 400/403 with its own message when the request is not allowed.
+   */
+  async impersonate(role: Role): Promise<ImpersonationSession> {
+    const response = await api.post<Record<string, unknown>>('/users/impersonate', { role });
+    const returnedRole = normalizeRoles([asText(response?.role)])[0] ?? role;
+    return {
+      access_token: asText(response?.access_token),
+      expires_at_utc:
+        typeof response?.expires_at_utc === 'string' ? response.expires_at_utc : null,
+      role: returnedRole,
+      scope: asText(response?.scope),
+      impersonated_by:
+        response?.impersonated_by && typeof response.impersonated_by === 'object'
+          ? (response.impersonated_by as { id: string; email: string })
+          : null,
+    };
   },
 
   /** Deactivates the account; nothing is deleted from the audit trail. */

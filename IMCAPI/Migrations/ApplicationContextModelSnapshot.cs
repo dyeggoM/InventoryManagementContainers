@@ -83,7 +83,7 @@ namespace IMCAPI.Migrations
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasMaxLength(32)
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ActorEmail")
@@ -105,7 +105,7 @@ namespace IMCAPI.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("EntityId")
-                        .HasMaxLength(512)
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ImpersonatedUserId")
@@ -314,6 +314,8 @@ namespace IMCAPI.Migrations
                     b.HasIndex("DeletedById");
 
                     b.HasIndex("ItemId");
+
+                    b.HasIndex("Label");
 
                     b.ToTable("ItemsArchive", (string)null);
                 });

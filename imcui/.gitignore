@@ -1,0 +1,7 @@
+# The tooling resolves `--ignore-path .gitignore` relative to this directory, so the file has to
+# exist here: without it `npm run lint:check` walks `dist/` and dies on the minified bundle.
+node_modules/
+dist/
+.quasar/
+src-pwa/custom-service-worker.js
+*.tsbuildinfo

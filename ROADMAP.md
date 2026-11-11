@@ -12,8 +12,9 @@ What is deliberately not built yet, in the order it is worth doing.
 - **Restaurar no devuelve los adjuntos**: los ficheros se borran del disco en el `DELETE`, así que un
   registro restaurado vuelve sin ellos. Si se quiere recuperación completa, hay que pasar a papelera
   de ficheros en vez de borrado.
-- **`GET /api/item/archive` hace `COUNT(*)` por página** y no tiene índice por `Label`; revisar cuando
-  la tabla crezca (misma deuda que `AuditLogs`).
+- **`GET /api/item/archive` hace `COUNT(*)` por página**; el índice por `Label` ya existe
+  (migración 2026-11-11), así que el filtro no es un scan, pero el total sigue contándose entero en
+  cada página. Revisar cuando la tabla crezca (misma deuda que `AuditLogs`).
 
 ## Done
 
@@ -76,12 +77,15 @@ qué debe exigir cada ruta es [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md)
   desactiva las comprobaciones de rol en bloque — es herramienta de diagnóstico local, no un modo
   para producción.
 
-- [ ] **(c) Dashboard superadmin: suplantación y CRUD de usuarios** — `todo` · dueños:
-  openai-coder (API) + opencode-coder (UI) · depende de (b).
-  Alta, baja, reset de contraseña y cambio de rol desde la propia app, más suplantación explícita
-  ("entrar como") auditada: el token de suplantación debe llevar quién suplanta a quién, caducar
-  corto y dejar rastro en el historial de (d). Sin (b) no hay `ClaimsPrincipal` del que colgar
-  ninguna de las dos cosas.
+- [x] **(c) Dashboard superadmin: suplantación y CRUD de usuarios** — `done` (2026-11-11).
+  Entregado en #18/#14 y cerrado en esta ronda: alta, baja, cambio de rol y **contraseña** desde la
+  app (`POST /api/users` devuelve `initialPassword` de un solo uso; `POST /api/users/{id}/password`
+  revoca los refresh tokens y, vía `sstamp`, los access tokens ya emitidos), y suplantación **por rol
+  y jerarquía** como pedía la restricción de abajo: `superadmin → admin|operador|lector`,
+  `admin → operador|lector`, `operador → lector`, nunca `superadmin` como destino, token de 7 minutos
+  que conserva la identidad real en `sub` y añade `act`/`impersonated_role`, escrituras bloqueadas por
+  middleware y el par `ImpersonateStart`/`ImpersonateEnd` en la auditoría. La suplantación **no se
+  renueva**: al caducar, la sesión vuelve al usuario real.
 
   **Restricciones anotadas por Diego (2026-11-11)**: la suplantación es **por rol, nunca por usuario
   concreto** — superadmin puede "entrar como" admin u operador para validar funcionamientos, pero
@@ -91,30 +95,47 @@ qué debe exigir cada ruta es [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md)
   `UserController.Impersonate`) recibe un `id` de usuario concreto y solo exige ser superadmin, de
   modo que el contrato tiene que pasar a rol + jerarquía antes de cerrar (c).
 
-- [ ] **(d) Auditoría de cambios con interceptor EF** — `todo` · dueño: openai-coder · depende de (b).
-  Un `SaveChangesInterceptor` que registre entidad, `Id`, operación (`Added`/`Modified`/`Deleted`),
+- [x] **(d) Auditoría de cambios con interceptor EF** — `done` (2026-11-10, PR #16) · dueño: openai-coder.
+  Entregado: `AuditSaveChangesInterceptor` como único escritor, `AuditLog` con antes/después, actor
+  tomado del token, redacción de secretos y `GET /api/audit` sólo para superadmin. Lo que sigue son
+  dos mejoras derivadas de las notas de Diego, no trabajo pendiente de (d).
+  Lo que se pidió: un `SaveChangesInterceptor` que registrara entidad, `Id`, operación (`Added`/`Modified`/`Deleted`),
   **usuario real tomado de `User.Identity`** —nunca del cuerpo: eso es exactamente **A-2**,
   CWE-915— y marca de tiempo. Es la contrapartida de servidor al campo `UpdatedBy` de
   `DB/Entities/Models.cs:7` y la base del historial que la suplantación de (c) necesita para ser
   auditable.
 
-  **Anotado por Diego (2026-11-11)**: (1) revisar el `MaxLength` de `AuditLog` contra los campos de
-  los ítems auditados —medido: `Action` 32, `Entity` 256, `EntityId` 512, `ActorEmail` 320, y
-  `BeforeJson`/`AfterJson` **sin** tope—; en SQLite el largo no se valida, así que hoy no rompe,
-  pero un `Action` nuevo de más de 32 o un `EntityId` compuesto de más de 512 sí rompería al migrar
-  a SQL Server. (2) Su intención original para los borrados era una **tabla independiente sin
-  relaciones** con el registro borrado más quién y cuándo: eso ya existe como `ItemsArchive`
-  (`DB/Entities/ItemArchive.cs`, deliberadamente sin FK, con `DeletedAtUtc`/`DeletedById`/`DeletedBy`
-  y `RestoredAtUtc`), así que lo correcto es conservar `AuditLogs` como historial de cambios y dejar
-  `ItemsArchive` como ledger de borrado, sin duplicar la misma información en los dos sitios.
+- [x] **(d.1) Anchos de `AuditLog`** — `done` (2026-11-11). `Action` 32 → 64 y `EntityId` 512 → 1024,
+  con migración `20261111142916_WidenAuditLogAndIndexArchiveLabel` (en SQLite es solo metadato porque
+  ambas columnas son `TEXT`; el modelo es lo que leería una migración a SQL Server). `BeforeJson` y
+  `AfterJson` siguen sin tope a propósito: son texto libre y el límite real lo pone el tamaño de la
+  fila. Además `ItemsArchive.Label` tiene índice, que era la deuda del listado del archivo.
+- [ ] **(d.2) `ItemsArchive` como ledger de borrado** — `todo` · dueño: pendiente. Su intención
+  original para los borrados era una **tabla independiente sin relaciones** con el registro borrado
+  más quién y cuándo: eso ya existe como `ItemsArchive` (`DB/Entities/ItemArchive.cs`,
+  deliberadamente sin FK, con `DeletedAtUtc`/`DeletedById`/`DeletedBy` y `RestoredAtUtc`), así que lo
+  correcto es conservar `AuditLogs` como historial de cambios y dejar `ItemsArchive` como ledger de
+  borrado, sin duplicar la misma información en los dos sitios.
 
-- [ ] **(e) `RefreshToken`: fechas solo del servidor** — `todo` · dueño: pendiente.
-  Anotado por Diego (2026-11-11): la creación y la expiración del refresh token no pueden salir del
-  cliente. Estado actual: ya son columnas de la fila (`DB/Entities/RefreshToken.cs`:
-  `CreatedAtUtc`, `ExpiresAtUtc`, `RevokedAtUtc`, `ReplacedByTokenHash`) y `AuthController` decide
-  con `stored.ExpiresAtUtc <= now` sobre esa fila, nunca con nada que venga en el cuerpo, así que el
-  riesgo está cerrado; falta un test que fije el contrato (que `refresh` ignore fechas del cliente) y
-  decidir si los 7 días de `AuthController:71` se parametrizan en configuración.
+- [x] **(e) `RefreshToken`: fechas solo del servidor** — `done` (2026-11-11).
+  `Refresh` no tiene parámetro de cuerpo, así que el cliente no puede influir en las fechas; el test
+  `Refresh_TakesItsDatesFromTheServer_NotFromTheBody` fija el contrato: un cuerpo con fechas a diez
+  años se ignora y el token de acceso sigue saliendo a 15 minutos y la fila de refresh a 7 días.
+  Queda solo la decisión cosmética de parametrizar los 7 días de `AuthController:71`.
+- [x] **(f) Rate limiting en `/api/auth/*`** — `done` (2026-11-11). Ventana fija por dirección de
+  cliente (`Auth:RateLimit:PermitLimit` 10 / `Auth:RateLimit:WindowSeconds` 60 por defecto) que
+  responde `429`; cubre solo `AuthController`, y las rutas de negocio quedan fuera. La suite sube el
+  límite para no ser intermitente y `RateLimitTests` lo baja a 3 con una fábrica propia para recorrer
+  la ventana.
+- [x] **(g.1) `ImpersonateEnd` cuando se sale desde la app** — `done` (2026-11-11). El botón *Salir*
+  llama a `POST /api/auth/stop-impersonation` con el token prestado y adopta el que devuelve, así que
+  el par `ImpersonateStart`/`ImpersonateEnd` queda completo. Si la llamada falla (red, token ya
+  caducado, `403`) vuelve al token propio guardado y, sin él, cierra la sesión: nunca deja el aviso
+  arriba sobre un token que ya no suplanta. Sin llamada no hay fila de fin, y eso es lo honesto.
+- [ ] **(g) Suplantación: dejar rastro en la fila de auditoría** — `low` · dueño: pendiente. Con la
+  suplantación por rol ya no hay usuario suplantado, así que `AuditLogs.ImpersonatedUserId` queda
+  siempre nulo; las filas `ImpersonateStart`/`ImpersonateEnd` llevan el rol en `EntityId`, pero una
+  escritura hecha mientras se suplanta (hoy imposible por el middleware) no podría distinguirse.
 
 ### Prioridad 1 de corrección: C-2 — DoS por ciclo de `ParentId` (CWE-674)
 

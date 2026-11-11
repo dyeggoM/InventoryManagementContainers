@@ -16,6 +16,23 @@ set -e
 root=$(git rev-parse --show-toplevel)
 inventory=${CODE_INVENTORY_HOME:-$HOME/.hermes/skills/software-development/code-inventory}
 
+# Security review gate first: `check` is read-only, so it cannot corrupt the commit it guards, and
+# running it before the inventory refresh means a blocked commit leaves the tree exactly as it was.
+# A review is consumed by the commit it covers — committing moves HEAD, so the next commit needs a
+# new pass (`security_matrix.py scan` → `scope-reviewed --all` → `review --status passed`).
+# Bypass for one commit:  git commit --no-verify
+# A missing CLI warns instead of blocking, like the inventory below: a local tool that is not
+# installed must never stop work.
+security_cli="${SECURITY_MATRIX_CLI:-$HOME/.hermes/security-tools/security_matrix.py}"
+if [ -f "$security_cli" ]; then
+  if ! python3 "$security_cli" --repo "$root" check; then
+    echo "pre-commit: blocked by the security gate — see SECURITY_MATRIX.md" >&2
+    exit 1
+  fi
+else
+  echo "pre-commit: security CLI not found at $security_cli — gate skipped"
+fi
+
 # "<relative root>:<lang>" pairs. "." is the repository root.
 ROOTS='.:js
 IMCAPI:cs

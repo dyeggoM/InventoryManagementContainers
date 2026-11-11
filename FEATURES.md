@@ -13,7 +13,15 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   carries it, `serial` finds the items that have that key, and a matched row shows the pair under the
   name. The count reports rows that matched on their own, and the panel says when nothing matches.
 - Rows show a child count while collapsed and a paperclip when the record carries files.
-- Delete from an overflow menu that names what it deletes, with confirmation.
+- Delete from an overflow menu that names what it deletes, with confirmation. A record with children
+  is refused (`409` with a message that says how many), so the tree never loses a branch by accident;
+  a record without them is moved to the archive instead of disappearing.
+- **The archive is a screen, not a database table** (`components/dashboard/ArchivePanel.vue`): the
+  superadmin filters by label, by who deleted it and by a date range, pages through the server's
+  total, and restores a record with a confirmation. A restored row is marked and cannot be restored
+  twice, a record already restored answers "ya fue restaurado" instead of an error, and a restore
+  obeys the same depth bound as creating a record — a record archived at level twelve cannot come
+  back at level thirteen.
 - Empty states everywhere: no records yet, nothing matches, and “Select an item to edit it”.
 
 ## Attributes
@@ -65,6 +73,59 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - When a new version is deployed, a notification offers **Reload** rather than reloading under an
   open form.
 
+## Access and roles
+
+- The API answers `401` without a login. The five routes that may stay anonymous are declared one per
+  line in `endpoints.allow-anonymous.txt` (the three `/test` health checks, the attribute catalogue
+  and the three `/api/auth` endpoints), and a contract test fails when an anonymous route is not
+  declared there.
+- **Four roles, enforced by action rather than by controller**: `superadmin` > `admin` > `operador` >
+  `lector`. Reads need any role, records and attachments are written by `operador` and up, deletes and
+  the configuration tree by `admin`, users, audit and impersonation by `superadmin`. The table is
+  [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md) and `Testing/AuthMatrixTests.cs` executes it.
+- **The login door is throttled**: a fixed window per client address (`Auth:RateLimit:PermitLimit`,
+  ten a minute by default) answers `429` instead of checking another password, so a credential-stuffing
+  script cannot use the form as an oracle. Business routes are outside that window.
+- **Login screen** (`pages/login.vue`) with the server's message on failure and a return to the route
+  the user was trying to open. The access token lives 15 minutes; on a `401` the client refreshes once
+  (`POST /api/auth/refresh`, `HttpOnly` cookie, rotation) and otherwise sends the user back to the
+  login instead of leaving a blank screen.
+- **The interface follows the role**: the drawer, the forms and the router guard read the same list
+  (`services/roles.ts`), so `lector` is not offered a write control that would bounce, and
+  `admin`/`superadmin` screens are unreachable by URL for the roles below them.
+- **Superadmin dashboard** with three panels: accounts (list, create, change roles, deactivate),
+  audit (actor/entity/action/date filters, before/after viewer, CSV export) and impersonation.
+- **Impersonation is by role, never by account**: `POST /api/users/impersonate` takes a role, and
+  only a role strictly below the caller's own — `superadmin` may enter as `admin`, `operador` or
+  `lector`, `admin` as `operador` or `lector`, `operador` as `lector`, and `lector` may not
+  impersonate at all. Nobody ever signs in as a specific colleague, and `superadmin` is not a target.
+- **The borrowed session is read-only, short and visible**: a 7-minute token that names the real
+  caller in `sub` plus `act`/`impersonated_role`, every write (including a restore) answers `403`, a
+  permanent banner sits over the app, and the start writes `ImpersonateStart` to the audit trail.
+  It is deliberately not renewable: when it expires the session returns as the caller, with the
+  banner gone. *Salir* goes through `POST /api/auth/stop-impersonation`, which writes the
+  `ImpersonateEnd` row and hands back a fresh token for the caller; if that call cannot be made the
+  app returns to the token it kept aside, or ends the session when there is none, rather than
+  leaving a borrowed token in place.
+- **Passwords are managed from the app**: creating an account accepts a password or generates a
+  24-character one and shows it once; *Restablecer contraseña* does the same for an existing account,
+  revokes its refresh tokens and invalidates the access tokens already issued (the token carries the
+  account's security stamp, and the pipeline compares it).
+
+## Audit trail
+
+- Every change is recorded **at the persistence layer**, by one `SaveChangesInterceptor`
+  (`Services/AuditSaveChangesInterceptor.cs`), so a controller cannot forget to log: timestamp, actor
+  id and email, impersonated account, action, entity, entity id, `BeforeJson`, `AfterJson`, IP, user
+  agent and request id.
+- **The actor comes from the token**, never from the request body; `PasswordHash`, `SecurityStamp`,
+  tokens and token hashes are redacted before anything is written, and audit rows cannot be modified
+  or deleted through EF.
+- Explicit rows for `Login`, failed login, `Logout`, refresh-token reuse, `RoleChange` and `SoftDelete`,
+  so a deletion is findable as such instead of hiding as an update.
+- `GET /api/audit` with filters and pagination, `superadmin` only, `ProblemDetails` on a bad filter and
+  **no write route at all** — `POST`, `PUT` and `DELETE` answer `405`.
+
 ## Data
 
 - SQLite through EF Core; migrations run at startup, so a clone builds its own schema.
@@ -73,12 +134,17 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 
 ## Repository tooling
 
-- `AI_INVENTORY.md` — a symbol-level map of both projects (321 symbols, call edges, `path:line`
-  anchors) committed with the code and refreshed by `.githooks/pre-commit` from the staged files.
+- `AI_INVENTORY.md` — a router index of both projects (906 symbols across 95 files, call edges,
+  `path:line` anchors) plus one slice per module under `inventory/`, committed with the code and
+  refreshed by `.githooks/pre-commit` from the staged files.
+- `SECURITY_MATRIX.md` — the scanner's ledger: which changed files were reviewed, what was found and
+  in what state each finding is (`confirmed` → `in_remediation` → `verified_fixed`).
 - `ROADMAP.md` — what is deliberately not built yet.
 - `CHANGELOG.md` — every pull request and what it changed; this file — the resulting capability list.
 - Checks used before each commit: `vue-tsc`, `eslint`, `dotnet build`, `dotnet test`, `npm test`.
-- **API tests** run the app itself over a throwaway database and media folder: the tree shape, the
-  write paths, attachments written and served back byte-for-byte, archival deletion with restore, seeding and
-  validation.
-- **UI tests** cover the tree editor's state machine and the attribute editor's typed rows.
+- **API tests** (101) run the app itself over a throwaway database and media folder: the authorization
+  matrix route by route, token abuse, the tree shape, the write paths, attachments written and served
+  back byte-for-byte, archival deletion with restore, the audit redaction, user administration, the
+  role-impersonation hierarchy, password creation/reset and the refresh contract.
+- **UI tests** (131) cover the tree editor's state machine, the attribute and attachment editors, the
+  auth store and role-aware router guards, and the audit, user and archive panels.

@@ -123,6 +123,12 @@ ai_inventory.json
 INVENTORY.md
 inventory/
 
+# The security scanner's artifacts are local: the ledger is a database, and the matrix it renders
+# carries the HEAD of the review that produced it, so committing it would dirty the tree on every
+# review. Both regenerate from `.security/security.db` with the CLI.
+.security/
+SECURITY_MATRIX.md
+
 ############################################
 # TEMPORARY FILES
 ############################################

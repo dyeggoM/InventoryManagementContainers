@@ -67,6 +67,9 @@ namespace IMCAPI.DB
                 entity.HasIndex(archive => archive.ItemId);
                 entity.HasIndex(archive => archive.DeletedAtUtc);
                 entity.HasIndex(archive => archive.DeletedById);
+                // The archive screen filters by label; without this the filter is a scan on a table
+                // that only grows.
+                entity.HasIndex(archive => archive.Label);
             });
 
             modelBuilder.Entity<AuditLog>(entity =>
@@ -75,9 +78,11 @@ namespace IMCAPI.DB
                 entity.HasKey(log => log.Id);
                 entity.HasIndex(log => new { log.Entity, log.EntityId });
                 entity.HasIndex(log => log.TimestampUtc);
-                entity.Property(log => log.Action).HasMaxLength(32).IsRequired();
+                // Room for the action names this app will keep adding: SQLite does not enforce the
+                // length, SQL Server does, and a 33-character action would fail only after a migration.
+                entity.Property(log => log.Action).HasMaxLength(64).IsRequired();
                 entity.Property(log => log.Entity).HasMaxLength(256);
-                entity.Property(log => log.EntityId).HasMaxLength(512);
+                entity.Property(log => log.EntityId).HasMaxLength(1024);
                 entity.Property(log => log.ActorUserId).HasMaxLength(450);
                 entity.Property(log => log.ActorEmail).HasMaxLength(320);
                 entity.Property(log => log.ImpersonatedUserId).HasMaxLength(450);

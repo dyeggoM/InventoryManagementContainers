@@ -58,6 +58,12 @@ public sealed class AttachmentStorage
         return null;
     }
 
+    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".heic", ".heif",
+        ".pdf", ".txt", ".csv", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".rar", ".7z",
+    };
+
     /// <summary>Writes the original file and returns its relative path plus the preview.</summary>
     public async Task<StoredAttachment> SaveAsync(int itemId, string? fileName, byte[] content,
         CancellationToken cancellationToken = default)
@@ -66,17 +72,23 @@ public sealed class AttachmentStorage
         var absoluteDirectory = Path.Combine(_contentRoot, relativeDirectory);
         Directory.CreateDirectory(absoluteDirectory);
 
+        // The client's extension is a suggestion, not a decision: storing `.html` or `.svg` under the
+        // media root is harmless while the API streams the bytes, and stored XSS the day that folder
+        // is served. Anything outside this list is re-detected from the content itself.
         var extension = Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
-        if (extension.Length is 0 or > 10)
+        if (!AllowedExtensions.Contains(extension))
         {
             extension = DetectExtension(content);
         }
 
+        // The preview is computed before anything is written: a throw from here used to escape after
+        // the file existed, and the caller had no path to clean up.
+        var thumbnail = CreateThumbnail(content);
         var storedName = $"{Guid.NewGuid():N}{extension}";
         await File.WriteAllBytesAsync(Path.Combine(absoluteDirectory, storedName), content, cancellationToken);
 
         var relativePath = Path.Combine(relativeDirectory, storedName).Replace('\\', '/');
-        return new StoredAttachment(relativePath, CreateThumbnail(content));
+        return new StoredAttachment(relativePath, thumbnail);
     }
 
     /// <summary>Turns a data URL or a bare base64 string into bytes; null when it is not valid.</summary>
