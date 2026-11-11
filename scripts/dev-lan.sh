@@ -26,7 +26,12 @@ lan_ip="$(ip -4 addr show scope global | awk '/inet /{print $2}' | cut -d/ -f1 |
 
 start_api() {
   echo "API      -> http://${lan_ip:-<host-ip>}:5173/api   (binds 0.0.0.0:5173, profile 'http')"
-  echo "           login: ${AUTH_BOOTSTRAP_EMAIL} / ${AUTH_BOOTSTRAP_PASSWORD}"
+  # The bootstrap password only seeds a database that has no superadmin yet. On a database that
+  # already has one (the normal case after the first run) this value is ignored, so printing it as
+  # "the login" sent testers to a 401. Say which account, and where the password really lives.
+  echo "           login: ${AUTH_BOOTSTRAP_EMAIL}"
+  echo "           password: the one that account already has. The bootstrap value below is used"
+  echo "                     only when the database is empty: ${AUTH_BOOTSTRAP_PASSWORD}"
   dotnet run --project "$repo_root/IMCAPI" --no-launch-profile \
     --urls "http://0.0.0.0:5173" &
 }
