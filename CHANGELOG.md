@@ -6,6 +6,36 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/attachment-preview-and-attribute-lists`
+
+**Opening an uploaded file works again, inside the app.** The *open original* action was an `<a>`
+pointing at `/api/attachment/{id}/file`, so the browser opened a new tab without the bearer token,
+the route answered `401` and the tab stayed blank — the thumbnail looked fine because it is a stored
+preview, not a request.
+
+- The file is fetched with the session the app already holds (`api.getBlob`, same single-flight
+  refresh as every other call) and shown in a **modal** instead of a tab: images render as images,
+  PDFs in a viewer, anything else offers *Descargar*. The bytes are requested when the dialog opens,
+  not before, and the object URL is revoked on close.
+- The route stays behind `RequiereLectura`, which is what a modal can do and a new tab cannot.
+
+**Attribute lists can be searched, and an admin can add a value from the form.**
+
+- The value control is a real input on a phone now: typing filters the options instead of leaving the
+  long tap-menu as the only way in.
+- When what the user typed is not in the list, `admin` and `superadmin` get *Añadir «X» a «Label»*;
+  it creates the constant in the same group, refreshes the catalogue and leaves the row with the new
+  value, so a missing value no longer means leaving the form for Configuration. `operador` and
+  `lector` never see the affordance, and the API still requires `admin`.
+- The new value lands under the catalogue node that owns the group (`Brand` values under the `Brand`
+  node), not under the `Attribute` definition that merely names the attribute.
+
+Verified: `npm run test` **153 passed** (16 files), `npm run typecheck` clean, `npm run lint:check`
+exit 0. Against the running API: an upload then `GET /api/attachment/{id}/file` with the token answers
+`200 image/png` byte-identical (68/68), the same request without a token answers `401`, and a constant
+created with the payload the page sends appears in `GET /api/constants/group/Brand` and in the
+Configuration tree under the right parent.
+
 ## Pending — `wip/round-20261111`
 
 **Impersonation is by role, and only downwards.** The superadmin picks a role, not an account, which

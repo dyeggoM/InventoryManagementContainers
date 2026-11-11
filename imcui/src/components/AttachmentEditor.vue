@@ -33,10 +33,9 @@
               no-caps
               icon="open_in_new"
               label="Open"
-              :href="fileUrl(row.id)"
-              target="_blank"
-              rel="noopener"
+              type="button"
               class="q-px-xs"
+              @click="openOriginal(row)"
             />
           </div>
 
@@ -98,12 +97,20 @@
       />
       <span v-if="rows.length" class="text-caption text-grey-7">{{ rows.length }} on this item</span>
     </div>
+
+    <!-- The original lives behind the token, so it is fetched and shown here instead of in a tab. -->
+    <FilePreviewDialog
+      v-model="previewing.open"
+      :attachment-id="previewing.id"
+      :file-name="previewing.fileName"
+      :type="previewing.type"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount } from 'vue';
-import { attachmentsService } from '@services/attachment';
+import { onBeforeUnmount, ref } from 'vue';
+import FilePreviewDialog from './FilePreviewDialog.vue';
 
 /** An attachment row that may still carry the file the user picked in this form. */
 export interface AttachmentRow {
@@ -134,12 +141,26 @@ const emit = defineEmits<{
   remove: [index: number];
 }>();
 
+/** What the preview dialog is looking at; `open` is the only part that toggles. */
+const previewing = ref<{
+  open: boolean;
+  id: number;
+  fileName: string | null;
+  type: string | null;
+}>({ open: false, id: 0, fileName: null, type: null });
+
 onBeforeUnmount(() => {
   for (const row of rows.value) releasePreview(row);
 });
 
-function fileUrl(id: number): string {
-  return attachmentsService.fileUrl(id);
+/** Opens the original in the app: its route requires the token, which a new tab cannot send. */
+function openOriginal(row: AttachmentRow) {
+  previewing.value = {
+    open: true,
+    id: row.id,
+    fileName: row.fileName ?? null,
+    type: row.type ?? null,
+  };
 }
 
 /** A photo is taken with the camera; every other type is a document from the file manager. */

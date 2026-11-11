@@ -181,6 +181,14 @@ traducción a `404`/`409`, `IgnoreQueryFilters()` para que el borrado físico se
 **M-2/M-3** (`UseExceptionHandler` fuera de Development y validación del `itemId` antes de escribir
 en disco) y los cuatro bajos (**B-1..B-4**) en un solo pase.
 
+## Dashboard en móvil
+
+- [ ] **(h) Los paneles del dashboard en pantalla pequeña** — `low` · dueño: opencode-coder. Las
+  tablas de usuarios y auditoría y el panel de archivo se diseñaron en escritorio: en un móvil las
+  columnas no caben y hay que desplazar en horizontal. Convertirlos en tarjetas por fila (o en una
+  tabla con columnas prioritarias y un detalle desplegable), sin tocar la lógica ni los servicios.
+  Prioridad baja: primero lo que bloquea el trabajo diario.
+
 ## Entrada masiva desde plantilla
 
 Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case; the

@@ -62,6 +62,7 @@
         :lists="attributeLists"
         :types="attributeTypes"
         :readonly="!canWrite"
+        :create-value="canManageConfiguration ? createAttributeValue : undefined"
       />
     </div>
 
@@ -88,7 +89,7 @@ import { useFeedback } from '../../composables/useFeedback';
 import { useAuthStore } from '../../stores/auth-store';
 import { itemsService, type Item, type Attributes } from '@services/items';
 import { attachmentsService } from '@services/attachment';
-import { constantsService } from '@services/constants';
+import { constantsService, type Constants } from '@services/constants';
 
 const feedback = useFeedback();
 const auth = useAuthStore();
@@ -100,8 +101,15 @@ const attributes = ref<Attributes[]>([]);
 const attributeLabels = ref<string[]>([]);
 const attributeTypes = ref<Record<string, string>>({});
 const attributeLists = ref<Record<string, string[]>>({});
+/** The `Attribute` constants themselves: each one is the parent of its own values. */
+const attributeNodes = ref<Constants[]>([]);
+/** Every constant, flat: needed to place a new value after its siblings. */
+const constantPanels = ref<Constants[]>([]);
 const attachmentTypes = ref<string[]>([]);
 const attachments = ref<AttachmentRow[]>([]);
+
+// Only an admin and a superadmin may write Configuration, and never while impersonating.
+const canManageConfiguration = computed(() => auth.canManageConfiguration);
 
 const blank = (): Item => ({
   id: 0,
@@ -225,7 +233,7 @@ const {
   },
 });
 
-async function loadConstants() {
+async function loadConstants(resetRows = true) {
   try {
     const [attachmentTypeRows, attributeRows, all] = await Promise.all([
       constantsService.getByGroup('AttachmentType'),
@@ -234,6 +242,7 @@ async function loadConstants() {
     ]);
 
     attachmentTypes.value = (attachmentTypeRows ?? []).map((row) => row.label);
+    attributeNodes.value = attributeRows ?? [];
     attributeLabels.value = (attributeRows ?? [])
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -256,10 +265,58 @@ async function loadConstants() {
       lists[group] = (lists[group] ?? []).sort((a, b) => a.localeCompare(b));
     }
     attributeLists.value = lists;
-    attributes.value = blankAttributes();
+    constantPanels.value = all?.panels ?? [];
+    // Adding a value to the catalogue must not wipe what the user already typed on the form.
+    if (resetRows) attributes.value = blankAttributes();
   } catch (error) {
     feedback.error(error, 'Could not load the constants');
   }
+}
+
+/** Where the new value goes when a list has no values yet. */
+function nextSortOrder(parentId: number): number {
+  const siblings = constantPanels.value.filter((constant) => constant.parentId === parentId);
+  return siblings.reduce((highest, constant) => Math.max(highest, constant.sortOrder ?? 0), 0) + 1;
+}
+
+/**
+ * Saves a value the item form does not find in its list, so the user does not have to open
+ * Configuration first. Only wired for an admin or a superadmin; the API enforces the same.
+ * Returns `false` and leaves the message to the editor when the write fails.
+ */
+async function createAttributeValue(label: string, value: string): Promise<boolean> {
+  const node = attributeNodes.value.find((constant) => constant.label === label);
+  const trimmed = value.trim();
+  if (!node || !trimmed) return false;
+
+  // The values of a list attribute hang from the catalogue node that owns the group (`Brand` values
+  // under the `Brand` node), not from the `Attribute` definition that merely names the attribute.
+  // Reuse the parent of a value that is already there; with none yet, the definition is the least
+  // wrong place, and the group is what the editor actually reads.
+  const sibling = constantPanels.value.find(
+    (constant) => constant.group === label && constant.parentId != null,
+  );
+  const parentId = sibling?.parentId ?? node.id;
+
+  try {
+    await constantsService.create({
+      id: 0,
+      label: trimmed,
+      icon: '',
+      children: [],
+      sortOrder: nextSortOrder(parentId),
+      group: label,
+      parentId,
+      description: '',
+      parent: undefined,
+    });
+  } catch {
+    return false;
+  }
+
+  // The value is written: a failure here (loadConstants reports it) must not undo the row.
+  await loadConstants(false);
+  return true;
 }
 
 onMounted(async () => {
