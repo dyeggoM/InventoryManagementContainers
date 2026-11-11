@@ -83,12 +83,38 @@ qué debe exigir cada ruta es [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md)
   corto y dejar rastro en el historial de (d). Sin (b) no hay `ClaimsPrincipal` del que colgar
   ninguna de las dos cosas.
 
+  **Restricciones anotadas por Diego (2026-11-11)**: la suplantación es **por rol, nunca por usuario
+  concreto** — superadmin puede "entrar como" admin u operador para validar funcionamientos, pero
+  nunca como un admin o un user específico. El alcance es siempre hacia abajo en la jerarquía:
+  `superadmin → admin → operador → lector`, `admin → operador → lector`, `operador → lector`;
+  `lector` no suplanta. Lo que hay hoy (`POST /api/user/{id}/impersonate`,
+  `UserController.Impersonate`) recibe un `id` de usuario concreto y solo exige ser superadmin, de
+  modo que el contrato tiene que pasar a rol + jerarquía antes de cerrar (c).
+
 - [ ] **(d) Auditoría de cambios con interceptor EF** — `todo` · dueño: openai-coder · depende de (b).
   Un `SaveChangesInterceptor` que registre entidad, `Id`, operación (`Added`/`Modified`/`Deleted`),
   **usuario real tomado de `User.Identity`** —nunca del cuerpo: eso es exactamente **A-2**,
   CWE-915— y marca de tiempo. Es la contrapartida de servidor al campo `UpdatedBy` de
   `DB/Entities/Models.cs:7` y la base del historial que la suplantación de (c) necesita para ser
   auditable.
+
+  **Anotado por Diego (2026-11-11)**: (1) revisar el `MaxLength` de `AuditLog` contra los campos de
+  los ítems auditados —medido: `Action` 32, `Entity` 256, `EntityId` 512, `ActorEmail` 320, y
+  `BeforeJson`/`AfterJson` **sin** tope—; en SQLite el largo no se valida, así que hoy no rompe,
+  pero un `Action` nuevo de más de 32 o un `EntityId` compuesto de más de 512 sí rompería al migrar
+  a SQL Server. (2) Su intención original para los borrados era una **tabla independiente sin
+  relaciones** con el registro borrado más quién y cuándo: eso ya existe como `ItemsArchive`
+  (`DB/Entities/ItemArchive.cs`, deliberadamente sin FK, con `DeletedAtUtc`/`DeletedById`/`DeletedBy`
+  y `RestoredAtUtc`), así que lo correcto es conservar `AuditLogs` como historial de cambios y dejar
+  `ItemsArchive` como ledger de borrado, sin duplicar la misma información en los dos sitios.
+
+- [ ] **(e) `RefreshToken`: fechas solo del servidor** — `todo` · dueño: pendiente.
+  Anotado por Diego (2026-11-11): la creación y la expiración del refresh token no pueden salir del
+  cliente. Estado actual: ya son columnas de la fila (`DB/Entities/RefreshToken.cs`:
+  `CreatedAtUtc`, `ExpiresAtUtc`, `RevokedAtUtc`, `ReplacedByTokenHash`) y `AuthController` decide
+  con `stored.ExpiresAtUtc <= now` sobre esa fila, nunca con nada que venga en el cuerpo, así que el
+  riesgo está cerrado; falta un test que fije el contrato (que `refresh` ignore fechas del cliente) y
+  decidir si los 7 días de `AuthController:71` se parametrizan en configuración.
 
 ### Prioridad 1 de corrección: C-2 — DoS por ciclo de `ParentId` (CWE-674)
 
