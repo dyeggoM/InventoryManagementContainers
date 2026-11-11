@@ -6,7 +6,15 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `feat/attachment-preview-and-attribute-lists`
+## Pending — `docs/security-gate`
+
+The commit gate is documented where the next person looks. `AGENTS.md` now has the three commands that
+satisfy it, says that a review is consumed by the commit that carries it, and records that the rendered
+matrix stays out of Git because it carries the HEAD it was generated for.
+
+Also corrected: `AGENTS.md` still advertised 57 tests; the suite is 101.
+
+## #25 — The file opens in the app, searchable attribute lists, and dark mode · merged 2026-11-11
 
 **Opening an uploaded file works again, inside the app.** The *open original* action was an `<a>`
 pointing at `/api/attachment/{id}/file`, so the browser opened a new tab without the bearer token,
@@ -50,7 +58,7 @@ Configuration tree under the right parent. Dark mode was checked in a real brows
 inventory tree, the dashboard tables (no white panel left), the file preview modal and the login card
 all render dark with readable text, and switching back to *Sistema* returns the body to the OS mode.
 
-## Pending — `wip/round-20261111`
+## #23 — Impersonation by role, the security round and the archive screen · merged 2026-11-11
 
 **Impersonation is by role, and only downwards.** The superadmin picks a role, not an account, which
 is the rule the app needed to be honest about: nobody signs in "as" a colleague.

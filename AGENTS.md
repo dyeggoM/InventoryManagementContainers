@@ -76,7 +76,8 @@ open, and the whole point is lost.
 ```bash
 # API
 dotnet build IMCAPI/IMCAPI.csproj
-dotnet test Testing/Testing.csproj          # 57 tests: matrix, auth abuse, cycles, attachments
+dotnet test Testing/Testing.csproj          # 101 tests: matrix, auth abuse, cycles, attachments,
+                                            # impersonation, rate limiting, the security regressions
 dotnet run --project IMCAPI                 # needs AUTH_JWT_KEY/AUTH_JWT_ISSUER
                                             # and AUTH_BOOTSTRAP_EMAIL/AUTH_BOOTSTRAP_PASSWORD
 
@@ -90,6 +91,30 @@ npm run build
 
 Build the `.csproj` files, not `IMCAPI.sln`: the solution references an `imcui.esproj` that is not
 committed, so a solution build fails on a fresh clone.
+
+## The security gate
+
+`.githooks/pre-commit` asks the security matrix before it lets a commit through, and the answer is tied
+to the commit it covers: **a review is consumed by the commit that carries it**, so the next commit
+needs a new pass. For each change:
+
+```bash
+SM=~/.hermes/security-tools/security_matrix.py
+python3 $SM --repo . scan --mode incremental     # what changed, as a scope to read
+# read every path it lists; record what you found:
+python3 $SM --repo . finding --path F --symbol S --title T --severity high \
+    --description D --evidence "F:line ..." --actor scanner-agent
+python3 $SM --repo . scope-reviewed --run N --all --actor scanner-agent
+python3 $SM --repo . review --status passed --reviewer <you> --note '<evidence>'
+```
+
+- A fresh clone has no `.security/` ledger, so the gate speaks up on the first commit: run the three
+  commands and it lets you through. A missing CLI warns and allows, like the inventory hook.
+- The rendered `SECURITY_MATRIX.md` is **not** committed: it carries the HEAD of the review that
+  produced it. `.security/security.db` is the source; the CLI renders the document on demand.
+- Findings are keyed to the file's SHA-256, so record the fix state after the last edit to that file.
+- `git commit --no-verify` skips the gate for one commit. The gate is local today; it is not repeated
+  in CI.
 
 ## Security invariants (do not weaken these)
 
