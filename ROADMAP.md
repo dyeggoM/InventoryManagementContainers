@@ -76,10 +76,16 @@ qué debe exigir cada ruta es [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md)
   desactiva las comprobaciones de rol en bloque — es herramienta de diagnóstico local, no un modo
   para producción.
 
-- [ ] **(c) Dashboard superadmin: suplantación y CRUD de usuarios** — `todo` · dueños:
-  openai-coder (API) + opencode-coder (UI) · depende de (b).
-  Alta, baja, reset de contraseña y cambio de rol desde la propia app, más suplantación explícita
-  ("entrar como") auditada: el token de suplantación debe llevar quién suplanta a quién, caducar
+- [ ] **(c) Dashboard superadmin: suplantación y CRUD de usuarios** — `in progress` · dueños:
+  openai-coder (API) + opencode-coder (UI).
+  **Entregado** (PR #18 y #14): listado, alta, baja y cambio de rol desde la app (`UserController`,
+  `UsersPanel.vue`), suplantación auditada (`POST /api/users/{id}/impersonate`, acciones
+  `ImpersonateStart`/`ImpersonateEnd`) y el panel del dashboard con sus tres apartados.
+  **Falta**: (1) la suplantación **por rol y jerarquía** que pide la restricción de abajo — hoy la ruta
+  recibe el `id` de una cuenta concreta y sólo exige ser superadmin; (2) **contraseña**: `CreateUser`
+  crea la cuenta sin password, así que un usuario nuevo no puede entrar, y no existe reset.
+  Objetivo original: alta, baja, reset de contraseña y cambio de rol desde la propia app, más
+  suplantación explícita ("entrar como") auditada: el token de suplantación debe llevar quién suplanta a quién, caducar
   corto y dejar rastro en el historial de (d). Sin (b) no hay `ClaimsPrincipal` del que colgar
   ninguna de las dos cosas.
 
@@ -91,22 +97,28 @@ qué debe exigir cada ruta es [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md)
   `UserController.Impersonate`) recibe un `id` de usuario concreto y solo exige ser superadmin, de
   modo que el contrato tiene que pasar a rol + jerarquía antes de cerrar (c).
 
-- [ ] **(d) Auditoría de cambios con interceptor EF** — `todo` · dueño: openai-coder · depende de (b).
-  Un `SaveChangesInterceptor` que registre entidad, `Id`, operación (`Added`/`Modified`/`Deleted`),
+- [x] **(d) Auditoría de cambios con interceptor EF** — `done` (2026-11-10, PR #16) · dueño: openai-coder.
+  Entregado: `AuditSaveChangesInterceptor` como único escritor, `AuditLog` con antes/después, actor
+  tomado del token, redacción de secretos y `GET /api/audit` sólo para superadmin. Lo que sigue son
+  dos mejoras derivadas de las notas de Diego, no trabajo pendiente de (d).
+  Lo que se pidió: un `SaveChangesInterceptor` que registrara entidad, `Id`, operación (`Added`/`Modified`/`Deleted`),
   **usuario real tomado de `User.Identity`** —nunca del cuerpo: eso es exactamente **A-2**,
   CWE-915— y marca de tiempo. Es la contrapartida de servidor al campo `UpdatedBy` de
   `DB/Entities/Models.cs:7` y la base del historial que la suplantación de (c) necesita para ser
   auditable.
 
-  **Anotado por Diego (2026-11-11)**: (1) revisar el `MaxLength` de `AuditLog` contra los campos de
-  los ítems auditados —medido: `Action` 32, `Entity` 256, `EntityId` 512, `ActorEmail` 320, y
-  `BeforeJson`/`AfterJson` **sin** tope—; en SQLite el largo no se valida, así que hoy no rompe,
-  pero un `Action` nuevo de más de 32 o un `EntityId` compuesto de más de 512 sí rompería al migrar
-  a SQL Server. (2) Su intención original para los borrados era una **tabla independiente sin
-  relaciones** con el registro borrado más quién y cuándo: eso ya existe como `ItemsArchive`
-  (`DB/Entities/ItemArchive.cs`, deliberadamente sin FK, con `DeletedAtUtc`/`DeletedById`/`DeletedBy`
-  y `RestoredAtUtc`), así que lo correcto es conservar `AuditLogs` como historial de cambios y dejar
-  `ItemsArchive` como ledger de borrado, sin duplicar la misma información en los dos sitios.
+- [ ] **(d.1) Anchos de `AuditLog`** — `todo` · dueño: pendiente. Anotado por Diego (2026-11-11):
+  revisar el `MaxLength` contra los campos de los ítems auditados —medido en
+  `DB/ApplicationContext.cs:78-86`: `Action` 32, `Entity` 256, `EntityId` 512, `ActorEmail` 320, y
+  `BeforeJson`/`AfterJson` **sin** tope—; en SQLite el largo no se valida, así que hoy no rompe, pero
+  un `Action` nuevo de más de 32 o un `EntityId` compuesto de más de 512 sí rompería al migrar a
+  SQL Server.
+- [ ] **(d.2) `ItemsArchive` como ledger de borrado** — `todo` · dueño: pendiente. Su intención
+  original para los borrados era una **tabla independiente sin relaciones** con el registro borrado
+  más quién y cuándo: eso ya existe como `ItemsArchive` (`DB/Entities/ItemArchive.cs`,
+  deliberadamente sin FK, con `DeletedAtUtc`/`DeletedById`/`DeletedBy` y `RestoredAtUtc`), así que lo
+  correcto es conservar `AuditLogs` como historial de cambios y dejar `ItemsArchive` como ledger de
+  borrado, sin duplicar la misma información en los dos sitios.
 
 - [ ] **(e) `RefreshToken`: fechas solo del servidor** — `todo` · dueño: pendiente.
   Anotado por Diego (2026-11-11): la creación y la expiración del refresh token no pueden salir del
