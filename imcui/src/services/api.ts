@@ -238,6 +238,20 @@ export const api = {
     return request<T>(endpoint, requestOptions);
   },
 
+  /** Partial update: the archive's activate route is a PATCH with no body. */
+  patch<T>(endpoint: string, body?: unknown, options?: RequestInit): Promise<T> {
+    const requestOptions: RequestInit = {
+      ...options,
+      method: 'PATCH',
+    };
+
+    if (body !== undefined) {
+      requestOptions.body = JSON.stringify(body);
+    }
+
+    return request<T>(endpoint, requestOptions);
+  },
+
   delete<T>(endpoint: string, options?: RequestInit): Promise<T> {
     return request<T>(endpoint, {
       ...options,

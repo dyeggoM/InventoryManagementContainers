@@ -12,18 +12,32 @@
       icon="logout"
       label="Salir"
       class="q-ml-sm"
+      :loading="stopping"
+      :disable="stopping"
       @click="stop"
     />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useAuthStore } from '../stores/auth-store';
 
 const auth = useAuthStore();
+const stopping = ref(false);
 
-function stop(): void {
-  auth.stopImpersonation();
+/**
+ * The API writes the `ImpersonateEnd` audit row, so this is a round-trip: the button stays busy
+ * until the store has swapped the token back (or fallen back when the call could not be made).
+ */
+async function stop(): Promise<void> {
+  if (stopping.value) return;
+  stopping.value = true;
+  try {
+    await auth.stopImpersonation();
+  } finally {
+    stopping.value = false;
+  }
 }
 </script>
 

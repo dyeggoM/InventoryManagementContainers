@@ -2,17 +2,9 @@
   <div class="impersonation-panel">
     <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-subtitle1 text-weight-medium">Suplantación</div>
-      <q-space />
-      <q-btn flat dense no-caps icon="refresh" label="Recargar" :loading="loading" @click="load" />
     </div>
 
-    <q-banner v-if="pending" dense class="bg-orange-1 text-orange-10 q-mb-md">
-      <template v-slot:avatar><q-icon name="construction" /></template>
-      API pendiente: <code>GET /api/users</code> todavía no existe en la API, así que no hay a quién
-      elegir. El selector y el aviso están listos para cuando responda.
-    </q-banner>
-
-    <q-banner v-else-if="errorMessage" dense class="bg-red-1 text-red-9 q-mb-md">
+    <q-banner v-if="errorMessage" dense class="bg-red-1 text-red-9 q-mb-md">
       <template v-slot:avatar><q-icon name="error_outline" /></template>
       {{ errorMessage }}
     </q-banner>
@@ -33,26 +25,38 @@
           color="orange-9"
           icon="logout"
           label="Salir"
+          :loading="stopping"
+          :disable="stopping"
           @click="stop"
         />
       </div>
     </q-card>
 
-    <q-card flat bordered class="q-pa-md">
-      <div class="text-body2 q-mb-sm">Elegir un usuario para ver la aplicación como él</div>
+    <q-banner
+      v-else-if="!auth.canImpersonate"
+      dense
+      class="bg-blue-grey-1 text-blue-grey-9 q-mb-md"
+    >
+      <template v-slot:avatar><q-icon name="info" /></template>
+      Tu rol no permite suplantar a nadie: solo se entra como un rol estrictamente por debajo del
+      propio.
+    </q-banner>
+
+    <q-card v-else flat bordered class="q-pa-md">
+      <div class="text-body2 q-mb-sm">Entrar como un rol por debajo del tuyo</div>
+      <div class="text-caption text-grey-7 q-mb-sm">{{ caption }}</div>
       <div class="row items-center q-gutter-sm">
         <q-select
-          v-model="selectedId"
+          v-model="selectedRole"
           dense
           outlined
           emit-value
           map-options
           class="col-12 col-sm-8"
-          label="Usuario"
-          :options="options"
-          :loading="loading"
-          :disable="auth.isImpersonating || users.length === 0"
-          :hint="hint"
+          label="Rol"
+          :options="roleOptions"
+          :disable="!auth.canImpersonate"
+          hint="Solo lectura: las escrituras quedan bloqueadas mientras suplantas."
           options-dense
         />
         <q-btn
@@ -61,7 +65,8 @@
           color="primary"
           icon="switch_account"
           label="Suplantar"
-          :disable="!selectedId || auth.isImpersonating"
+          :disable="!selectedRole || !auth.canImpersonate"
+          :loading="starting"
           @click="start"
         />
       </div>
@@ -70,66 +75,63 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { isApiPending } from '@services/api';
-import { usersService, type ManagedUser } from '@services/users';
+import { computed, ref } from 'vue';
+import type { Role } from '@services/roles';
 import { useAuthStore } from '../../stores/auth-store';
 
 const auth = useAuthStore();
 
-const users = ref<ManagedUser[]>([]);
-const loading = ref(false);
-const pending = ref(false);
+const selectedRole = ref<Role | null>(null);
+const starting = ref(false);
+const stopping = ref(false);
 const errorMessage = ref<string | null>(null);
-const selectedId = ref<string | null>(null);
 
-const options = computed(() =>
-  users.value
-    .filter((user) => user.isActive)
-    .map((user) => ({ label: user.email, value: user.id })),
+/** Offered in hierarchy order, highest first: exactly what the API accepts from this caller. */
+const roleOptions = computed(() =>
+  auth.impersonatable.map((role) => ({ label: role, value: role })),
 );
 
-const hint = computed(() => {
-  if (pending.value) return 'Sin datos: la API de usuarios todavía no existe.';
-  if (options.value.length === 0) return 'No hay usuarios activos.';
-  return 'Solo lectura: las escrituras quedan bloqueadas mientras suplantas.';
+/** The hierarchy in one line: "puedes entrar como admin, operador o lector". */
+const caption = computed(() => {
+  const roles = auth.impersonatable;
+  if (roles.length === 0) return 'No hay ningún rol por debajo del tuyo.';
+  const list =
+    roles.length === 1
+      ? roles[0]
+      : `${roles.slice(0, -1).join(', ')} o ${roles[roles.length - 1]}`;
+  return `Puedes entrar como ${list}.`;
 });
 
-async function load(): Promise<void> {
-  loading.value = true;
-  pending.value = false;
+async function start(): Promise<void> {
   errorMessage.value = null;
+  const role = selectedRole.value;
+  if (!role) return;
+  starting.value = true;
   try {
-    users.value = await usersService.list();
-  } catch (error) {
-    if (isApiPending(error)) {
-      pending.value = true;
-      users.value = [];
-    } else {
-      errorMessage.value = error instanceof Error ? error.message : String(error);
-    }
+    const entered = await auth.impersonate(role);
+    // The store keeps the API's own message when it refuses (400/403): show that, not a guess.
+    if (!entered) errorMessage.value = auth.error ?? 'No se pudo iniciar la suplantación.';
+    else selectedRole.value = null;
   } finally {
-    loading.value = false;
+    starting.value = false;
   }
 }
 
-function start(): void {
-  const target = users.value.find((user) => user.id === selectedId.value);
-  if (!target) return;
-  auth.startImpersonation({
-    id: target.id,
-    email: target.email,
-    name: target.email,
-    roles: target.roles,
-  });
+/**
+ * Leaving is a round-trip — the API writes the `ImpersonateEnd` audit row — so the picker is only
+ * reset once the store has actually swapped the token back.
+ */
+async function stop(): Promise<void> {
+  if (stopping.value) return;
+  stopping.value = true;
+  try {
+    await auth.stopImpersonation();
+    selectedRole.value = null;
+    errorMessage.value = null;
+  } finally {
+    stopping.value = false;
+  }
 }
-
-function stop(): void {
-  auth.stopImpersonation();
-  selectedId.value = null;
-}
-
-onMounted(load);
 </script>
 
 <style scoped>

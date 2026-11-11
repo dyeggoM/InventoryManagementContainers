@@ -23,6 +23,25 @@ export const ADMIN_ROLES: readonly Role[] = ['superadmin', 'admin'];
 /** The dashboard: users, audit and impersonation. */
 export const SUPERADMIN_ROLES: readonly Role[] = ['superadmin'];
 
+/**
+ * The impersonation hierarchy, highest first. The API accepts a target only when it sits strictly
+ * below the caller's own role (`UserController.Impersonate`) and never lets `superadmin` be
+ * borrowed, so the picker and the store derive their options from this one list.
+ */
+export const ROLE_HIERARCHY: readonly Role[] = ['superadmin', 'admin', 'operador', 'lector'];
+
+/**
+ * The roles the signed-in user may enter as: strictly below their own, never their own and never
+ * `superadmin`. A lector gets an empty list, which is how the panel knows not to offer the picker.
+ */
+export function impersonatableRoles(callerRoles: readonly Role[]): Role[] {
+  const own = ROLE_HIERARCHY.find((role) => callerRoles.includes(role));
+  if (!own) return [];
+  return ROLE_HIERARCHY.slice(ROLE_HIERARCHY.indexOf(own) + 1).filter(
+    (role) => role !== 'superadmin',
+  );
+}
+
 /** A role the UI knows; anything else is kept out of the store rather than rendered half-broken. */
 export function isRole(value: string): value is Role {
   return (ROLES as readonly string[]).includes(value);
