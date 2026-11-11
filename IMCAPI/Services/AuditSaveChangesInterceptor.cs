@@ -72,15 +72,14 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
             var http = accessor.HttpContext;
             var principal = http?.User;
             var now = DateTime.UtcNow;
-            var impersonated = principal?.FindFirst("impersonated_user_id")?.Value
-                ?? principal?.FindFirst("impersonatedUserId")?.Value;
+            var impersonated = principal?.FindFirst("act")?.Value;
             var actorId = impersonated is null
                 ? principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal?.FindFirst("sub")?.Value
-                : principal?.FindFirst("act")?.Value;
+                : impersonated;
             var actorEmail = impersonated is null
                 ? principal?.FindFirst(ClaimTypes.Email)?.Value ?? principal?.Identity?.Name
                 : principal?.FindFirst("act_email")?.Value;
-            var imp = impersonated;
+            var imp = (string?)null;
             var changes = new List<Change>(changed.Count);
             foreach (var entry in changed)
             {
@@ -276,8 +275,7 @@ public sealed class AuditLogWriter(ApplicationContext context, IHttpContextAcces
     {
         var http = accessor.HttpContext;
         var principal = http?.User;
-        var impersonating = principal?.FindFirst("impersonated_user_id")?.Value
-            ?? principal?.FindFirst("impersonatedUserId")?.Value;
+        var impersonating = principal?.FindFirst("act")?.Value;
         context.AuditLogs.Add(new AuditLog
         {
             TimestampUtc = DateTime.UtcNow,
@@ -287,7 +285,7 @@ public sealed class AuditLogWriter(ApplicationContext context, IHttpContextAcces
             ActorEmail = actorEmail ?? (impersonating is null
                 ? principal?.FindFirst(ClaimTypes.Email)?.Value ?? principal?.Identity?.Name
                 : principal?.FindFirst("act_email")?.Value),
-            ImpersonatedUserId = impersonatedUserId ?? impersonating,
+            ImpersonatedUserId = impersonatedUserId,
             Action = action, Entity = entity, EntityId = entityId,
             BeforeJson = beforeJson, AfterJson = afterJson,
             IpAddress = http?.Connection.RemoteIpAddress?.ToString(), UserAgent = http?.Request.Headers.UserAgent.ToString(),
