@@ -1,0 +1,32 @@
+#!/bin/sh
+# Pre-commit security gate: refuse the commit unless a security review is recorded for this tree.
+#
+# The review lives in `.security/security.db` (local, gitignored) and is tied to the current HEAD plus
+# the source hashes of every file in scope, so it only means something on the machine that ran it.
+#
+# Two deliberate non-blocks, both of them noisy on purpose:
+#   - the CLI is not installed here -> warn and allow. A missing local tool must never stop work.
+#   - there is no ledger in this clone -> warn and allow. Nothing has been audited yet, so there is
+#     nothing to gate; run `scan` to start. A clone without the ledger is not a clone without risk,
+#     which is why CI is where the hard guarantee belongs.
+#
+# Skip for one commit:  git commit --no-verify
+# Check by hand:        python3 ~/.hermes/security-tools/security_matrix.py --repo . check
+set -u
+
+root=$(git rev-parse --show-toplevel)
+cli=${SECURITY_MATRIX_CLI:-$HOME/.hermes/security-tools/security_matrix.py}
+
+if [ ! -f "$cli" ]; then
+  echo "security-gate: CLI not found at $cli (set SECURITY_MATRIX_CLI) — gate skipped"
+  exit 0
+fi
+
+if [ ! -d "$root/.security" ]; then
+  echo "security-gate: no .security/ ledger in this clone — gate skipped (run a scan to start auditing)"
+  exit 0
+fi
+
+# `check` is read-only: it must not rewrite the tree in the middle of a commit. Exit 0 when the review
+# is valid for this HEAD and these sources, 1 when it is not (the reason goes to stderr).
+exec python3 "$cli" --repo "$root" check

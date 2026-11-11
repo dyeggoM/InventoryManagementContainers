@@ -93,6 +93,14 @@ committed, so a solution build fails on a fresh clone.
 
 ## Security invariants (do not weaken these)
 
+- **The security matrix decides what is committable.** Findings live in `.security/security.db`
+  (local, gitignored) and `SECURITY_MATRIX.md` is the view that goes in the diff. The pre-commit hook
+  refuses a commit while the matrix has an unreviewed file, an open finding, or a review that belongs
+  to a different HEAD — `python3 ~/.hermes/security-tools/security_matrix.py --repo . check` answers the
+  same question by hand. Validate first, commit second: a passing review covers exactly one commit.
+- **The reviewer is not the author.** `Unfiltered` records `review --status passed`; the bot that wrote
+  the fix does not sign it off. A passing review is an evidence-bounded statement, never proof of zero
+  vulnerabilities, and `accepted_risk` does not count as resolved.
 - **Authorization is by decision, not by habit.** `SECURITY_AUTH_MATRIX.md` says which role each
   route needs; `Testing/AuthMatrixTests.cs` executes that table. Widening a policy is a security
   change and belongs in a pull request that says so.

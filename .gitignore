@@ -124,6 +124,14 @@ INVENTORY.md
 inventory/
 
 ############################################
+# SECURITY MATRIX (generated)
+############################################
+
+# The ledger is local (.security/security.db, WAL sidecars included) and is tied to one machine's
+# HEAD; SECURITY_MATRIX.md is the view a reviewer reads in the diff.
+.security/
+
+############################################
 # TEMPORARY FILES
 ############################################
 

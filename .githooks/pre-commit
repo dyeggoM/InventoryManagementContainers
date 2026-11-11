@@ -1,20 +1,28 @@
 #!/bin/sh
-# Pre-commit: refresh the code inventory from the staged files, so the AI_INVENTORY.md a reviewer
-# reads in the diff describes the code in that same commit.
+# Pre-commit: refuse the commit if the security matrix has no valid review for this tree, then refresh
+# the code inventory from the staged files, so the AI_INVENTORY.md a reviewer reads in the diff
+# describes the code in that same commit.
 #
 # Install (once per clone):
 #   mkdir -p .githooks && cp <skill>/templates/pre-commit-hook.sh .githooks/pre-commit
 #   chmod +x .githooks/pre-commit && git config core.hooksPath .githooks
+#   (both hooks must stay executable: pre-commit and security-gate)
 #
 # Skip for one commit:  git commit --no-verify
 #
 # Roots are project-specific — edit ROOTS below. CODE_INVENTORY_HOME points at the skill directory;
 # without it the hook warns and lets the commit through, because a missing local tool must never
-# block work.
+# block work. The security gate follows the same rule (see .githooks/security-gate).
 set -e
 
 root=$(git rev-parse --show-toplevel)
 inventory=${CODE_INVENTORY_HOME:-$HOME/.hermes/skills/software-development/code-inventory}
+
+# The security gate runs first: it is read-only, and running the inventory refresh before a refusal
+# would leave AI_INVENTORY.md staged for a commit that never happened. Skip both with --no-verify.
+if [ -x "$root/.githooks/security-gate" ]; then
+  "$root/.githooks/security-gate" || exit 1
+fi
 
 # "<relative root>:<lang>" pairs. "." is the repository root.
 ROOTS='.:js
