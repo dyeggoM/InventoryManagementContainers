@@ -136,7 +136,7 @@ async function stop(): Promise<void> {
 
 <style scoped>
 .impersonating-card {
-  border-left: 4px solid var(--q-orange-9, #e65100);
-  background: #fff8e1;
+  border-left: 4px solid var(--imc-warning-strong);
+  background: var(--imc-warning-bg);
 }
 </style>

@@ -506,7 +506,7 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #6b7280;
+  color: var(--imc-text-muted);
 }
 
 .attribute-list {
@@ -515,7 +515,7 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
 }
 
 .attribute-row {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--imc-hairline);
   min-height: 44px;
 }
 
@@ -525,7 +525,7 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
 }
 
 .attribute-name :deep(.q-field__native) {
-  color: #4b5563;
+  color: var(--imc-text-body);
   font-size: 14px;
 }
 
@@ -546,7 +546,7 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
   grid-column: 1 / -1;
   font-size: 11px;
   line-height: 1.3;
-  color: #b91c1c;
+  color: var(--imc-danger-text);
   padding: 2px 0 4px;
 }
 
@@ -557,11 +557,11 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
 
 .attribute-name--custom :deep(.q-field__native) {
   font-style: italic;
-  color: #334155;
+  color: var(--imc-text-body);
 }
 
 .attribute-name__hint {
-  color: #b6bcc6;
+  color: var(--imc-text-soft);
 }
 
 .attribute-remove {

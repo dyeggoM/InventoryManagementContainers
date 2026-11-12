@@ -12,9 +12,20 @@ export default defineConfig({
   // the price of a single config file; the runtime is the same code.
   plugins: [vue() as unknown as never],
   resolve: {
-    alias: {
-      '@services': fileURLToPath(new URL('./src/services', import.meta.url)),
-    },
+    alias: [
+      { find: '@services', replacement: fileURLToPath(new URL('./src/services', import.meta.url)) },
+      {
+        // Quasar's `exports` map answers a Node resolution with its server build, where
+        // `Dark.set()` returns immediately and `body--dark` is never toggled: the theme store
+        // would look broken here while working in the browser. Resolve the client build instead —
+        // the one the app actually runs. The regex is exact on purpose: `quasar/wrappers` and
+        // friends must keep resolving to their own files.
+        find: /^quasar$/,
+        replacement: fileURLToPath(
+          new URL('./node_modules/quasar/dist/quasar.client.js', import.meta.url),
+        ),
+      },
+    ],
   },
   test: {
     environment: 'jsdom',

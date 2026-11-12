@@ -37,3 +37,27 @@ Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
   writable: true,
 });
+
+/**
+ * jsdom ships no `matchMedia`, and Quasar's Dark plugin asks for it as soon as the mode is `auto` —
+ * which is the app's default. Answer "light" so `auto` resolves the same way on every run instead
+ * of depending on the machine the suite happens to run on.
+ */
+if (typeof window.matchMedia !== 'function') {
+  const lightPreference = {
+    matches: false,
+    media: '(prefers-color-scheme: dark)',
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  };
+
+  Object.defineProperty(window, 'matchMedia', {
+    value: (query: string) => ({ ...lightPreference, media: query }),
+    configurable: true,
+    writable: true,
+  });
+}

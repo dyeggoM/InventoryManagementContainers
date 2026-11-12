@@ -422,7 +422,7 @@ onMounted(load);
   font-size: 1rem;
   letter-spacing: 0.02em;
   word-break: break-all;
-  background: #f5f5f5;
+  background: var(--imc-surface-sunken);
   border-radius: 4px;
   padding: 8px 12px;
 }

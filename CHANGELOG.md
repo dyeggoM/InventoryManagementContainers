@@ -30,11 +30,25 @@ preview, not a request.
 - The new value lands under the catalogue node that owns the group (`Brand` values under the `Brand`
   node), not under the `Attribute` definition that merely names the attribute.
 
-Verified: `npm run test` **153 passed** (16 files), `npm run typecheck` clean, `npm run lint:check`
+**Dark mode, system by default and switchable.**
+
+- Quasar's `Dark` plugin is installed; `stores/theme-store.ts` keeps `auto | light | dark` in
+  `localStorage`, `auto` being the default and what a fresh browser gets. `boot/theme.ts` applies it
+  before the app mounts, so a reload in dark does not flash a white page first.
+- The header carries the control (icon reflects the mode, menu with *Sistema* / *Claro* / *Oscuro*,
+  the active one ticked). `auto` follows the OS and keeps following it.
+- The screens that would have broken were repaired rather than left to Quasar's defaults: the tab
+  panels had a `bg-white`, the tree dialog a `background: #fff`, and Quasar's colour utilities
+  (`text-grey-7`, `bg-orange-1`/`text-orange-10`, `bg-red-1`, `bg-blue-1`) are plain hex, so
+  `css/app.scss` re-pairs them in dark mode with measured contrast (6:1 or better on the dark page).
+
+Verified: `npm run test` **161 passed** (18 files), `npm run typecheck` clean, `npm run lint:check`
 exit 0. Against the running API: an upload then `GET /api/attachment/{id}/file` with the token answers
 `200 image/png` byte-identical (68/68), the same request without a token answers `401`, and a constant
 created with the payload the page sends appears in `GET /api/constants/group/Brand` and in the
-Configuration tree under the right parent.
+Configuration tree under the right parent. Dark mode was checked in a real browser at 780×437: the
+inventory tree, the dashboard tables (no white panel left), the file preview modal and the login card
+all render dark with readable text, and switching back to *Sistema* returns the body to the OS mode.
 
 ## Pending — `wip/round-20261111`
 

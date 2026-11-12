@@ -232,7 +232,7 @@ function onFile(row: AttachmentRow, file: File | null) {
   column-gap: 10px;
   align-items: start;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--imc-hairline);
   min-height: 56px;
 }
 
@@ -241,14 +241,14 @@ function onFile(row: AttachmentRow, file: File | null) {
   height: 48px;
   border-radius: 6px;
   overflow: hidden;
-  background: #f2f4f7;
+  background: var(--imc-surface-sunken);
 }
 
 .attachment-thumb--empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8b93a1;
+  color: var(--imc-text-soft);
 }
 
 .attachment-body {
