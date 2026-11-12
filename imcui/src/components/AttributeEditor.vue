@@ -99,17 +99,75 @@
           map-options
           @update:model-value="(value: string) => setLabel(index, value)"
         />
+        <!-- A searchable list, not a menu: `use-input` opens the phone's keyboard. `hide-selected`
+             hides the chosen value from the menu, but it also hides it from the field, so the
+             input has to keep it: with `fill-input` off Quasar renders only the arrow and the
+             value of the row is invisible. -->
         <q-select
           v-if="listFor(row.label).length > 0"
           dense
           options-dense
           borderless
           hide-bottom-space
+          use-input
+          hide-selected
+          fill-input
+          :input-debounce="0"
+          autocomplete="off"
+          inputmode="search"
           :readonly="readonly"
+          :loading="creatingIndex === index"
+          :ref="(element: unknown) => bindValueSelect(index, element)"
           placeholder="—"
           v-model="row.value"
-          :options="listFor(row.label)"
-        />
+          :options="valueOptions(index)"
+          @filter="
+            (value: string, update: (callback: () => void) => void) =>
+              onValueFilter(index, value, update)
+          "
+          @popup-hide="clearValueFilter(index)"
+        >
+          <!-- The dropdown is the list; what the user types narrows it and may name a value that
+               Configuration does not have yet. Choosing it saves the value there and here. -->
+          <template v-slot:no-option>
+            <q-item
+              v-if="addCandidate(index)"
+              clickable
+              :disable="creatingIndex === index"
+              class="attribute-add-option"
+              @click="createFromList(index)"
+            >
+              <q-item-section avatar>
+                <q-spinner v-if="creatingIndex === index" size="16px" color="primary" />
+                <q-icon v-else name="add" size="18px" />
+              </q-item-section>
+              <q-item-section>
+                Añadir «{{ addCandidate(index) }}» a «{{ prettyLabel(row.label) }}»
+              </q-item-section>
+            </q-item>
+            <q-item v-else-if="valueFilterFor(index).trim()" class="attribute-no-match">
+              <q-item-section class="text-caption text-grey-7">No matches.</q-item-section>
+            </q-item>
+          </template>
+          <!-- Some options match but the typed string is not one of them: it still goes last. -->
+          <template v-slot:after-options>
+            <q-item
+              v-if="addCandidate(index)"
+              clickable
+              :disable="creatingIndex === index"
+              class="attribute-add-option"
+              @click="createFromList(index)"
+            >
+              <q-item-section avatar>
+                <q-spinner v-if="creatingIndex === index" size="16px" color="primary" />
+                <q-icon v-else name="add" size="18px" />
+              </q-item-section>
+              <q-item-section>
+                Añadir «{{ addCandidate(index) }}» a «{{ prettyLabel(row.label) }}»
+              </q-item-section>
+            </q-item>
+          </template>
+        </q-select>
         <q-input
           v-else
           dense
@@ -140,6 +198,10 @@
           :aria-label="`Remove ${row.label || 'attribute'}`"
           @click="remove(index)"
         />
+        <!-- Adding a value to Configuration can fail: the row keeps its value and says why. -->
+        <div v-if="createError && createError.index === index" class="attribute-error" role="alert">
+          {{ createError.message }}
+        </div>
       </div>
     </div>
 
@@ -165,6 +227,11 @@ const props = defineProps<{
   types?: Record<string, string | null | undefined>;
   /** The session cannot write: rows render as text and the add/remove buttons are gone. */
   readonly?: boolean;
+  /**
+   * Saves a new value to Configuration and resolves whether it was written. Only an admin and a
+   * superadmin can do it, so the page passes it only for them; without it no affordance appears.
+   */
+  createValue?: ((label: string, value: string) => Promise<boolean>) | undefined;
 }>();
 
 const rows = defineModel<Attributes[]>({ required: true });
@@ -174,6 +241,23 @@ const focusedIndex = ref<number | null>(null);
 
 /** Finds one attribute among ten; matches the name or the value. */
 const filter = ref('');
+
+/** What the user typed into each value list, keyed by the row's original index. */
+const valueFilters = ref<Record<number, string>>({});
+
+/** The row whose value is being written to Configuration: its field shows a spinner meanwhile. */
+const creatingIndex = ref<number | null>(null);
+
+/** The last failed add, shown under the row it belongs to. */
+const createError = ref<{ index: number; message: string } | null>(null);
+
+/** The value selects by row index: after a failed add the field must show the old value again. */
+const valueSelects = new Map<number, ValueSelectHandle>();
+
+interface ValueSelectHandle {
+  updateInputValue?: (value: string, noFiltering?: boolean, internal?: boolean) => void;
+  hidePopup?: () => void;
+}
 
 /** Pairs keep the original index, so editing a filtered row still targets the right entry. */
 const visibleRows = computed(() => {
@@ -210,10 +294,125 @@ function listFor(label: string): string[] {
   return props.lists[label] ?? [];
 }
 
+/** What the user typed into a row's value list; the filter keeps the caret where they left it. */
+function valueFilterFor(index: number): string {
+  return valueFilters.value[index] ?? '';
+}
+
+function setValueFilter(index: number, value: string | null | undefined) {
+  createError.value = null;
+  valueFilters.value = { ...valueFilters.value, [index]: value == null ? '' : String(value) };
+}
+
+/**
+ * Quasar's `filter` hands over an `update` callback: a select that filters its own list has to
+ * call it, or the field stays "loading" (and never fills with the chosen value).
+ */
+function onValueFilter(
+  index: number,
+  value: string | null | undefined,
+  update: (callback: () => void) => void,
+) {
+  update(() => setValueFilter(index, value));
+}
+
+/** Keeps the rendered select of each row, so a failed add can put the old text back. */
+function bindValueSelect(index: number, element: unknown) {
+  const handle = element as ValueSelectHandle | null;
+  if (handle) valueSelects.set(index, handle);
+  else valueSelects.delete(index);
+}
+
+/** Shows `value` in the field again and closes the list: what a refusal must look like. */
+function restoreValueInput(index: number, value: string) {
+  const handle = valueSelects.get(index);
+  if (!handle) return;
+  // Same call Quasar makes when the field loses focus: the label, not the typed text.
+  handle.updateInputValue?.(value, true, true);
+  handle.hidePopup?.();
+}
+
+/** Closing the dropdown drops the filter, so the next open starts from the whole list. */
+function clearValueFilter(index: number) {
+  if (valueFilters.value[index] === undefined) return;
+  const { [index]: _dropped, ...rest } = valueFilters.value;
+  void _dropped;
+  valueFilters.value = rest;
+}
+
+/** The options to show: the whole list, or the part of it that contains what was typed. */
+function valueOptions(index: number): string[] {
+  const row = rows.value[index];
+  if (!row) return [];
+  const all = listFor(row.label);
+  const needle = valueFilterFor(index).trim().toLowerCase();
+  if (!needle) return all;
+  return all.filter((option) => option.toLowerCase().includes(needle));
+}
+
+/**
+ * The string the dropdown may offer to add, or null. Nothing is offered without `createValue`, for
+ * a session that cannot write, for an empty string, or for a value the list already has.
+ */
+function addCandidate(index: number): string | null {
+  if (props.readonly || props.createValue === undefined) return null;
+  const row = rows.value[index];
+  if (!row) return null;
+  const typed = valueFilterFor(index).trim();
+  if (!typed) return null;
+  const existing = listFor(row.label).some(
+    (option) => option.trim().toLowerCase() === typed.toLowerCase(),
+  );
+  return existing ? null : typed;
+}
+
+/**
+ * Adds the typed string to Configuration and, only when that worked, to the row. A failure leaves
+ * the row as it was and says so under it instead of writing half of it.
+ */
+async function createFromList(index: number) {
+  // Disabling the select would close the list and hide the spinner: one write at a time instead.
+  if (creatingIndex.value !== null) return;
+  const create = props.createValue;
+  const row = rows.value[index];
+  const typed = addCandidate(index);
+  if (!row || !typed || create === undefined) return;
+
+  const previous = row.value;
+  creatingIndex.value = index;
+  createError.value = null;
+
+  let created = false;
+  try {
+    created = await create(row.label, typed);
+  } catch {
+    // A rejected promise is the same outcome as `false`: nothing was written, `created` stays false.
+  } finally {
+    creatingIndex.value = null;
+  }
+
+  if (created) {
+    row.value = typed;
+    clearValueFilter(index);
+    valueSelects.get(index)?.hidePopup?.();
+    return;
+  }
+
+  row.value = previous;
+  createError.value = {
+    index,
+    message: `Could not add “${typed}” to “${prettyLabel(row.label)}”.`,
+  };
+  clearValueFilter(index);
+  // The typed text is not the value of the row: put the previous one back in the field.
+  restoreValueInput(index, previous);
+}
+
 function setLabel(index: number, label: string) {
   const row = rows.value[index];
   if (!row) return;
   row.label = label;
+  clearValueFilter(index);
   // A value chosen from another attribute's list no longer makes sense.
   if (!listFor(label).includes(row.value)) row.value = '';
 }
@@ -254,6 +453,10 @@ function setCustomLabel(index: number, value: string | number | null) {
 
 function remove(index: number) {
   rows.value.splice(index, 1);
+  // Filters and errors are keyed by row index: after a removal none of them point at their row.
+  valueFilters.value = {};
+  valueSelects.clear();
+  createError.value = null;
 }
 
 /** The data type of a row: from Configuration for a listed attribute, Text for one typed by hand. */
@@ -303,7 +506,7 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #6b7280;
+  color: var(--imc-text-muted);
 }
 
 .attribute-list {
@@ -312,7 +515,7 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
 }
 
 .attribute-row {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--imc-hairline);
   min-height: 44px;
 }
 
@@ -322,7 +525,7 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
 }
 
 .attribute-name :deep(.q-field__native) {
-  color: #4b5563;
+  color: var(--imc-text-body);
   font-size: 14px;
 }
 
@@ -338,13 +541,27 @@ function inputType(row: Attributes): 'textarea' | 'date' | 'text' {
   font-size: 13px;
 }
 
+/* A message about this row sits under the whole row, inside the same grid. */
+.attribute-error {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--imc-danger-text);
+  padding: 2px 0 4px;
+}
+
+/* The "add to Configuration" row reads as an action, not as another value of the list. */
+.attribute-add-option {
+  color: var(--q-primary);
+}
+
 .attribute-name--custom :deep(.q-field__native) {
   font-style: italic;
-  color: #334155;
+  color: var(--imc-text-body);
 }
 
 .attribute-name__hint {
-  color: #b6bcc6;
+  color: var(--imc-text-soft);
 }
 
 .attribute-remove {

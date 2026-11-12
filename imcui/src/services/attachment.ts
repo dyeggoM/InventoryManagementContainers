@@ -1,4 +1,4 @@
-import { api, API_BASE_URL } from './api';
+import { api } from './api';
 
 export interface Attachment {
   id: number;
@@ -48,8 +48,11 @@ export const attachmentsService = {
     return api.delete<void>(`/attachment/${id}`);
   },
 
-  /** Direct link to the original file, for opening or downloading it. */
-  fileUrl(id: number): string {
-    return `${API_BASE_URL}/attachment/${id}/file`;
+  /**
+   * The original file as bytes, signed with the session token. The route requires read access, so a
+   * plain link answers 401: every read of the original goes through here.
+   */
+  fetchFile(id: number): Promise<Blob> {
+    return api.getBlob(`/attachment/${id}/file`);
   },
 };

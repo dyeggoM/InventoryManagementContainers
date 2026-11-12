@@ -54,7 +54,9 @@ async function stop(): Promise<void> {
   justify-content: center;
   gap: 8px;
   padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
-  background: #e65100;
+  /* Campaign-orange keeps its meaning in both modes; the dark half is darker so white text on it
+     clears AA (5.8:1) instead of a bright bar on a dark page. */
+  background: var(--imc-warning-strong);
   color: #fff;
   font-size: 14px;
   font-weight: 500;

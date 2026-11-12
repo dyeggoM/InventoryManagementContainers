@@ -433,41 +433,41 @@ async function requestClose() {
 .imc-tree__match {
   font-size: 12px;
   line-height: 16px;
-  color: #6b7280;
+  color: var(--imc-text-muted);
 }
 
 .imc-count {
   min-width: 22px;
   padding: 0 6px;
   border-radius: 11px;
-  background: #eef1f5;
-  color: #5b6472;
+  background: var(--imc-surface-sunken);
+  color: var(--imc-text-muted);
   font-size: 12px;
   line-height: 20px;
   text-align: center;
 }
 
 .imc-chevron {
-  color: #9aa1ac;
+  color: var(--imc-text-soft);
 }
 
 .imc-attach {
-  color: #8a93a0;
+  color: var(--imc-text-soft);
   margin-left: 6px;
 }
 
 .imc-unsaved {
-  color: #b26a00;
+  color: var(--imc-warning-text);
   font-weight: 500;
 }
 
 /* Sibling rows get a hairline; a parent row is tinted so the groups read as blocks. */
 .imc-tree :deep(.q-tree__node + .q-tree__node) {
-  border-top: 1px solid #eff1f4;
+  border-top: 1px solid var(--imc-border);
 }
 
 .imc-tree :deep(.q-tree__node--parent > .q-tree__node-header) {
-  background: #fafbfc;
+  background: var(--imc-surface-raised);
 }
 
 .imc-fab {
@@ -477,7 +477,7 @@ async function requestClose() {
 
 .tree-pane :deep(.q-tree__arrow) {
   padding: 8px 4px; /* the chevron is a target too */
-  color: #9aa1ac;
+  color: var(--imc-text-soft);
 }
 
 .dialog-card {
@@ -493,7 +493,7 @@ async function requestClose() {
 }
 
 .dialog-header {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--imc-hairline);
   padding-top: calc(4px + env(safe-area-inset-top));
 }
 
@@ -504,8 +504,8 @@ async function requestClose() {
 
 /* Save stays reachable on a phone, whatever the form length. */
 .dialog-actions {
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  background: #fff;
+  border-top: 1px solid var(--imc-hairline);
+  background: var(--imc-surface);
   padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
 </style>

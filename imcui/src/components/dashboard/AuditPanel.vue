@@ -262,7 +262,7 @@ onMounted(load);
   margin: 0 0 16px;
   padding: 10px;
   border-radius: 6px;
-  background: #f4f6f9;
+  background: var(--imc-surface-sunken);
   font-size: 12px;
   line-height: 16px;
   white-space: pre-wrap;

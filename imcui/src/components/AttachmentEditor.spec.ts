@@ -75,7 +75,22 @@ const QIcon = defineComponent({
   },
 });
 
-const stubs = { QFile, QBtn, QSelect, QImg, QIcon };
+/** The dialog is exercised by its own spec; here only the props the editor hands it matter. */
+const FilePreviewDialog = defineComponent({
+  name: 'FilePreviewDialog',
+  props: {
+    modelValue: { type: Boolean, default: false },
+    attachmentId: { type: Number, default: 0 },
+    fileName: { type: String, default: null },
+    type: { type: String, default: null },
+  },
+  emits: ['update:modelValue'],
+  render() {
+    return h('div', { class: 'file-preview-stub' });
+  },
+});
+
+const stubs = { QFile, QBtn, QSelect, QImg, QIcon, FilePreviewDialog };
 
 function row(overrides: Partial<AttachmentRow> = {}): AttachmentRow {
   return { id: 0, itemId: 3, type: 'Photo', fileName: '', ...overrides };
@@ -159,11 +174,19 @@ describe('AttachmentEditor', () => {
     expect(wrapper.text()).toContain('2 on this item');
   });
 
-  it('offers the stored file only for a saved row', () => {
+  it('opens the stored file in the preview dialog, not in a new tab', async () => {
     const saved = mountEditor([row({ id: 7, filePath: 'media/items/3/x.png', fileName: 'x.png' })]);
     const open = saved.findAllComponents({ name: 'QBtn' }).find((b) => b.props('label') === 'Open');
     expect(open).toBeTruthy();
-    expect(open!.props('href')).toContain('/api/attachment/7/file');
+    // A link would be opened by the browser without the bearer token: the route answers 401.
+    expect(open!.props('href')).toBeUndefined();
+
+    await open!.trigger('click');
+
+    const dialog = saved.findComponent({ name: 'FilePreviewDialog' });
+    expect(dialog.props('modelValue')).toBe(true);
+    expect(dialog.props('attachmentId')).toBe(7);
+    expect(dialog.props('fileName')).toBe('x.png');
 
     const draft = mountEditor([row({ id: 0, fileName: 'new.png' })]);
     expect(draft.findAllComponents({ name: 'QBtn' }).some((b) => b.props('label') === 'Open')).toBe(false);

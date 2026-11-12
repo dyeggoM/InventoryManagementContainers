@@ -32,7 +32,7 @@
 
       <q-separator />
 
-      <q-tab-panels v-model="tab" animated class="bg-white">
+      <q-tab-panels v-model="tab" animated>
         <q-tab-panel name="users" class="q-pa-md">
           <users-panel />
         </q-tab-panel>

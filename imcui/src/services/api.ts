@@ -158,11 +158,16 @@ async function send(endpoint: string, options: RequestInit, isFormData: boolean)
   }
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  // FormData must go out untouched: the browser writes the multipart boundary itself, and a
-  // JSON content type would make the server reject the body.
-  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-
+/**
+ * Sends the request, recovers the session once on a 401 and turns a failed status into an
+ * `ApiError`. Both the JSON and the byte path go through here, so a download is signed, refreshed
+ * and reported exactly like the calls around it.
+ */
+async function sendWithSession(
+  endpoint: string,
+  options: RequestInit,
+  isFormData: boolean,
+): Promise<Response> {
   let response = await send(endpoint, options, isFormData);
 
   if (response.status === 401 && !isAuthEndpoint(endpoint)) {
@@ -192,6 +197,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     throw new ApiError(response.status, response.statusText, data, serverMessage(data));
   }
 
+  return response;
+}
+
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  // FormData must go out untouched: the browser writes the multipart boundary itself, and a
+  // JSON content type would make the server reject the body.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const response = await sendWithSession(endpoint, options, isFormData);
+
   if (response.status === 204) {
     return undefined as T;
   }
@@ -199,9 +213,28 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return response.json() as Promise<T>;
 }
 
+/**
+ * The same request as `get`, answered as bytes instead of JSON. A file the API serves behind the
+ * token cannot be handed to the browser as a link: a new tab carries no `Authorization` header, so
+ * the route answers 401 and the tab stays blank. The blob is what an in-app preview and a download
+ * can actually use.
+ */
+async function requestBlob(endpoint: string, options: RequestInit): Promise<Blob> {
+  const response = await sendWithSession(endpoint, options, false);
+  return response.blob();
+}
+
 export const api = {
   get<T>(endpoint: string, options?: RequestInit): Promise<T> {
     return request<T>(endpoint, {
+      ...options,
+      method: 'GET',
+    });
+  },
+
+  /** A file behind the bearer token, fetched with the session the app already holds. */
+  getBlob(endpoint: string, options?: RequestInit): Promise<Blob> {
+    return requestBlob(endpoint, {
       ...options,
       method: 'GET',
     });

@@ -1,3 +1,81 @@
+// Theme tokens.
+//
+// Quasar's Dark plugin toggles `body--dark` and repaints the page and its own components (cards,
+// drawers, tables, fields and menus all switch surface by themselves). It cannot know about the
+// surfaces these screens paint in their own style blocks, so every colour that used to be a literal
+// in a component lives here once, and the dark half below is what keeps a card, a border or a
+// caption from surviving into dark mode as a light artefact. Values Quasar already owns are read
+// from its custom properties (`--q-dark`) instead of being copied.
+:root {
+  --imc-surface: #fff; // a sheet our own blocks sit on (dialog footer)
+  --imc-surface-raised: #fafbfc; // a block tinted one step above that sheet (parent tree rows)
+  --imc-surface-sunken: #f4f6f9; // a well: page background, code block, thumbnail placeholder
+  --imc-border: #eff1f4; // the separator between sections
+  --imc-hairline: rgba(0, 0, 0, 0.08); // a row separator inside a block
+  --imc-text-body: #4b5563; // a name or a value shown as content, quieter than the heading
+  --imc-text-muted: #6b7280; // captions, hints, counts
+  --imc-text-soft: #c4c9d2; // an icon or a placeholder that is decoration, not information
+  --imc-danger-bg: #fdecec;
+  --imc-danger-text: #b3261e;
+  --imc-warning-bg: #fff8e1;
+  --imc-warning-text: #b26a00;
+  --imc-warning-strong: #e65100; // the impersonation banner, which paints its own background
+}
+
+// The dark half is derived, not invented: surfaces come from Quasar's own `--q-dark`, and the text
+// steps are white alphas so they keep their contrast over any of the surfaces above.
+body.body--dark {
+  --imc-surface: var(--q-dark);
+  --imc-surface-raised: rgba(255, 255, 255, 0.05);
+  // A well goes below the card, to the page level Quasar already defines, so a card keeps standing
+  // out instead of the backdrop being the lighter of the two.
+  --imc-surface-sunken: var(--q-dark-page);
+  --imc-border: rgba(255, 255, 255, 0.12);
+  --imc-hairline: rgba(255, 255, 255, 0.14);
+  --imc-text-body: rgba(255, 255, 255, 0.87);
+  --imc-text-muted: rgba(255, 255, 255, 0.72);
+  --imc-text-soft: rgba(255, 255, 255, 0.45);
+  --imc-danger-bg: rgba(255, 138, 128, 0.14);
+  --imc-danger-text: #ff8a80;
+  --imc-warning-bg: rgba(255, 183, 77, 0.14);
+  --imc-warning-text: #ffb74d;
+  --imc-warning-strong: #b23f00; // white on this measures 5.8:1; on the light orange it is 3.8:1
+}
+
+// Quasar's colour utilities are plain hex, so they do not follow the mode. These are the ones the
+// templates use: the grey text steps, and the pale banner pairs (a light fill with dark text) that
+// would otherwise stay as bright blocks on a dark page. Each pair is matched on the same element on
+// purpose — `text-orange-10` also appears on the white button inside the impersonation banner, and a
+// descendant rule would repaint that label onto its own background. The fill becomes a tint of the
+// same hue and the text moves to the light end of the ramp: every combination below measures 6:1 or
+// better on `--q-dark`.
+body.body--dark {
+  .text-grey-7,
+  .text-grey-8 {
+    color: rgba(255, 255, 255, 0.72) !important;
+  }
+
+  .bg-orange-1.text-orange-10 {
+    background: rgba(230, 81, 0, 0.18) !important;
+    color: #ffb74d !important; // 8.0:1
+  }
+
+  .bg-red-1.text-red-9 {
+    background: rgba(244, 67, 54, 0.18) !important;
+    color: #ff8a80 !important; // 6.0:1
+  }
+
+  .bg-blue-1.text-blue-10 {
+    background: rgba(33, 150, 243, 0.18) !important;
+    color: #90caf9 !important; // 7.4:1
+  }
+
+  .bg-blue-grey-1.text-blue-grey-9 {
+    background: rgba(96, 125, 139, 0.22) !important;
+    color: #b0bec5 !important; // 6.8:1
+  }
+}
+
 // Shared layout primitives. The pages are phone-first, so the scale lives in one place: a section
 // heading, a comfortable tap target and the room a floating action button needs.
 .imc-page {
@@ -7,7 +85,7 @@
 .imc-section + .imc-section {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #eff1f4;
+  border-top: 1px solid var(--imc-border);
 }
 
 .imc-section__title {
@@ -15,7 +93,7 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #6b7280;
+  color: var(--imc-text-muted);
   margin-bottom: 10px;
 }
 
@@ -26,10 +104,10 @@
 .imc-empty {
   padding: 48px 16px;
   text-align: center;
-  color: #6b7280;
+  color: var(--imc-text-muted);
 }
 
 .imc-empty .q-icon {
   font-size: 48px;
-  color: #c4c9d2;
+  color: var(--imc-text-soft);
 }

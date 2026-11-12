@@ -121,7 +121,7 @@ async function submit(): Promise<void> {
 <style scoped>
 .login-page {
   min-height: 100vh;
-  background: #f4f6f9;
+  background: var(--imc-surface-sunken);
 }
 
 .login-card {
@@ -130,8 +130,8 @@ async function submit(): Promise<void> {
 }
 
 .login-error {
-  background: #fdecec;
-  color: #b3261e;
+  background: var(--imc-danger-bg);
+  color: var(--imc-danger-text);
   font-size: 13px;
 }
 </style>
