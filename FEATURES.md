@@ -126,6 +126,16 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - `GET /api/audit` with filters and pagination, `superadmin` only, `ProblemDetails` on a bad filter and
   **no write route at all** — `POST`, `PUT` and `DELETE` answer `405`.
 
+## Appearance
+
+- **Dark mode follows the system** unless you choose otherwise: the header menu offers *Sistema*,
+  *Claro* and *Oscuro*, the choice survives a reload, and *Sistema* keeps tracking the phone or the
+  laptop when it switches at sunset.
+- The whole app is themed, not just the page background: the inventory tree, the record form, the
+  configuration tree, the dashboard tables, the file preview modal and the login card. Quasar's colour
+  utilities are plain hex, so the banner pairs (orange, red, blue) get dark-mode equivalents with
+  measured contrast rather than staying as bright blocks.
+
 ## Data
 
 - SQLite through EF Core; migrations run at startup, so a clone builds its own schema.
