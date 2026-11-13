@@ -150,3 +150,7 @@ orchestrator. Reviews from Unfiltered arrive at the orchestrator as findings wit
 
 Code, comments, commit messages, branch names and pull request bodies in English. Conversation with
 the owner, Diego, in Spanish.
+
+## License
+
+MIT — see [LICENSE](LICENSE). By contributing you agree your work is released under it.
