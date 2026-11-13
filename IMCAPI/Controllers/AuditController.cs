@@ -12,7 +12,7 @@ public sealed class AuditController(ApplicationContext context) : ControllerBase
     private static readonly HashSet<string> Actions = new(StringComparer.OrdinalIgnoreCase)
     {
         "Create", "Update", "Delete", "SoftDelete", "Login", "LoginFailed", "Logout", "RoleChange",
-        "ImpersonateStart", "ImpersonateEnd", "RefreshReuse"
+        "ImpersonateStart", "ImpersonateEnd", "RefreshReuse", "ArchivePurge"
     };
 
     [Authorize(Policy = "RequiereSuperadmin")]
@@ -43,9 +43,15 @@ public sealed class AuditController(ApplicationContext context) : ControllerBase
         if (from.HasValue) query = query.Where(row => row.TimestampUtc >= from.Value.UtcDateTime);
         if (to.HasValue) query = query.Where(row => row.TimestampUtc <= to.Value.UtcDateTime);
 
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query.OrderByDescending(row => row.TimestampUtc).ThenByDescending(row => row.Id)
-            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
-        return Ok(new { items, totalCount, page, pageSize });
+        // Counting the table on every page is what makes page 20 as expensive as page 1. The total is
+        // answered once, on page 1; every page says whether another one exists by fetching one row
+        // more than it returns.
+        var totalCount = page == 1 ? await query.CountAsync(cancellationToken) : (int?)null;
+        var offset = Math.Min((long)(page - 1) * pageSize, int.MaxValue);
+        var rows = await query.OrderByDescending(row => row.TimestampUtc).ThenByDescending(row => row.Id)
+            .Skip((int)offset).Take(pageSize + 1).ToListAsync(cancellationToken);
+        var hasMore = rows.Count > pageSize;
+        if (hasMore) rows.RemoveAt(rows.Count - 1);
+        return Ok(new { items = rows, totalCount, page, pageSize, hasMore });
     }
 }

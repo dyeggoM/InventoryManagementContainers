@@ -15,29 +15,36 @@
       />
     </div>
 
-    <div class="row q-col-gutter-sm q-mb-md">
-      <div class="col-12 col-sm-6 col-md-2">
+    <div
+      class="filters q-mb-md"
+      :class="$q.screen.lt.sm ? 'column q-gutter-y-sm' : 'row q-col-gutter-sm'"
+    >
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-2'">
         <q-input v-model="filters.actor" dense outlined label="Actor" clearable>
           <template v-slot:prepend><q-icon name="person" size="18px" /></template>
         </q-input>
       </div>
-      <div class="col-12 col-sm-6 col-md-2">
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-2'">
         <q-input v-model="filters.entity" dense outlined label="Entidad" clearable>
           <template v-slot:prepend><q-icon name="category" size="18px" /></template>
         </q-input>
       </div>
-      <div class="col-12 col-sm-6 col-md-2">
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-2'">
         <q-input v-model="filters.action" dense outlined label="Acción" clearable>
           <template v-slot:prepend><q-icon name="bolt" size="18px" /></template>
         </q-input>
       </div>
-      <div class="col-12 col-sm-6 col-md-2">
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-2'">
         <q-input v-model="filters.from" dense outlined label="Desde" type="date" clearable />
       </div>
-      <div class="col-12 col-sm-6 col-md-2">
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-2'">
         <q-input v-model="filters.to" dense outlined label="Hasta" type="date" clearable />
       </div>
-      <div class="col-12 col-sm-6 col-md-2 row items-center q-gutter-xs">
+      <!-- The buttons take a row of their own on a phone instead of squeezing into the last column. -->
+      <div
+        class="filter-actions row items-center"
+        :class="$q.screen.lt.sm ? 'full-width q-gutter-x-sm' : 'col-12 col-sm-6 col-md-2 q-gutter-xs'"
+      >
         <q-btn unelevated no-caps color="primary" icon="search" label="Buscar" @click="apply" />
         <q-btn flat no-caps label="Limpiar" @click="clear" />
       </div>
@@ -55,6 +62,7 @@
     </q-banner>
 
     <q-table
+      v-if="!$q.screen.lt.sm"
       :rows="rows"
       :columns="columns"
       row-key="id"
@@ -92,8 +100,48 @@
       </template>
     </q-table>
 
+    <!-- Below `sm`: action and entity on the first line, who and when on the second; the whole card
+         opens the before/after viewer, so the tap target is the row itself and not a small button. -->
+    <div v-else class="audit-cards column q-gutter-sm">
+      <q-card
+        v-for="entry in rows"
+        :key="entry.id"
+        flat
+        bordered
+        clickable
+        class="audit-card"
+        @click="openEntry(entry)"
+      >
+        <q-card-section class="q-py-sm">
+          <div class="row items-center no-wrap">
+            <div class="col">
+              <div class="text-body2 text-weight-medium ellipsis">
+                {{ entry.action }} · {{ entry.entity }}
+                <span
+                  v-if="entry.entityId !== null && entry.entityId !== ''"
+                  class="text-grey-7"
+                >
+                  #{{ entry.entityId }}
+                </span>
+              </div>
+              <div class="text-caption text-grey-7 ellipsis">
+                {{ entry.actorEmail }} · {{ formatTimestamp(entry.occurredAtUtc) }}
+              </div>
+            </div>
+            <q-icon name="visibility" size="20px" class="text-primary q-ml-sm" />
+          </div>
+        </q-card-section>
+      </q-card>
+
+      <div v-if="!loading && rows.length === 0" class="text-caption text-grey-7">
+        No hay cambios que coincidan
+      </div>
+    </div>
+
     <div class="row items-center q-mt-sm">
-      <div class="text-caption text-grey-7">{{ total }} registro(s) · página {{ page }}</div>
+      <div class="text-caption text-grey-7">
+        <span v-if="total !== null">{{ total }} registro(s) · </span>página {{ page }}
+      </div>
       <q-space />
       <q-btn
         flat
@@ -110,7 +158,7 @@
         round
         icon="chevron_right"
         aria-label="Página siguiente"
-        :disable="rows.length < pageSize || loading"
+        :disable="hasMore === false || (hasMore === null && rows.length < pageSize) || loading"
         @click="goTo(page + 1)"
       />
     </div>
@@ -150,7 +198,11 @@ import { auditService, auditToCsv, formatAuditPayload, type AuditEntry } from '@
 import { formatTimestamp } from '@services/utilities';
 
 const rows = ref<AuditEntry[]>([]);
-const total = ref(0);
+// The API answers `total` on the first page; a later page may leave it out, and that must not turn
+// the pager into "page 2 of 1". Unknown is kept as null and the footer simply omits the count.
+const total = ref<number | null>(null);
+/** The server's own answer to "is there another page", which needs no total. */
+const hasMore = ref<boolean | null>(null);
 const page = ref(1);
 const pageSize = ref(25);
 const loading = ref(false);
@@ -191,7 +243,10 @@ async function load(): Promise<void> {
       pageSize: pageSize.value,
     });
     rows.value = result.items;
-    total.value = result.total;
+    if (typeof result.total === 'number' && Number.isFinite(result.total)) {
+      total.value = result.total;
+    }
+    hasMore.value = typeof result.hasMore === 'boolean' ? result.hasMore : null;
     pageSize.value = result.pageSize;
   } catch (error) {
     if (isApiPending(error)) {

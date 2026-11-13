@@ -7,14 +7,22 @@ What is deliberately not built yet, in the order it is worth doing.
 - [x] **Los hijos de un registro borrado quedan como raíces** — resuelto: ahora el borrado devuelve
   `409 Conflict` mientras existan hijos; primero hay que moverlos o borrarlos, conservando intactas
   las relaciones existentes.
-- **Las filas de `ItemsArchive` no caducan**: no hay retención ni purga, y `AttachmentsJson` puede
-  crecer con los adjuntos. Definir política (por antigüedad o por tamaño) antes de que haya volumen.
+- [x] **Las filas de `ItemsArchive` no caducan** — `done` (2026-11-11). `POST /api/item/archive/purge`
+  (superadmin) borra las filas más antiguas que la retención, configurable con
+  `Archive:Retention:Days` / `ARCHIVE_RETENTION_DAYS` y **desactivada por defecto a propósito**: nada se
+  borra salvo que alguien la configure o pase `olderThanDays`. Deja fila `ArchivePurge` en la auditoría.
+  Sigue en pie la decisión de plazo: el mecanismo está, el número es tuyo.
+- **Las filas de `ItemsArchive` no caducan (tamaño, no antigüedad)**: no hay límite por número de filas
+  ni por tamaño de `AttachmentsJson`. Si el volumen crece más rápido que el calendario, la purga por
+  fecha no basta.
 - **Restaurar no devuelve los adjuntos**: los ficheros se borran del disco en el `DELETE`, así que un
   registro restaurado vuelve sin ellos. Si se quiere recuperación completa, hay que pasar a papelera
   de ficheros en vez de borrado.
-- **`GET /api/item/archive` hace `COUNT(*)` por página**; el índice por `Label` ya existe
-  (migración 2026-11-11), así que el filtro no es un scan, pero el total sigue contándose entero en
-  cada página. Revisar cuando la tabla crezca (misma deuda que `AuditLogs`).
+- [x] **`GET /api/item/archive` hacía `COUNT(*)` por página** — `done` (2026-11-11). El total se
+  responde una vez, en la página 1; las siguientes devuelven `total: null` y un `hasMore` calculado
+  pidiendo una fila de más. Igual en `GET /api/audit`. El índice por `Label` (migración 2026-11-11)
+  sigue ahí, así que el filtro tampoco es un scan. Queda la deuda de las páginas profundas: `OFFSET`
+  sigue recorriendo lo saltado; se resolverá con paginación por cursor si llega el volumen.
 
 ## Done
 

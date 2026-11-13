@@ -149,6 +149,20 @@ const QCard = defineComponent({
   },
 });
 
+const QCardSection = defineComponent({
+  name: 'QCardSection',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'q-card-section-stub' }, slots.default?.());
+  },
+});
+
+const QCardActions = defineComponent({
+  name: 'QCardActions',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'q-card-actions-stub' }, slots.default?.());
+  },
+});
+
 const QSpace = defineComponent({ name: 'QSpace', render: () => h('span') });
 const QTooltip = defineComponent({ name: 'QTooltip', render: () => h('span') });
 
@@ -164,6 +178,8 @@ const stubs = {
   QTooltip,
   QTd,
   QCard,
+  QCardSection,
+  QCardActions,
 };
 
 function entry(overrides: Partial<ArchiveEntry> = {}): ArchiveEntry {
@@ -193,8 +209,14 @@ function page(items: ArchiveEntry[], total = items.length) {
   return { items, page: 1, pageSize: 25, total };
 }
 
-async function mountPanel(): Promise<VueWrapper> {
-  const wrapper = mount(ArchivePanel, { global: { stubs } });
+async function mountPanel(mobile = false): Promise<VueWrapper> {
+  const wrapper = mount(ArchivePanel, {
+    global: {
+      stubs,
+      // `$q` is a Quasar plugin global property, injected the way every spec provides one.
+      mocks: { $q: { screen: { lt: { sm: mobile } } } },
+    },
+  });
   await flushPromises();
   return wrapper;
 }
@@ -350,5 +372,79 @@ describe('ArchivePanel', () => {
     await flushPromises();
 
     expect(mocks.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
+  });
+
+  it('renders the archive as cards below sm, with Restaurar inside the card', async () => {
+    mocks.list.mockResolvedValue(page([entry({ attachmentsJson: '[{"id":1}]' })]));
+    mocks.restore.mockResolvedValue({ id: 7, label: 'Taladro' });
+
+    const wrapper = await mountPanel(true);
+
+    // Six columns do not fit a phone: the row becomes a card and the table is not rendered.
+    expect(wrapper.find('.q-table-stub').exists()).toBe(false);
+
+    const card = wrapper.find('.archive-card');
+    expect(card.exists()).toBe(true);
+    expect(card.text()).toContain('Taladro');
+    expect(card.text()).toContain('#7');
+    expect(card.text()).toContain(new Date('2026-11-10T12:30:00Z').toLocaleString());
+    expect(card.text()).toContain('root@imc.test');
+    expect(card.text()).toContain('En archivo');
+    expect(card.find('[aria-label="Tenía adjuntos"]').exists()).toBe(true);
+
+    // The action is in the card, and it still reaches the service after the confirmation.
+    await card.find('button[aria-label="Restaurar Taladro"]').trigger('click');
+    expect(mocks.restore).not.toHaveBeenCalled();
+    const confirm = wrapper
+      .findAllComponents({ name: 'QBtn' })
+      .filter((button) => button.props('label') === 'Restaurar')
+      .at(-1)!;
+    await confirm.trigger('click');
+    await flushPromises();
+
+    expect(mocks.restore).toHaveBeenCalledWith(7);
+  });
+
+  it('keeps the table and hides the cards at sm and above', async () => {
+    mocks.list.mockResolvedValue(page([entry()]));
+
+    const wrapper = await mountPanel(false);
+
+    expect(wrapper.find('.q-table-stub').exists()).toBe(true);
+    expect(wrapper.find('.archive-card').exists()).toBe(false);
+  });
+
+  it('stacks the filters and their buttons on a phone, and not above sm', async () => {
+    mocks.list.mockResolvedValue(page([]));
+
+    const mobile = await mountPanel(true);
+    expect(mobile.find('.filters').classes()).toContain('column');
+    for (const field of mobile.findAll('.filters > div')) {
+      // Each control takes the full width instead of two-per-row at 50%.
+      expect(field.classes()).toContain('full-width');
+    }
+    expect(mobile.find('.filter-actions').classes()).toContain('full-width');
+
+    const desktop = await mountPanel(false);
+    expect(desktop.find('.filters').classes()).toContain('row');
+    expect(desktop.findAll('.filters > div')[0]!.classes()).toContain('col-md-3');
+  });
+
+  it('keeps the first page total when a later page answers without one', async () => {
+    mocks.list
+      .mockResolvedValueOnce({ items: [entry()], page: 1, pageSize: 25, total: 60 })
+      .mockResolvedValueOnce({ items: [entry()], page: 2, pageSize: 25, total: null });
+
+    const wrapper = await mountPanel(true);
+    expect(wrapper.text()).toContain('página 1 de 3');
+
+    await wrapper.find('button[aria-label="Página siguiente"]').trigger('click');
+    await flushPromises();
+
+    // A null total must not turn page 2 into "página 2 de 1", and the pager keeps working.
+    expect(wrapper.text()).toContain('página 2 de 3');
+    expect(
+      wrapper.find('button[aria-label="Página siguiente"]').attributes('disabled'),
+    ).toBeUndefined();
   });
 });

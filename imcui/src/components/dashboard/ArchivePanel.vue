@@ -6,24 +6,31 @@
       <q-btn flat dense no-caps icon="refresh" label="Recargar" :loading="loading" @click="load" />
     </div>
 
-    <div class="row q-col-gutter-sm q-mb-md">
-      <div class="col-12 col-sm-6 col-md-3">
+    <div
+      class="filters q-mb-md"
+      :class="$q.screen.lt.sm ? 'column q-gutter-y-sm' : 'row q-col-gutter-sm'"
+    >
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-3'">
         <q-input v-model="filters.label" dense outlined label="Etiqueta" clearable>
           <template v-slot:prepend><q-icon name="label" size="18px" /></template>
         </q-input>
       </div>
-      <div class="col-12 col-sm-6 col-md-3">
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-3'">
         <q-input v-model="filters.actor" dense outlined label="Eliminado por" clearable>
           <template v-slot:prepend><q-icon name="person" size="18px" /></template>
         </q-input>
       </div>
-      <div class="col-12 col-sm-6 col-md-2">
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-2'">
         <q-input v-model="filters.from" dense outlined label="Desde" type="date" clearable />
       </div>
-      <div class="col-12 col-sm-6 col-md-2">
+      <div :class="$q.screen.lt.sm ? 'full-width' : 'col-12 col-sm-6 col-md-2'">
         <q-input v-model="filters.to" dense outlined label="Hasta" type="date" clearable />
       </div>
-      <div class="col-12 col-sm-6 col-md-2 row items-center q-gutter-xs">
+      <!-- The buttons take a row of their own on a phone instead of squeezing into the last column. -->
+      <div
+        class="filter-actions row items-center"
+        :class="$q.screen.lt.sm ? 'full-width q-gutter-x-sm' : 'col-12 col-sm-6 col-md-2 q-gutter-xs'"
+      >
         <q-btn unelevated no-caps color="primary" icon="search" label="Buscar" @click="apply" />
         <q-btn flat no-caps label="Limpiar" @click="clear" />
       </div>
@@ -40,6 +47,7 @@
     </q-banner>
 
     <q-table
+      v-if="!$q.screen.lt.sm"
       :rows="rows"
       :columns="columns"
       row-key="archiveId"
@@ -108,9 +116,75 @@
       </template>
     </q-table>
 
+    <!-- Below `sm`: the six columns become one card, with Restaurar inside thumb reach. -->
+    <div v-else class="archive-cards column q-gutter-sm">
+      <q-card
+        v-for="entry in rows"
+        :key="entry.archiveId"
+        flat
+        bordered
+        class="archive-card"
+      >
+        <q-card-section class="q-py-sm">
+          <div class="row items-center no-wrap">
+            <q-icon
+              :name="entry.icon || 'inventory_2'"
+              size="18px"
+              class="text-grey-7 q-mr-xs"
+            />
+            <span class="text-body2 text-weight-medium ellipsis">{{ entry.label }}</span>
+            <span class="text-caption text-grey-7 q-ml-xs">#{{ entry.itemId }}</span>
+            <q-space />
+            <q-badge
+              :color="entry.restoredAtUtc !== null ? 'positive' : 'grey-6'"
+              rounded
+              class="q-ml-sm"
+            >
+              {{ entry.restoredAtUtc !== null ? 'Restaurado' : 'En archivo' }}
+            </q-badge>
+          </div>
+          <div class="text-caption text-grey-7 q-mt-xs">
+            {{ formatTimestamp(entry.deletedAtUtc) }} · {{ entry.deletedBy || '—' }}
+          </div>
+        </q-card-section>
+
+        <q-card-actions class="q-pt-none">
+          <div class="row items-center full-width q-gutter-x-sm">
+            <q-icon
+              v-if="entry.attachmentsJson !== null"
+              name="attach_file"
+              size="18px"
+              class="text-grey-8"
+              aria-label="Tenía adjuntos"
+            >
+              <q-tooltip>Tenía adjuntos archivados</q-tooltip>
+            </q-icon>
+            <span v-else class="text-caption text-grey-5">Sin adjuntos</span>
+            <q-space />
+            <q-btn
+              flat
+              dense
+              no-caps
+              icon="restore"
+              label="Restaurar"
+              :loading="busyId === entry.archiveId"
+              :disable="entry.restoredAtUtc !== null"
+              :aria-label="`Restaurar ${entry.label}`"
+              @click="askRestore(entry)"
+            />
+          </div>
+        </q-card-actions>
+      </q-card>
+
+      <div v-if="!loading && rows.length === 0" class="text-caption text-grey-7">
+        No hay registros en el archivo
+      </div>
+    </div>
+
     <div class="row items-center q-mt-sm">
       <div class="text-caption text-grey-7">
-        {{ total }} registro(s) · página {{ page }} de {{ lastPage }}
+        <span v-if="total !== null">{{ total }} registro(s) · </span>página {{ page
+        }}<span v-if="pageCount !== null"> de {{ pageCount }}</span>
       </div>
       <q-space />
       <q-btn
@@ -128,7 +202,7 @@
         round
         icon="chevron_right"
         aria-label="Página siguiente"
-        :disable="page >= lastPage || loading"
+        :disable="!canGoNext || loading"
         @click="goTo(page + 1)"
       />
     </div>
@@ -167,7 +241,11 @@ import { useFeedback } from '../../composables/useFeedback';
 const feedback = useFeedback();
 
 const rows = ref<ArchiveEntry[]>([]);
-const total = ref(0);
+// The API answers `total` on the first page; a later page may leave it out, so an unknown total is
+// null rather than 0 — the pager keeps what it was told and never claims "page 3 of 1".
+const total = ref<number | null>(null);
+/** The server's own answer to "is there another page", which needs no total. */
+const hasMore = ref<boolean | null>(null);
 const page = ref(1);
 const pageSize = ref(25);
 const loading = ref(false);
@@ -196,7 +274,16 @@ const columns = [
 ];
 
 /** The API reports the total, so the last page is arithmetic and not "is this page full". */
-const lastPage = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
+const pageCount = computed(() =>
+  total.value === null ? null : Math.max(1, Math.ceil(total.value / pageSize.value)),
+);
+
+/** Without a total the only honest signal is a full page: `pageCount` is unknown, not one. */
+const canGoNext = computed(() => {
+  // The server knows whether another page exists; a full page is only a guess at it.
+  if (hasMore.value !== null) return hasMore.value;
+  return pageCount.value === null ? rows.value.length >= pageSize.value : page.value < pageCount.value;
+});
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -211,7 +298,11 @@ async function load(): Promise<void> {
       pageSize: pageSize.value,
     });
     rows.value = result.items;
-    total.value = result.total;
+    // A later page may answer without a total: keep the one the first page gave instead of zeroing it.
+    if (typeof result.total === 'number' && Number.isFinite(result.total)) {
+      total.value = result.total;
+    }
+    hasMore.value = typeof result.hasMore === 'boolean' ? result.hasMore : null;
     pageSize.value = result.pageSize;
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error);
@@ -237,7 +328,8 @@ function clear(): void {
 }
 
 function goTo(next: number): void {
-  page.value = Math.min(lastPage.value, Math.max(1, next));
+  const ceiling = pageCount.value;
+  page.value = ceiling === null ? Math.max(1, next) : Math.min(ceiling, Math.max(1, next));
   notice.value = null;
   void load();
 }
