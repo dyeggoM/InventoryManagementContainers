@@ -6,6 +6,11 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `chore/mit-license`
+
+**The project is MIT licensed.** `LICENSE` carries the canonical text and AGENTS.md says so, so
+"can I use this?" now has a written answer instead of a guess.
+
 ## Pending — `docs/security-gate`
 
 The commit gate is documented where the next person looks. `AGENTS.md` now has the three commands that
