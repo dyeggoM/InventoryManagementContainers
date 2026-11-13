@@ -23,8 +23,7 @@ being rows that carry a code but no name.
 **The project is MIT licensed.** `LICENSE` carries the canonical text and AGENTS.md says so, so
 "can I use this?" now has a written answer instead of a guess.
 
-## Pending — `docs/security-gate`
-## Pending — `feat/archive-retention-and-mobile-dashboard`
+## #27 — Archive retention, paging without a per-page COUNT, and the dashboard on a phone · merged 2026-11-11
 
 **The archive can expire, when somebody says so.** `POST /api/item/archive/purge` (superadmin) removes
 ledger rows older than the retention age, which comes from `olderThanDays` or from
@@ -46,6 +45,7 @@ stacked full width, pagination at the bottom — and keep their tables at `sm` a
 
 Verified: `dotnet test` **105 passed**, `npm run test` **173 passed** (19 files), `npm run typecheck`
 and `npm run lint:check` clean.
+
 
 ## #26 — The commit gate, documented · merged 2026-11-11
 
