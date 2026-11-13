@@ -198,6 +198,27 @@ const QCard = defineComponent({
   },
 });
 
+const QCardSection = defineComponent({
+  name: 'QCardSection',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'q-card-section-stub' }, slots.default?.());
+  },
+});
+
+const QCardActions = defineComponent({
+  name: 'QCardActions',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'q-card-actions-stub' }, slots.default?.());
+  },
+});
+
+const QChip = defineComponent({
+  name: 'QChip',
+  setup(_props, { slots }) {
+    return () => h('span', { class: 'q-chip-stub' }, slots.default?.());
+  },
+});
+
 const QSpace = defineComponent({ name: 'QSpace', render: () => h('span') });
 const QTooltip = defineComponent({ name: 'QTooltip', render: () => h('span') });
 
@@ -215,6 +236,9 @@ const stubs = {
   QTooltip,
   QTd,
   QCard,
+  QCardSection,
+  QCardActions,
+  QChip,
 };
 
 function user(overrides: Partial<ManagedUser> = {}): ManagedUser {
@@ -228,7 +252,10 @@ function user(overrides: Partial<ManagedUser> = {}): ManagedUser {
   };
 }
 
-async function mountPanel(rows: ManagedUser[] = [user()]): Promise<VueWrapper> {
+async function mountPanel(
+  rows: ManagedUser[] = [user()],
+  mobile = false,
+): Promise<VueWrapper> {
   mocks.list.mockResolvedValue(rows);
   localStorage.setItem(
     ACCESS_TOKEN_KEY,
@@ -236,7 +263,15 @@ async function mountPanel(rows: ManagedUser[] = [user()]): Promise<VueWrapper> {
   );
   const pinia = createPinia();
   setActivePinia(pinia);
-  const wrapper = mount(UsersPanel, { global: { plugins: [pinia], stubs } });
+  const wrapper = mount(UsersPanel, {
+    global: {
+      plugins: [pinia],
+      stubs,
+      // `$q` is a Quasar plugin global property: injected the same way in every spec, not a
+      // second media-query mechanism of the panel's own.
+      mocks: { $q: { screen: { lt: { sm: mobile } } } },
+    },
+  });
   await flushPromises();
   return wrapper;
 }
@@ -335,5 +370,49 @@ describe('UsersPanel', () => {
 
     expect(mocks.resetPassword).toHaveBeenCalledWith('u-1', 'Nueva-2026!');
     expect(wrapper.text()).not.toContain('Se muestra solo una vez');
+  });
+
+  it('renders the users as cards below sm, with the actions inside the card', async () => {
+    mocks.deactivate.mockResolvedValue(undefined);
+
+    const wrapper = await mountPanel([user()], true);
+
+    // The table is gone: five columns do not fit a phone.
+    expect(wrapper.find('.q-table-stub').exists()).toBe(false);
+
+    const card = wrapper.find('.user-card');
+    expect(card.exists()).toBe(true);
+    expect(card.text()).toContain('lector@imc.test');
+    expect(card.text()).toContain('Lector');
+    expect(card.text()).toContain('Activo');
+    expect(card.text()).toContain('Último acceso:');
+
+    // Every action is in the card, and it still calls the service.
+    expect(card.findAllComponents({ name: 'QSelect' })).toHaveLength(1);
+    await card.find('button[aria-label="Desactivar lector@imc.test"]').trigger('click');
+    await flushPromises();
+    expect(mocks.deactivate).toHaveBeenCalledWith('u-1');
+  });
+
+  it('resets a password from a card as well', async () => {
+    mocks.resetPassword.mockResolvedValue({ initialPassword: null });
+
+    const wrapper = await mountPanel([user()], true);
+
+    await wrapper.find('button[aria-label="Restablecer contraseña de lector@imc.test"]').trigger(
+      'click',
+    );
+    await flushPromises();
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(mocks.resetPassword).toHaveBeenCalledWith('u-1', undefined);
+  });
+
+  it('keeps the table and hides the cards at sm and above', async () => {
+    const wrapper = await mountPanel([user()], false);
+
+    expect(wrapper.find('.q-table-stub').exists()).toBe(true);
+    expect(wrapper.find('.user-card').exists()).toBe(false);
   });
 });

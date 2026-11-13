@@ -45,7 +45,10 @@ export interface ArchivePage {
   items: ArchiveEntry[];
   page: number;
   pageSize: number;
-  total: number;
+  /** Known on the first page; a later page may leave it out (`null`). */
+  total: number | null;
+  /** Whether another page exists, answered by every page without counting the table. */
+  hasMore?: boolean | undefined;
 }
 
 /** The item the API answers `/activate` with: the row it put back in the tree. */
@@ -120,7 +123,8 @@ export const archiveService = {
       items,
       page: response?.page ?? page,
       pageSize: response?.pageSize ?? pageSize,
-      total: response?.total ?? items.length,
+      total: typeof response?.total === 'number' && Number.isFinite(response.total) ? response.total : null,
+      hasMore: (response as { hasMore?: boolean })?.hasMore,
     };
   },
 

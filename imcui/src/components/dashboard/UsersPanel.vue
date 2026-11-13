@@ -36,6 +36,7 @@
     </q-banner>
 
     <q-table
+      v-if="!$q.screen.lt.sm"
       :rows="users"
       :columns="columns"
       row-key="id"
@@ -115,6 +116,92 @@
         </q-td>
       </template>
     </q-table>
+
+    <!-- Below `sm` the five columns do not fit: the same row, as a card with its actions in reach. -->
+    <div v-else class="users-cards column q-gutter-sm">
+      <q-card v-for="user in users" :key="user.id" flat bordered class="user-card">
+        <q-card-section class="q-py-sm">
+          <div class="text-body2 text-weight-medium ellipsis">{{ user.email }}</div>
+          <div class="row items-center q-gutter-xs q-mt-xs">
+            <q-chip
+              v-for="role in user.roles"
+              :key="role"
+              dense
+              square
+              size="sm"
+              color="primary"
+              text-color="white"
+            >
+              {{ roleLabel(role) }}
+            </q-chip>
+            <span v-if="user.roles.length === 0" class="text-caption text-grey-7">Sin roles</span>
+          </div>
+        </q-card-section>
+
+        <q-card-section class="q-py-xs">
+          <div class="row items-center q-gutter-sm">
+            <q-badge :color="user.isActive ? 'positive' : 'grey-6'" rounded>
+              {{ user.isActive ? 'Activo' : 'Inactivo' }}
+            </q-badge>
+            <span class="text-caption text-grey-7">
+              Último acceso: {{ formatTimestamp(user.lastAccessUtc) }}
+            </span>
+          </div>
+        </q-card-section>
+
+        <q-card-actions class="q-pt-xs">
+          <div class="row items-center full-width q-gutter-x-sm">
+            <q-select
+              class="col"
+              dense
+              borderless
+              multiple
+              use-chips
+              emit-value
+              map-options
+              label="Roles"
+              :model-value="user.roles"
+              :options="roleOptions"
+              :disable="!auth.canManageUsers"
+              :loading="busyId === user.id"
+              :aria-label="`Cambiar roles de ${user.email}`"
+              @update:model-value="(value: string[]) => changeRoles(user, value)"
+            />
+            <q-btn
+              flat
+              dense
+              round
+              no-caps
+              icon="key"
+              color="primary"
+              :aria-label="`Restablecer contraseña de ${user.email}`"
+              :disable="!auth.canManageUsers"
+              @click="openReset(user)"
+            >
+              <q-tooltip>Restablecer contraseña</q-tooltip>
+            </q-btn>
+            <q-btn
+              flat
+              dense
+              round
+              no-caps
+              icon="person_off"
+              color="negative"
+              :aria-label="`Desactivar ${user.email}`"
+              :disable="!auth.canManageUsers || !user.isActive"
+              :loading="busyId === user.id"
+              @click="deactivate(user)"
+            >
+              <q-tooltip>Desactivar</q-tooltip>
+            </q-btn>
+          </div>
+        </q-card-actions>
+      </q-card>
+
+      <div v-if="!loading && users.length === 0" class="text-caption text-grey-7">
+        Todavía no hay usuarios para mostrar
+      </div>
+    </div>
 
     <q-dialog v-model="showCreate" persistent>
       <q-card class="q-pa-md create-card">
@@ -225,7 +312,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { getErrorMessage, isApiPending } from '@services/api';
-import { ROLES, ROLE_LABELS, type Role } from '@services/roles';
+import { ROLES, ROLE_LABELS, roleLabel, type Role } from '@services/roles';
 import { usersService, type ManagedUser } from '@services/users';
 import { formatTimestamp } from '@services/utilities';
 import { useAuthStore } from '../../stores/auth-store';
