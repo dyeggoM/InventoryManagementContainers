@@ -6,7 +6,30 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `docs/security-gate`
+## Pending — `feat/archive-retention-and-mobile-dashboard`
+
+**The archive can expire, when somebody says so.** `POST /api/item/archive/purge` (superadmin) removes
+ledger rows older than the retention age, which comes from `olderThanDays` or from
+`Archive:Retention:Days` / `ARCHIVE_RETENTION_DAYS`. It is **off by default on purpose**: with nothing
+configured the route answers `400` instead of treating "no policy" as "delete everything". Each run
+writes an `ArchivePurge` audit row with the cutoff and the count, and touches neither live items nor the
+files on disk.
+
+**A page no longer counts the whole table.** `GET /api/item/archive` and `GET /api/audit` answered
+`COUNT(*)` plus `Skip/Take` on every request, which makes page 20 as expensive as page 1. The total is
+now answered once, on page 1; later pages leave it out and send `hasMore`, computed by asking the
+database for one row more than the page shows. Both panels keep the total they got on the first page and
+use `hasMore` to decide whether the next button is live — which also fixes a pager that treated a page
+as the whole result whenever the API named the count `totalCount` and the client looked for `total`.
+
+**The dashboard fits a phone.** The three superadmin panels got a card layout below the `sm`
+breakpoint — the fields that matter on a card, the actions in a row you can reach with a thumb, filters
+stacked full width, pagination at the bottom — and keep their tables at `sm` and above.
+
+Verified: `dotnet test` **105 passed**, `npm run test` **173 passed** (19 files), `npm run typecheck`
+and `npm run lint:check` clean.
+
+## #26 — The commit gate, documented · merged 2026-11-11
 
 The commit gate is documented where the next person looks. `AGENTS.md` now has the three commands that
 satisfy it, says that a review is consumed by the commit that carries it, and records that the rendered

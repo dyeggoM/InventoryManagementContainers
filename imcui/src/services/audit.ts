@@ -34,9 +34,12 @@ export interface AuditQuery {
 
 export interface AuditPage {
   items: AuditEntry[];
-  total: number;
+  /** Known on the first page; a later page may leave it out (`null`), so keep the one you have. */
+  total: number | null;
   page: number;
   pageSize: number;
+  /** Whether another page exists, answered by every page without counting the table. */
+  hasMore?: boolean | undefined;
 }
 
 /** Only the filled-in fields go out: an empty filter must not narrow the result to nothing. */
@@ -77,6 +80,19 @@ function toEntry(raw: Record<string, unknown>): AuditEntry {
   };
 }
 
+/**
+ * The API names the count `totalCount` (and the archive calls it `total`); a page after the first may
+ * answer neither. Anything that is not a finite number stays unknown rather than becoming the length
+ * of the page, which is what used to make the pager think it was on the last page.
+ */
+function totalOf(response: unknown): number | null {
+  const source = response as { total?: unknown; totalCount?: unknown } | null;
+  for (const candidate of [source?.totalCount, source?.total]) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+  }
+  return null;
+}
+
 export const auditService = {
   async search(query: AuditQuery = {}): Promise<AuditPage> {
     const page = query.page ?? 1;
@@ -95,9 +111,10 @@ export const auditService = {
     );
     return {
       items,
-      total: response?.total ?? items.length,
+      total: totalOf(response),
       page: response?.page ?? page,
       pageSize: response?.pageSize ?? pageSize,
+      hasMore: (response as { hasMore?: boolean })?.hasMore,
     };
   },
 };

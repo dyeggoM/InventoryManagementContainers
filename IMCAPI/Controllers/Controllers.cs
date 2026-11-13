@@ -18,12 +18,16 @@ namespace IMCAPI.Controllers
         private readonly AttachmentStorage _attachments;
         private readonly ApplicationContext _context;
         private readonly int _maxDepth;
+        private readonly AuditLogWriter _audit;
+        private readonly IConfiguration _configuration;
 
         public ItemController(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments,
-            ApplicationContext context, IConfiguration configuration) : base(repository, logger)
+            ApplicationContext context, IConfiguration configuration, AuditLogWriter audit) : base(repository, logger)
         {
             _attachments = attachments;
             _context = context;
+            _audit = audit;
+            _configuration = configuration;
             var environmentMaxDepth = Environment.GetEnvironmentVariable("ITEMS_MAX_DEPTH");
             _maxDepth = int.TryParse(environmentMaxDepth, out var parsedEnvironmentDepth) && parsedEnvironmentDepth > 0
                 ? parsedEnvironmentDepth
@@ -241,13 +245,54 @@ namespace IMCAPI.Controllers
             if (!string.IsNullOrWhiteSpace(actor))
                 query = query.Where(row => row.DeletedById == actor || row.DeletedBy == actor || row.DeletedBy!.Contains(actor));
             if (!string.IsNullOrWhiteSpace(label)) query = query.Where(row => row.Label.Contains(label));
-            var totalCount = await query.CountAsync(cancellationToken);
+            // The pager needs the total once. Counting the whole table on every page makes a deep page
+            // as expensive as the first, so page 1 returns it, later pages return null, and every page
+            // says whether another one exists by asking the database for one row more than it shows.
+            var total = page == 1 ? await query.CountAsync(cancellationToken) : (int?)null;
             // `(page - 1) * pageSize` overflows int for a large enough page and silently wrapped back to
             // the first one; compute it wide and clamp instead of trusting the arithmetic.
             var offset = Math.Min((long)(page - 1) * pageSize, int.MaxValue);
-            var items = await query.OrderByDescending(row => row.DeletedAtUtc).ThenByDescending(row => row.ArchiveId)
-                .Skip((int)offset).Take(pageSize).ToListAsync(cancellationToken);
-            return Ok(new { items, page, pageSize, total = totalCount });
+            var rows = await query.OrderByDescending(row => row.DeletedAtUtc).ThenByDescending(row => row.ArchiveId)
+                .Skip((int)offset).Take(pageSize + 1).ToListAsync(cancellationToken);
+            var hasMore = rows.Count > pageSize;
+            if (hasMore) rows.RemoveAt(rows.Count - 1);
+            return Ok(new { items = rows, page, pageSize, total, hasMore });
+        }
+
+        /// <summary>
+        /// Removes archive rows older than the retention age. This is the ledger only: live items and
+        /// the files on disk are untouched, so a purge can never lose a record that still exists.
+        /// </summary>
+        [HttpPost("archive/purge")]
+        [Authorize(Policy = "RequiereSuperadmin")]
+        public async Task<IActionResult> PurgeArchive([FromQuery] int? olderThanDays, CancellationToken cancellationToken = default)
+        {
+            int configured;
+            if (!int.TryParse(Environment.GetEnvironmentVariable("ARCHIVE_RETENTION_DAYS"), out configured) || configured < 0)
+            {
+                configured = int.TryParse(_configuration["Archive:Retention:Days"], out var days) ? days : 0;
+            }
+            var age = olderThanDays ?? configured;
+            if (age < 1)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Archive retention is not configured",
+                    Detail = "Pass olderThanDays, or set Archive:Retention:Days (ARCHIVE_RETENTION_DAYS)."
+                });
+            }
+
+            var cutoff = DateTime.UtcNow.AddDays(-age);
+            var expired = await _context.ItemArchives
+                .Where(row => row.DeletedAtUtc < cutoff)
+                .ToListAsync(cancellationToken);
+            _context.ItemArchives.RemoveRange(expired);
+            await _context.SaveChangesAsync(cancellationToken);
+            await _audit.WriteAsync("ArchivePurge", "ItemArchive", cutoff.ToString("O"), cancellationToken: cancellationToken,
+                afterJson: System.Text.Json.JsonSerializer.Serialize(new { deleted = expired.Count, cutoffUtc = cutoff, olderThanDays = age }));
+
+            return Ok(new { deleted = expired.Count, cutoffUtc = cutoff, olderThanDays = age });
         }
 
         [HttpPatch("{id:int}/activate")]

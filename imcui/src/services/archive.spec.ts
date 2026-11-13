@@ -123,8 +123,10 @@ describe('archiveService.list', () => {
     const result = await archiveService.list({ page: 2, pageSize: 10 });
 
     expect(result.items).toHaveLength(1);
-    // The envelope said nothing: the request's own numbers are the truth, and total is the row count.
-    expect(result).toMatchObject({ page: 2, pageSize: 10, total: 1 });
+    // The envelope said nothing: the request's own numbers are the truth, and an absent total stays
+    // unknown — treating the page length as the total is what made the pager think it was at the end.
+    expect(result).toMatchObject({ page: 2, pageSize: 10, total: null });
+    expect(result.hasMore).toBeUndefined();
   });
 
   it('maps a 400 problem-details answer to the API message', async () => {
