@@ -6,6 +6,11 @@ namespace IMCAPI.Services;
 /// Stores an attachment's bytes under <c>media/items/{itemId}/</c> and returns a small, compressed
 /// preview to keep in the row. A phone photo is 3–6 MB; keeping it base64 in the database made
 /// every attachment list carry megabytes and grow the file without limit.
+/// <para>
+/// Deleting a record does not unlink its files: they move to a <c>media/trash/</c> tree that mirrors
+/// the live one, so a restore from the archive is the same move in reverse, and only a purge of the
+/// archive row destroys anything.
+/// </para>
 /// </summary>
 public sealed class AttachmentStorage
 {
@@ -114,28 +119,155 @@ public sealed class AttachmentStorage
         }
     }
 
-    public string ToAbsolute(string relativePath) =>
-        Path.Combine(_contentRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+    /// <summary>
+    /// The absolute path of a stored file, confined to the media root. A path read back from the
+    /// database is still a path this process did not build, so a row claiming
+    /// <c>../appsettings.json</c> must not turn the file route into a reader for the whole disk.
+    /// Answers an empty string when the path escapes, which every caller already treats as missing.
+    /// </summary>
+    public string ToAbsolute(string relativePath) => ResolveLive(relativePath) ?? string.Empty;
 
     /// <summary>Best effort: a missing file must not stop a row from being deleted.</summary>
-    public void Delete(string? relativePath)
+    public void Delete(string? relativePath) => DeleteFile(ResolveLive(relativePath));
+
+    /// <summary>
+    /// Moves files aside instead of destroying them: <c>media/items/7/a.png</c> becomes
+    /// <c>media/trash/items/7/a.png</c>. The trash mirrors the live tree on purpose — a restore is
+    /// the same move in reverse, so the paths stored in the archive stay usable exactly as they are.
+    /// Best effort, like the delete it replaces: a missing file must not stop a deletion, and the
+    /// record's folder still goes away with its last file.
+    /// </summary>
+    public void MoveToTrash(IEnumerable<string?> relativePaths)
     {
-        if (string.IsNullOrWhiteSpace(relativePath))
+        foreach (var relativePath in relativePaths)
+        {
+            var source = ResolveLive(relativePath);
+            var destination = ResolveTrash(relativePath);
+            if (source is null || destination is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                if (!File.Exists(source))
+                {
+                    RemoveEmptyFolder(Path.GetDirectoryName(source));
+                    continue;
+                }
+
+                var folder = Path.GetDirectoryName(destination);
+                if (folder is not null)
+                {
+                    Directory.CreateDirectory(folder);
+                }
+
+                File.Move(source, destination, overwrite: true);
+                RemoveEmptyFolder(Path.GetDirectoryName(source));
+            }
+            catch (IOException)
+            {
+                // Locked or already gone: the row is what matters.
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Puts the files back where the archive says they were and returns the paths that could not
+    /// come back, so the caller can say how many are lost instead of pretending the restore was
+    /// whole.
+    /// </summary>
+    public IReadOnlyList<string> RestoreFromTrash(IEnumerable<string?> relativePaths)
+    {
+        var missing = new List<string>();
+        foreach (var relativePath in relativePaths)
+        {
+            var source = ResolveTrash(relativePath);
+            var destination = ResolveLive(relativePath);
+            if (source is null || destination is null)
+            {
+                missing.Add(relativePath ?? string.Empty);
+                continue;
+            }
+
+            try
+            {
+                if (!File.Exists(source))
+                {
+                    missing.Add(relativePath!);
+                    continue;
+                }
+
+                var folder = Path.GetDirectoryName(destination);
+                if (folder is not null)
+                {
+                    Directory.CreateDirectory(folder);
+                }
+
+                File.Move(source, destination, overwrite: true);
+                RemoveEmptyFolder(Path.GetDirectoryName(source));
+            }
+            catch (IOException)
+            {
+                missing.Add(relativePath!);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                missing.Add(relativePath!);
+            }
+        }
+
+        return missing;
+    }
+
+    /// <summary>
+    /// The only place a stored file is really destroyed now: a deletion moves a file to the trash,
+    /// and the purge of its archive row is what removes it for good.
+    /// </summary>
+    public void DeleteFromTrash(IEnumerable<string?> relativePaths)
+    {
+        foreach (var relativePath in relativePaths)
+        {
+            DeleteFile(ResolveTrash(relativePath));
+        }
+    }
+
+    private void DeleteFile(string? absolute)
+    {
+        if (absolute is null)
         {
             return;
         }
 
         try
         {
-            var absolute = ToAbsolute(relativePath);
             if (File.Exists(absolute))
             {
                 File.Delete(absolute);
             }
 
-            // A record's folder is only a container: once its last file is gone the folder goes too,
-            // instead of leaving an empty directory per deleted record.
-            var folder = Path.GetDirectoryName(absolute);
+            RemoveEmptyFolder(Path.GetDirectoryName(absolute));
+        }
+        catch (IOException)
+        {
+            // Locked or already gone: the row is what matters.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// A record's folder is only a container: once its last file is gone the folder goes too,
+    /// instead of leaving an empty directory per deleted record.
+    /// </summary>
+    private static void RemoveEmptyFolder(string? folder)
+    {
+        try
+        {
             if (folder is not null
                 && Directory.Exists(folder)
                 && !Directory.EnumerateFileSystemEntries(folder).Any())
@@ -145,11 +277,163 @@ public sealed class AttachmentStorage
         }
         catch (IOException)
         {
-            // Locked or already gone: the row is what matters.
         }
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    private const string MediaFolder = "media";
+    private const string TrashFolder = "trash";
+
+    /// <summary>
+    /// Where a live relative path really lives, or null when it is not a plain path inside
+    /// <c>media/</c>. These paths are read back from the database, which makes them client output
+    /// until proven otherwise.
+    /// </summary>
+    private string? ResolveLive(string? relativePath) => ResolveUnderMedia(SafeSegments(relativePath));
+
+    /// <summary>
+    /// The mirrored location of a live path under <c>media/trash/</c>:
+    /// <c>media/items/7/a.png</c> is stored as <c>media/trash/items/7/a.png</c>.
+    /// </summary>
+    private string? ResolveTrash(string? relativePath)
+    {
+        var segments = SafeSegments(relativePath);
+        if (segments is null)
+        {
+            return null;
+        }
+
+        // A path that does not start with `media/` is mirrored as it is, which keeps a legacy row
+        // recoverable without letting it name anything outside the media root.
+        var skip = string.Equals(segments[0], MediaFolder, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        if (segments.Length == skip)
+        {
+            return null;
+        }
+
+        var mirrored = new string[segments.Length - skip + 2];
+        mirrored[0] = MediaFolder;
+        mirrored[1] = TrashFolder;
+        Array.Copy(segments, skip, mirrored, 2, segments.Length - skip);
+        return ResolveUnderMedia(mirrored);
+    }
+
+    /// <summary>
+    /// The absolute path these segments name, or null when it escapes <c>media/</c>. Every public
+    /// path-taking member above goes through here, so the containment rule lives in one place.
+    /// </summary>
+    private string? ResolveUnderMedia(string[]? segments)
+    {
+        if (segments is null)
+        {
+            return null;
+        }
+
+        var root = Path.Combine(_contentRoot, MediaFolder);
+        var absolute = Path.Combine(new[] { _contentRoot }.Concat(segments).ToArray());
+        return IsInside(absolute, root) ? absolute : null;
+    }
+
+    /// <summary>
+    /// True when <paramref name="candidate"/> stays inside <paramref name="root"/> with every link
+    /// on the way followed, so a symlink planted in the media tree cannot redirect a move or a
+    /// delete to the rest of the disk.
+    /// </summary>
+    private static bool IsInside(string candidate, string root)
+    {
+        try
+        {
+            var resolvedRoot = RealPath(root);
+            var resolved = RealPath(candidate);
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return resolved.StartsWith(resolvedRoot + Path.DirectorySeparatorChar, comparison)
+                || string.Equals(resolved, resolvedRoot, comparison);
+        }
+        catch (IOException)
+        {
+            // A link loop is not a path this class is willing to touch.
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The path with every symlink on it followed; the missing tail is appended as given.</summary>
+    private static string RealPath(string absolute)
+    {
+        var full = Path.GetFullPath(absolute);
+        var root = Path.GetPathRoot(full) ?? string.Empty;
+        var current = root.Length == 0 ? Path.DirectorySeparatorChar.ToString() : root;
+        var segments = full[root.Length..].Split(
+            new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries);
+        foreach (var segment in segments)
+        {
+            var next = Path.Combine(current, segment);
+            var info = Directory.Exists(next)
+                ? (FileSystemInfo)new DirectoryInfo(next)
+                : new FileInfo(next);
+            var link = info.LinkTarget;
+            if (link is null)
+            {
+                current = next;
+                continue;
+            }
+
+            var target = info.ResolveLinkTarget(returnFinalTarget: true);
+            current = target is null
+                ? Path.GetFullPath(link, current)
+                : Path.GetFullPath(target.FullName);
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// The segments of a relative path, or null when it is not a plain path: rooted, a drive or an
+    /// NTFS stream, or carrying a <c>..</c> or <c>.</c> segment.
+    /// </summary>
+    private static string[]? SafeSegments(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return null;
+        }
+
+        var normalized = relativePath.Replace('\\', '/').Trim();
+        if (normalized.Length == 0
+            || normalized.StartsWith('/')
+            || Path.IsPathRooted(normalized)
+            || normalized.Contains(':'))
+        {
+            return null;
+        }
+
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+        {
+            return null;
+        }
+
+        foreach (var segment in segments)
+        {
+            if (segment is "." or "..")
+            {
+                return null;
+            }
+        }
+
+        return segments;
     }
 
     public static string ContentTypeFor(string path) =>

@@ -20,14 +20,17 @@ namespace IMCAPI.Controllers
         private readonly int _maxDepth;
         private readonly AuditLogWriter _audit;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<ItemController> _log;
 
         public ItemController(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments,
-            ApplicationContext context, IConfiguration configuration, AuditLogWriter audit) : base(repository, logger)
+            ApplicationContext context, IConfiguration configuration, AuditLogWriter audit, ILogger<ItemController> log)
+            : base(repository, logger)
         {
             _attachments = attachments;
             _context = context;
             _audit = audit;
             _configuration = configuration;
+            _log = log;
             var environmentMaxDepth = Environment.GetEnvironmentVariable("ITEMS_MAX_DEPTH");
             _maxDepth = int.TryParse(environmentMaxDepth, out var parsedEnvironmentDepth) && parsedEnvironmentDepth > 0
                 ? parsedEnvironmentDepth
@@ -183,9 +186,41 @@ namespace IMCAPI.Controllers
             }
         }
 
+        /// <summary>One attachment exactly as the archive recorded it: enough to write the row again.</summary>
+        private sealed record ArchivedAttachment(string? FileName, string? Type, string? FilePath);
+
+        private static readonly System.Text.Json.JsonSerializerOptions ArchivedJson = new()
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
         /// <summary>
-        /// Deleting a record deletes its files: the UI says so, and orphaned images in the media
-        /// folder are impossible to find again once the row that named them is gone.
+        /// Reads the attachment list a deleted record left in the ledger. A row written by an older
+        /// shape must not make the record unrecoverable, so a payload that cannot be read is treated
+        /// as "no attachments" rather than as an error.
+        /// </summary>
+        private static List<ArchivedAttachment> ReadArchivedAttachments(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return new List<ArchivedAttachment>();
+            }
+
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<ArchivedAttachment>>(json, ArchivedJson)
+                    ?? new List<ArchivedAttachment>();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return new List<ArchivedAttachment>();
+            }
+        }
+
+        /// <summary>
+        /// Deleting a record archives it and moves its files aside: they wait in <c>media/trash</c>
+        /// until the archive row is purged, which is what makes a restore bring the attachments
+        /// back. Destroying them here would leave the ledger naming files nobody can find again.
         /// </summary>
         [HttpDelete("{id:int}")]
         [Authorize(Policy = "RequiereAdmin")]
@@ -221,7 +256,7 @@ namespace IMCAPI.Controllers
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            foreach (var filePath in filePaths) _attachments.Delete(filePath);
+            _attachments.MoveToTrash(filePaths);
             return NoContent();
         }
 
@@ -260,8 +295,9 @@ namespace IMCAPI.Controllers
         }
 
         /// <summary>
-        /// Removes archive rows older than the retention age. This is the ledger only: live items and
-        /// the files on disk are untouched, so a purge can never lose a record that still exists.
+        /// Removes archive rows older than the retention age and destroys the files those rows were
+        /// holding in <c>media/trash</c>. It never touches a live record: only the ledger rows this
+        /// purge deletes lose their files, which is exactly what a purge is for.
         /// </summary>
         [HttpPost("archive/purge")]
         [Authorize(Policy = "RequiereSuperadmin")]
@@ -287,10 +323,22 @@ namespace IMCAPI.Controllers
             var expired = await _context.ItemArchives
                 .Where(row => row.DeletedAtUtc < cutoff)
                 .ToListAsync(cancellationToken);
+            // The files these rows were holding have nobody left to restore them: this is the one
+            // place where a purged archive also gives up its bytes.
+            var purgeFilePaths = expired
+                .SelectMany(row => ReadArchivedAttachments(row.AttachmentsJson))
+                .Select(attachment => attachment.FilePath)
+                .Where(filePath => !string.IsNullOrWhiteSpace(filePath))
+                .ToArray();
             _context.ItemArchives.RemoveRange(expired);
             await _context.SaveChangesAsync(cancellationToken);
+            _attachments.DeleteFromTrash(purgeFilePaths);
             await _audit.WriteAsync("ArchivePurge", "ItemArchive", cutoff.ToString("O"), cancellationToken: cancellationToken,
-                afterJson: System.Text.Json.JsonSerializer.Serialize(new { deleted = expired.Count, cutoffUtc = cutoff, olderThanDays = age }));
+                afterJson: System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    deleted = expired.Count, cutoffUtc = cutoff, olderThanDays = age,
+                    destroyedAttachments = purgeFilePaths.Length
+                }));
 
             return Ok(new { deleted = expired.Count, cutoffUtc = cutoff, olderThanDays = age });
         }
@@ -331,9 +379,64 @@ namespace IMCAPI.Controllers
             archive.RestoredById = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                 ?? User.FindFirst("sub")?.Value;
             HttpContext.Items["ItemArchiveRestore"] = true;
-            _context.Items.Add(restored);
-            await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+
+            // Delete removed the attachment rows and moved the files to the trash, so a restore that
+            // only recreated the record would hand it back with its photos silently gone. The files
+            // come back first: a row naming a file nobody could return is a row that answers 404.
+            var archivedAttachments = ReadArchivedAttachments(archive.AttachmentsJson);
+            var storedPaths = archivedAttachments
+                .Select(attachment => attachment.FilePath)
+                .Where(filePath => !string.IsNullOrWhiteSpace(filePath))
+                .Select(filePath => filePath!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var missing = _attachments.RestoreFromTrash(storedPaths);
+            var returned = storedPaths.Except(missing, StringComparer.Ordinal).ToArray();
+
+            var attachments = archivedAttachments
+                .Where(attachment => string.IsNullOrWhiteSpace(attachment.FilePath)
+                    || returned.Contains(attachment.FilePath, StringComparer.Ordinal))
+                .Select(attachment => new Attachment
+                {
+                    ItemId = restored.Id,
+                    FileName = attachment.FileName ?? string.Empty,
+                    Type = attachment.Type ?? "Photo",
+                    FilePath = attachment.FilePath,
+                    IsActive = true,
+                })
+                .ToList();
+
+            try
+            {
+                _context.Items.Add(restored);
+                // The id is only known once the row is written: a restore whose original id was taken
+                // gets a new one, and the attachments have to point at the record that exists.
+                await _context.SaveChangesAsync(cancellationToken);
+                if (attachments.Count > 0)
+                {
+                    foreach (var attachment in attachments) attachment.ItemId = restored.Id;
+                    _context.Attachments.AddRange(attachments);
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                // The record did not come back, so neither should its files: back to the trash they
+                // came from, instead of leaving them in a live tree no row points at.
+                _attachments.MoveToTrash(returned);
+                throw;
+            }
+
+            Response.Headers["X-Restored-Attachments"] = attachments.Count.ToString();
+            if (missing.Count > 0)
+            {
+                Response.Headers["X-Missing-Attachments"] = missing.Count.ToString();
+                _log.LogWarning("Restored item {ItemId} without {MissingCount} attachment file(s): {MissingPaths}",
+                    restored.Id, missing.Count, string.Join(", ", missing));
+            }
+
             return Ok(restored);
         }
 
@@ -503,7 +606,7 @@ namespace IMCAPI.Controllers
                 if (attachment?.FilePath is null) return NotFound();
 
                 var absolute = _storage.ToAbsolute(attachment.FilePath);
-                if (!System.IO.File.Exists(absolute)) return NotFound();
+                if (string.IsNullOrEmpty(absolute) || !System.IO.File.Exists(absolute)) return NotFound();
 
                 return PhysicalFile(absolute, AttachmentStorage.ContentTypeFor(attachment.FilePath),
                     enableRangeProcessing: true);

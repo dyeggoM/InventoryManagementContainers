@@ -6,13 +6,26 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `chore/mit-license`
+## Pending — `feat/attachment-trash`
+
+**Restoring a record brings its files back.** Deleting used to unlink the attachments, so an archived
+record kept the *names* of files nobody could return. Deletion now moves them to `media/trash`, mirroring
+the live tree, and `PATCH /api/item/{id}/activate` moves them back and re-creates the attachment rows
+from the ledger snapshot — so a restored record has its photos again, byte for byte. The purge is the
+only place that now destroys bytes. Headers `X-Restored-Attachments` / `X-Missing-Attachments` say how
+many came back; an archive written before this change restores with none, which is the honest answer
+rather than a 404 nobody explains.
+
+**The file route no longer trusts the path it reads.** `GET /api/attachment/{id}/file` resolved
+`FilePath` straight onto the disk; it now goes through the same confined resolver the trash uses, so a
+row claiming `../appsettings.json` answers `404` instead of serving the file.
+
+## #28 — The project is MIT licensed · merged 2026-11-12
 
 **The project is MIT licensed.** `LICENSE` carries the canonical text and AGENTS.md says so, so
 "can I use this?" now has a written answer instead of a guess.
 
-## Pending — `docs/security-gate`
-## Pending — `feat/archive-retention-and-mobile-dashboard`
+## #27 — Archive retention, paging without a per-page COUNT, and the dashboard on a phone · merged 2026-11-11
 
 **The archive can expire, when somebody says so.** `POST /api/item/archive/purge` (superadmin) removes
 ledger rows older than the retention age, which comes from `olderThanDays` or from
@@ -34,6 +47,7 @@ stacked full width, pagination at the bottom — and keep their tables at `sm` a
 
 Verified: `dotnet test` **105 passed**, `npm run test` **173 passed** (19 files), `npm run typecheck`
 and `npm run lint:check` clean.
+
 
 ## #26 — The commit gate, documented · merged 2026-11-11
 
