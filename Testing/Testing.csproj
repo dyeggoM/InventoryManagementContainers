@@ -24,6 +24,8 @@
 
   <ItemGroup>
     <None Include="..\endpoints.allow-anonymous.txt" Link="endpoints.allow-anonymous.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The import tests read a real workbook, so the fixture travels with them. -->
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

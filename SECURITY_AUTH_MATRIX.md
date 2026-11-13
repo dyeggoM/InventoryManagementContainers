@@ -58,8 +58,9 @@ a valid target. Password reset is restricted to `superadmin`.
 | 33 | `POST /api/auth/logout` | `Controllers/AuthController.cs:132` | — (nueva) | `PUEDE_SER_ANONIMO` — revoca |
 | 34 | `POST /api/auth/stop-impersonation` | `Controllers/AuthController.cs:155` | — (nueva) | `REQUIERE_AUTH` + claim `act` |
 | 35 | `POST /api/item/archive/purge` | `Controllers/Controllers.cs:250` | — (nueva) | `REQUIERE_AUTH (superadmin)`; exige retención configurada o `olderThanDays` |
+| 36 | `POST /api/import/preview` | `Controllers/ImportController.cs:35` | — (nueva) | `REQUIERE_AUTH (admin)`; lee un `.xlsx`/`.xls` y **no escribe**: sin credencial no se puede usar como lector de ficheros arbitrario |
 
-Resumen: **27 rutas requieren autenticación** y 8 pueden responder sin credencial (las 5 del catálogo
+Resumen: **28 rutas requieren autenticación** y 8 pueden responder sin credencial (las 5 del catálogo
 original más `login`, `refresh` y `logout`, que existen para poder autenticarse). `logs` pasa de
 `A_REVISAR` a `REQUIERE_AUTH (admin)` porque sirve rutas internas y trazas.
 
