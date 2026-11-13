@@ -51,7 +51,7 @@ public sealed class ItemImporter
     public sealed record ImportSheet(string Name, string Status, int Green, int Yellow, int Red,
         int SkippedSections, IReadOnlyList<ImportGroup> Groups);
 
-    public sealed record ImportSummary(int Rows, int Green, int Yellow, int Red, int Importable, int Skipped);
+    public sealed record ImportSummary(int Rows, int Sections, int Green, int Yellow, int Red, int Importable, int Skipped);
 
     public sealed record ImportIssue(string Sheet, int Row, string Level, string Message);
 
@@ -136,8 +136,11 @@ public sealed class ItemImporter
         }
 
         var all = sheets.SelectMany(sheet => sheet.Groups).SelectMany(group => group.Items).ToList();
+        // `Rows` is the records the file describes; a section title is counted apart, so
+        // green + yellow + red adds up to it and nobody has to wonder where 18 rows went.
         var summary = new ImportSummary(
-            Rows: all.Count + sheets.Sum(sheet => sheet.SkippedSections),
+            Rows: all.Count,
+            Sections: sheets.Sum(sheet => sheet.SkippedSections),
             Green: all.Count(item => item.Status == Green),
             Yellow: all.Count(item => item.Status == Yellow),
             Red: all.Count(item => item.Status == Red),
