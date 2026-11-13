@@ -199,6 +199,16 @@ en disco) y los cuatro bajos (**B-1..B-4**) en un solo pase.
 
 ## Entrada masiva desde plantilla
 
+- [ ] **(i) Importación desde Excel** — `in progress` · dueño: openai-coder + code-orchestrator.
+  Hecho: `POST /api/import/preview` (`Controllers/ImportController.cs`, admin) lee un `.xlsx`/`.xls`
+  con `ExcelDataReader` (`Services/ItemImporter.cs`) y devuelve el árbol que el fichero describe con
+  cada fila en verde, amarillo o rojo y el motivo. **No escribe nada.** Medido sobre el fichero real
+  de 578 filas: 361 verdes, 94 amarillas, 105 rojas, 455 importables.
+  Falta: `POST /api/import` (escritura en una transacción, excluyendo rojas, idempotente por código),
+  la pantalla del dashboard y el patrón CSV. Decidido con Diego (2026-11-13): una fila = un elemento
+  físico (los repetidos son unidades, no duplicados), y `Attributes.Code` es opcional pero **único**
+  cuando viene.
+
 Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case; the
 next step is a CSV/Excel template the user fills in (parent, children, attributes per row, one column
 per attribute key) and uploads, with a preview of what will be created before anything is written.

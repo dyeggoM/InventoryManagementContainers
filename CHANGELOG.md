@@ -6,6 +6,18 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/spreadsheet-import`
+
+**A spreadsheet can be read before it is imported.** `POST /api/import/preview` (admin) reads an
+`.xlsx`/`.xls` and answers the tree it describes — sheet, subcategory, record — with every row marked
+green (import it), yellow (importable, but look first: brand outside the catalogue, no code, a
+description too short, a corrected subcategory spelling) or red (not importable: no description, or a
+code repeated in the file). It writes **nothing**: the import is a separate decision.
+`ExcelDataReader` is the only new dependency, and it is used to read.
+
+Measured on the owner's file (578 rows across five sheets): 361 green, 94 yellow, 105 red — the reds
+being rows that carry a code but no name.
+
 ## Pending — `chore/mit-license`
 
 **The project is MIT licensed.** `LICENSE` carries the canonical text and AGENTS.md says so, so
