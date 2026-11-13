@@ -16,6 +16,9 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - Delete from an overflow menu that names what it deletes, with confirmation. A record with children
   is refused (`409` with a message that says how many), so the tree never loses a branch by accident;
   a record without them is moved to the archive instead of disappearing.
+- **The archive has a retention switch** (`POST /api/item/archive/purge`, superadmin): rows older than
+  `Archive:Retention:Days` can be removed on demand, and with nothing configured the route refuses
+  instead of guessing. Live records and files are never touched by it.
 - **The archive is a screen, not a database table** (`components/dashboard/ArchivePanel.vue`): the
   superadmin filters by label, by who deleted it and by a date range, pages through the server's
   total, and restores a record with a confirmation. A restored row is marked and cannot be restored
@@ -93,6 +96,8 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - **The interface follows the role**: the drawer, the forms and the router guard read the same list
   (`services/roles.ts`), so `lector` is not offered a write control that would bounce, and
   `admin`/`superadmin` screens are unreachable by URL for the roles below them.
+- **The dashboard works on a phone**: below the `sm` breakpoint the three panels are cards with the
+  actions at thumb height and the filters stacked; from `sm` up they are the tables they always were.
 - **Superadmin dashboard** with three panels: accounts (list, create, change roles, deactivate),
   audit (actor/entity/action/date filters, before/after viewer, CSV export) and impersonation.
 - **Impersonation is by role, never by account**: `POST /api/users/impersonate` takes a role, and
