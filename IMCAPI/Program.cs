@@ -215,6 +215,7 @@ namespace IMCAPI
             builder.Services.AddTransient(typeof(IRepository<>),typeof(BaseRepository<>));
             // Attachment bytes live on disk; only a compressed preview stays in the row.
             builder.Services.AddSingleton<AttachmentStorage>();
+            builder.Services.AddScoped<ItemImporter>();
             #endregion
 
             var app = builder.Build();

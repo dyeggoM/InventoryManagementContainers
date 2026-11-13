@@ -6,21 +6,19 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `feat/attachment-trash`
+## Pending — `feat/spreadsheet-import`
 
-**Restoring a record brings its files back.** Deleting used to unlink the attachments, so an archived
-record kept the *names* of files nobody could return. Deletion now moves them to `media/trash`, mirroring
-the live tree, and `PATCH /api/item/{id}/activate` moves them back and re-creates the attachment rows
-from the ledger snapshot — so a restored record has its photos again, byte for byte. The purge is the
-only place that now destroys bytes. Headers `X-Restored-Attachments` / `X-Missing-Attachments` say how
-many came back; an archive written before this change restores with none, which is the honest answer
-rather than a 404 nobody explains.
+**A spreadsheet can be read before it is imported.** `POST /api/import/preview` (admin) reads an
+`.xlsx`/`.xls` and answers the tree it describes — sheet, subcategory, record — with every row marked
+green (import it), yellow (importable, but look first: brand outside the catalogue, no code, a
+description too short, a corrected subcategory spelling) or red (not importable: no description, or a
+code repeated in the file). It writes **nothing**: the import is a separate decision.
+`ExcelDataReader` is the only new dependency, and it is used to read.
 
-**The file route no longer trusts the path it reads.** `GET /api/attachment/{id}/file` resolved
-`FilePath` straight onto the disk; it now goes through the same confined resolver the trash uses, so a
-row claiming `../appsettings.json` answers `404` instead of serving the file.
+Measured on the owner's file (578 rows across five sheets): 361 green, 94 yellow, 105 red — the reds
+being rows that carry a code but no name.
 
-## #28 — The project is MIT licensed · merged 2026-11-12
+## Pending — `chore/mit-license`
 
 **The project is MIT licensed.** `LICENSE` carries the canonical text and AGENTS.md says so, so
 "can I use this?" now has a written answer instead of a guess.
