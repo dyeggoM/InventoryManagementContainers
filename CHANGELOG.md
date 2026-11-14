@@ -23,6 +23,16 @@ ones never. Running the same file twice creates nothing the second time: a code 
 or a nameless record that is already there, is skipped instead of duplicated. One `ItemImport` audit
 row records the counts.
 
+**An admin can reach the dashboard now.** The route was superadmin-only, so the import screen — an
+admin endpoint — was unreachable for an admin. `/dashboard` takes `ADMIN_ROLES`, and each panel hides
+itself according to the policy of the endpoint behind it: *Usuarios*, *Auditoría* and *Archivo* stay
+superadmin-only, *Importar desde Excel* and *Suplantación* are for admins too. The page opens on a tab
+the account can actually see instead of an empty card.
+
+**CSV, besides Excel.** Both calls read `.csv` as well as `.xlsx`/`.xls`: delimiter detected between
+comma, semicolon and tab (a Spanish-locale Excel export writes `;`), RFC 4180 quoting including fields
+with newlines, BOM stripped, and the file name becomes the root of the tree.
+
 **And the dashboard shows it.** The *Importar desde Excel* screen takes the file, renders the tree with
 its three colours, lets you filter to the doubtful rows and untick the yellow ones, and only then writes
 — with the counts of what went in, what was skipped, and why. Below `sm` it is the card layout.
