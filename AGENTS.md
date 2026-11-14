@@ -133,6 +133,29 @@ python3 $SM --repo . review --status passed --reviewer <you> --note '<evidence>'
 - **Never trust a path from the client**: validate the shape (`TryParseExact`, regex) and confine the
   result to its directory, whatever the proxy in front does.
 
+## The work ledger (required, not optional)
+
+Every agent here keeps a record of what it was asked and what it did, in
+`~/.hermes/ledgers/InventoryManagementContainers.<agent>.db` (one file per bot, driven by
+`~/.hermes/scripts/ledger` from the `work-ledger` skill). The context window is disposable; this is
+not.
+
+- **First action of a session:** `~/.hermes/scripts/ledger resume` — open work, the decisions that
+  constrain it, what was already tried and failed, recent results with their evidence.
+- **When you are assigned something**, before you touch a file: `ledger request "<the assignment,
+  verbatim>"`. A `pre_tool_call` hook blocks `write_file`, `patch` and `git commit` when you have no
+  open task, and the block message tells you the command.
+- **When you deliver:** `ledger result --task T0001 "<what you delivered>" --evidence "<command,
+  test, commit or path>"`. A result with no evidence is a claim, not a record.
+- **When you hit a dead end:** `ledger failure "<what did not work>" --evidence "<the error>"` — the
+  next session must not pay for the same discovery.
+- **When you decide something binding:** `ledger decision "<the rule>" --why "<why>"`.
+- **Before a purge or a handoff:** `ledger close --task T0001 "<state>"`, then `ledger resume` is
+  what the next session reads instead of the transcript.
+
+`ledger check` is the integrity pass: a task marked done without a result carrying evidence, a
+credential written into the record, or work left `open` for too long all come back as problems.
+
 ## How work is routed here
 
 Four agents work in this repository, one orchestrator and three specialists:
