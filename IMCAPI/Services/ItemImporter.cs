@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using ExcelDataReader;
 using IMCAPI.DB;
+using IMCAPI.DB.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace IMCAPI.Services;
@@ -39,8 +40,17 @@ public sealed class ItemImporter
     };
 
     private readonly ApplicationContext _context;
+    private readonly AuditLogWriter _audit;
 
-    public ItemImporter(ApplicationContext context) => _context = context;
+    public ItemImporter(ApplicationContext context, AuditLogWriter audit)
+    {
+        _context = context;
+        _audit = audit;
+    }
+
+    /// <summary>What an import did, so the answer can be checked against the file.</summary>
+    public sealed record ImportResult(int CreatedSheets, int CreatedGroups, int CreatedItems,
+        int SkippedRed, int SkippedYellow, int SkippedExisting, bool IncludeYellow);
 
     public sealed record ImportItem(string Label, string? Code, string? Brand, string? Reference,
         string? Serial, string? Notes, string? Dimensions, string Status, IReadOnlyList<string> Reasons, int Row);
@@ -60,7 +70,12 @@ public sealed class ItemImporter
 
     private sealed record RawRow(int Row, string Sheet, Dictionary<string, string> Cells);
 
-    public async Task<ImportPreview> PreviewAsync(Stream stream, CancellationToken cancellationToken = default)
+    public async Task<ImportPreview> PreviewAsync(Stream stream, CancellationToken cancellationToken = default) =>
+        (await BuildAsync(stream, cancellationToken)).Preview;
+
+    /// <summary>The preview and the rows it is made of: one parse serves both calls.</summary>
+    private async Task<(ImportPreview Preview, List<(string Sheet, string Group, ImportItem Item)> Rows)> BuildAsync(
+        Stream stream, CancellationToken cancellationToken)
     {
         // .xls needs the code pages; .xlsx does not, but registering once is harmless and the
         // registration is idempotent.
@@ -147,7 +162,156 @@ public sealed class ItemImporter
             Importable: all.Count(item => item.Status != Red),
             Skipped: all.Count(item => item.Status == Red));
 
-        return new ImportPreview(sheets, summary, issues, normalizations.ToList());
+        var preview = new ImportPreview(sheets, summary, issues, normalizations.ToList());
+        var planned = sheets
+            .SelectMany(sheet => sheet.Groups.SelectMany(group => group.Items.Select(item => (Sheet: sheet.Name, Group: group.Name, Item: item))))
+            .ToList();
+        return (preview, planned);
+    }
+
+    /// <summary>
+    /// Writes what the preview called green (and yellow, when asked) into the tree, in one
+    /// transaction: sheets become roots, SUB CATEGORIA becomes the level under them, and each row
+    /// becomes a record. Reds never go in. Running it twice on the same file creates nothing the
+    /// second time — a code that already exists, or a nameless record that is already there, is
+    /// skipped instead of duplicated.
+    /// </summary>
+    public async Task<ImportResult> ImportAsync(Stream stream, bool includeYellow = true,
+        IReadOnlyCollection<string>? skipCodes = null, CancellationToken cancellationToken = default)
+    {
+        var (preview, rows) = await BuildAsync(stream, cancellationToken);
+
+        var skip = new HashSet<string>(skipCodes ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var skippedRed = rows.Count(row => row.Item.Status == Red);
+        var skippedYellow = includeYellow ? 0 : rows.Count(row => row.Item.Status == Yellow);
+
+        var wanted = rows
+            .Where(row => row.Item.Status == Green || (includeYellow && row.Item.Status == Yellow))
+            .Where(row => row.Item.Code is null || !skip.Contains(row.Item.Code))
+            .ToList();
+
+        var existingCodes = await ExistingCodesAsync(cancellationToken);
+        // The pairs that already exist today, so a codeless row is not created twice across runs.
+        // Rows created *during* this run are not added to this set on purpose: thirty identical
+        // rows in one file are thirty units, not thirty duplicates.
+        var existingPairs = await ExistingPairsAsync(cancellationToken);
+
+        if (wanted.Count == 0)
+            return new ImportResult(0, 0, 0, skippedRed, skippedYellow, 0, includeYellow);
+
+        var createdSheets = 0;
+        var createdGroups = 0;
+        var createdItems = 0;
+        var skippedExisting = 0;
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        var roots = await _context.Items.IgnoreQueryFilters().Where(item => item.ParentId == null)
+            .ToListAsync(cancellationToken);
+        var children = await _context.Items.IgnoreQueryFilters().Where(item => item.ParentId != null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var sheet in wanted.GroupBy(row => row.Sheet, StringComparer.Ordinal))
+        {
+            var root = roots.FirstOrDefault(item => Same(item.Label, sheet.Key));
+            if (root is null)
+            {
+                root = NewItem(sheet.Key, parentId: null);
+                _context.Items.Add(root);
+                await _context.SaveChangesAsync(cancellationToken); // the id is needed by its children
+                roots.Add(root);
+                createdSheets++;
+            }
+
+            foreach (var group in sheet.GroupBy(row => row.Group, StringComparer.Ordinal))
+            {
+                var parent = children.FirstOrDefault(item => item.ParentId == root.Id && Same(item.Label, group.Key));
+                if (parent is null)
+                {
+                    parent = NewItem(group.Key, root.Id);
+                    _context.Items.Add(parent);
+                    await _context.SaveChangesAsync(cancellationToken);
+                    children.Add(parent);
+                    createdGroups++;
+                }
+
+                foreach (var (_, _, item) in group)
+                {
+                    if (item.Code is not null && existingCodes.Contains(item.Code))
+                    {
+                        skippedExisting++;
+                        continue;
+                    }
+
+                    var pair = (parent.Id, Normalize(item.Label));
+                    if (item.Code is null && existingPairs.Contains(pair))
+                    {
+                        skippedExisting++;
+                        continue;
+                    }
+
+                    _context.Items.Add(NewItem(item.Label, parent.Id, item));
+                    createdItems++;
+                    if (item.Code is not null) existingCodes.Add(item.Code);
+                }
+
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        await _audit.WriteAsync("ItemImport", "Item", null, cancellationToken: cancellationToken,
+            afterJson: JsonSerializer.Serialize(new
+            {
+                rows = preview.Summary.Rows,
+                createdSheets, createdGroups, createdItems,
+                skippedRed, skippedYellow, skippedExisting,
+                includeYellow
+            }));
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return new ImportResult(createdSheets, createdGroups, createdItems, skippedRed, skippedYellow, skippedExisting, includeYellow);
+    }
+
+    private static Item NewItem(string label, int? parentId, ImportItem? source = null)
+    {
+        var attributes = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (source is not null)
+        {
+            void Put(string key, string? value)
+            {
+                if (!string.IsNullOrWhiteSpace(value)) attributes[key] = value;
+            }
+
+            Put("Description", source.Label);
+            Put("Brand", source.Brand);
+            Put("Code", source.Code);
+            Put("Reference", source.Reference);
+            Put("Serial", source.Serial);
+            Put("Notes", source.Notes);
+            Put("Dimensions", source.Dimensions);
+        }
+
+        return new Item
+        {
+            Label = label,
+            Icon = string.Empty,
+            ParentId = parentId,
+            IsActive = true,
+            Attributes = attributes.Count == 0 ? "{}" : JsonSerializer.Serialize(attributes)
+        };
+    }
+
+    private static bool Same(string? left, string? right) =>
+        string.Equals(Normalize(left), Normalize(right), StringComparison.Ordinal);
+
+    /// <summary>Every (parent, name) already in the tree, so a nameless record is not created twice.</summary>
+    private async Task<HashSet<(int?, string)>> ExistingPairsAsync(CancellationToken cancellationToken)
+    {
+        var rows = await _context.Items.IgnoreQueryFilters()
+            .Select(item => new { item.ParentId, item.Label })
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => (row.ParentId, Normalize(row.Label))).ToHashSet();
     }
 
     private ImportSheet BuildSheet(string name, IEnumerable<RawRow> rows, HashSet<string> brands,
