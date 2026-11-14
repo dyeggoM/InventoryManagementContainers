@@ -76,14 +76,14 @@ open, and the whole point is lost.
 ```bash
 # API
 dotnet build IMCAPI/IMCAPI.csproj
-dotnet test Testing/Testing.csproj          # 101 tests: matrix, auth abuse, cycles, attachments,
+dotnet test Testing/Testing.csproj          # 134 tests: matrix, auth abuse, cycles, attachments,
                                             # impersonation, rate limiting, the security regressions
 dotnet run --project IMCAPI                 # needs AUTH_JWT_KEY/AUTH_JWT_ISSUER
                                             # and AUTH_BOOTSTRAP_EMAIL/AUTH_BOOTSTRAP_PASSWORD
 
 # Frontend
 cd imcui && npm ci
-npm run test        # vitest
+npm run test        # vitest, 207 tests
 npm run typecheck   # vue-tsc
 npm run lint:check
 npm run build
