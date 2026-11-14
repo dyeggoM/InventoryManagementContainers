@@ -143,7 +143,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 
 ## Coverage & caveats
 
-- 1715 in-project call edges of 13265 call sites; the rest are framework/dynamic.
+- 1715 in-project call edges of 13268 call sites; the rest are framework/dynamic.
 - Purposes come from doc comments only; blank means none. Absence of a symbol is not proof it does not exist (dynamic dispatch, generated code and unsupported languages are not indexed).
 
 ## Regenerate

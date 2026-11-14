@@ -152,6 +152,11 @@ public sealed class ItemImportWriteTests
 
         Assert.That(rows, Has.Count.EqualTo(1), "one summary row, not one per record");
         Assert.That(rows[0].AfterJson, Does.Contain("\"createdItems\":6"));
+
+        // The interceptor writes at the persistence layer, so each created node also leaves its own
+        // Create row: the summary says what the import was, the per-entity rows say what it made.
+        var created = await context.AuditLogs.CountAsync(row => row.Action == "Create" && row.Entity == "Item");
+        Assert.That(created, Is.EqualTo(6 + 4 + 2), "six records, four groups and two sheets were created");
     }
 
     [Test]
