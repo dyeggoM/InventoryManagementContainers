@@ -15,9 +15,13 @@ What is deliberately not built yet, in the order it is worth doing.
 - **Las filas de `ItemsArchive` no caducan (tamaño, no antigüedad)**: no hay límite por número de filas
   ni por tamaño de `AttachmentsJson`. Si el volumen crece más rápido que el calendario, la purga por
   fecha no basta.
-- **Restaurar no devuelve los adjuntos**: los ficheros se borran del disco en el `DELETE`, así que un
-  registro restaurado vuelve sin ellos. Si se quiere recuperación completa, hay que pasar a papelera
-  de ficheros en vez de borrado.
+- [x] **Restaurar no devuelve los adjuntos** — `done` (2026-11-11). El `DELETE` ya no borra: mueve los
+  ficheros a `media/trash` (espejo del árbol vivo, así las rutas guardadas en `AttachmentsJson` se
+  reutilizan tal cual). `PATCH /api/item/{id}/activate` devuelve los ficheros y **recrea** las filas de
+  adjunto desde el snapshot del ledger; la respuesta mantiene su forma y añade
+  `X-Restored-Attachments` / `X-Missing-Attachments`. La purga es el único sitio que destruye bytes.
+  Un registro archivado antes de este cambio no tiene nada en la papelera: se restaura sin adjuntos y
+  lo dice, que es la respuesta honesta.
 - [x] **`GET /api/item/archive` hacía `COUNT(*)` por página** — `done` (2026-11-11). El total se
   responde una vez, en la página 1; las siguientes devuelven `total: null` y un `hasMore` calculado
   pidiendo una fila de más. Igual en `GET /api/audit`. El índice por `Label` (migración 2026-11-11)

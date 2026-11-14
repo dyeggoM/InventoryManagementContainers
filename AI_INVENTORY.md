@@ -42,6 +42,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - **Testing/ApiTests.cs** — 1 file, 37 symbols, 15 KB → [`inventory/Testing-ApiTests-cs.md`](inventory/Testing-ApiTests-cs.md) · `ApiTests`, `StartApi`, `StopApi`, `Unique`, `PostItem`
 - **Testing/ArchiveRetentionTests.cs** — 1 file, 9 symbols, 5 KB → [`inventory/Testing-ArchiveRetentionTests-cs.md`](inventory/Testing-ArchiveRetentionTests-cs.md) · `ArchiveRetentionTests`, `Start`, `Stop`, `ArchivePage_CountsOnceAndEveryPageSaysWhetherAnotherExists`, `Purge_RemovesOnlyTheRowsOlderThanTheCutoff_AndIsAudited`
 - **Testing/AttachmentStorageTests.cs** — 1 file, 16 symbols, 5 KB → [`inventory/Testing-AttachmentStorageTests-cs.md`](inventory/Testing-AttachmentStorageTests-cs.md) · `AttachmentStorageTests`, `TempEnvironment`, `ContentRootPath`, `ContentRootFileProvider`, `EnvironmentName`
+- **Testing/AttachmentTrashTests.cs** — 1 file, 13 symbols, 9 KB → [`inventory/Testing-AttachmentTrashTests-cs.md`](inventory/Testing-AttachmentTrashTests-cs.md) · `AttachmentTrashTests`, `Start`, `Stop`, `Delete_MovesTheFileToTheTrashAndKeepsItInTheLedger`, `Restore_BringsTheFileAndTheRowBack`
 - **Testing/AuditTests.cs** — 1 file, 17 symbols, 6 KB → [`inventory/Testing-AuditTests-cs.md`](inventory/Testing-AuditTests-cs.md) · `AuditTests`, `Start`, `Stop`, `Interceptor_RecordsBeforeAndAfterOnUpdate`, `Interceptor_RecordsDeletedEntityBeforeValues`
 - **Testing/AuthMatrixTests.cs** — 1 file, 17 symbols, 7 KB → [`inventory/Testing-AuthMatrixTests-cs.md`](inventory/Testing-AuthMatrixTests-cs.md) · `AuthMatrixTests`, `Start`, `Stop`, `LoginAs`, `Request`
 - **Testing/AuthTests.cs** — 1 file, 13 symbols, 4 KB → [`inventory/Testing-AuthTests-cs.md`](inventory/Testing-AuthTests-cs.md) · `AuthTests`, `Start`, `Stop`, `Login_WithValidCredentials_ReturnsAccessTokenAndRefreshCookie`, `Refresh_RotatesCookieAndPersistsOnlyTokenHashes`
@@ -120,6 +121,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - `imcui/src/services/audit.ts` → `imcui/src` — 5 calls
 - `imcui/src/services/items.ts` → `imcui/src` — 5 calls
 - `imcui/src/components/dashboard/ImportPanel.vue` → `imcui/src` — 4 calls
+- `Testing/AttachmentTrashTests.cs` → `IMCAPI/Services` — 4 calls
 - `Testing/BaseRepositoryTests.cs` → `IMCAPI/DB` — 3 calls
 - `Testing/ItemArchiveTests.cs` → `Testing` — 3 calls
 - `imcui/src/components/dashboard/AuditPanel.vue` → `imcui/src` — 3 calls
@@ -135,6 +137,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - `imcui/src/components/dashboard/ArchivePanel.vue` → `imcui/src` — 2 calls
 - `imcui/src/services/session.ts` → `imcui/src` — 2 calls
 - `Testing/ApiTests.cs` → `Testing` — 1 call
+- `Testing/AttachmentTrashTests.cs` → `Testing` — 1 call
 - `Testing/AuthTests.cs` → `IMCAPI/DB` — 1 call
 - `imcui/src/components/dashboard/ArchivePanel.spec.ts` → `imcui/src` — 1 call
 - `imcui/src/components/dashboard/AuditPanel.spec.ts` → `imcui/src` — 1 call
