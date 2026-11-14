@@ -16,9 +16,11 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - Delete from an overflow menu that names what it deletes, with confirmation. A record with children
   is refused (`409` with a message that says how many), so the tree never loses a branch by accident;
   a record without them is moved to the archive instead of disappearing.
-- **The import preview reads a spreadsheet** (`POST /api/import/preview`, admin): it answers the tree
-  the file describes with every row green, yellow or red and the reason, and writes nothing. The
-  screen that shows it is not built yet, so today it is an API a superadmin/admin calls with a file.
+- **Stock can be imported from a spreadsheet** (`POST /api/import/preview` to look, `POST /api/import`
+  to write; admin): the file's sheets become the top of the tree, `SUB CATEGORIA` the level below and
+  each row a record. The *Importar desde Excel* screen renders that tree in three colours — green
+  imports, yellow imports but is worth a look, red never goes in — and lets the user untick yellow rows
+  before writing. A second run of the same file creates nothing.
 - **A restore gives the files back.** Deleting a record moves its attachments to `media/trash`; a
   restore returns them, and only a purge that passes the retention age destroys the bytes.
 - **The archive has a retention switch** (`POST /api/item/archive/purge`, superadmin): rows older than

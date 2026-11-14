@@ -55,6 +55,43 @@ public sealed class ImportController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Writes the file into the tree. Green rows always go in; yellow ones do too unless the caller
+    /// says otherwise, and red ones never do. One transaction, and a second run of the same file
+    /// creates nothing.
+    /// </summary>
+    [HttpPost]
+    [RequestSizeLimit(20 * 1024 * 1024)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Import([FromForm] IFormFile? file, [FromForm] bool includeYellow = true,
+        [FromForm] List<string>? skipCodes = null, CancellationToken cancellationToken = default)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(Problem("No file", "Attach the spreadsheet in the `file` field."));
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!AcceptedExtensions.Contains(extension))
+            return BadRequest(Problem("Unsupported file",
+                $"The importer reads {string.Join(" or ", AcceptedExtensions)}; this is {extension}."));
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var result = await _importer.ImportAsync(stream, includeYellow, skipCodes, cancellationToken);
+            _log.LogInformation("Imported {Items} records from {FileName} ({Sheets} sheets, {Groups} groups)",
+                result.CreatedItems, file.FileName, result.CreatedSheets, result.CreatedGroups);
+            return Ok(result);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The transaction is rolled back, so a failure leaves the tree exactly as it was.
+            _log.LogError(exception, "The import of {FileName} failed and was rolled back", file.FileName);
+            return BadRequest(Problem("The import failed",
+                "Nothing was written: the file could not be imported. The log has the reason."));
+        }
+    }
+
     private static ProblemDetails Problem(string title, string detail) => new()
     {
         Status = StatusCodes.Status400BadRequest,

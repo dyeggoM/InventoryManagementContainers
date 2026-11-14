@@ -208,10 +208,13 @@ en disco) y los cuatro bajos (**B-1..B-4**) en un solo pase.
   con `ExcelDataReader` (`Services/ItemImporter.cs`) y devuelve el árbol que el fichero describe con
   cada fila en verde, amarillo o rojo y el motivo. **No escribe nada.** Medido sobre el fichero real
   de 578 filas: 361 verdes, 94 amarillas, 105 rojas, 455 importables.
-  Falta: `POST /api/import` (escritura en una transacción, excluyendo rojas, idempotente por código),
-  la pantalla del dashboard y el patrón CSV. Decidido con Diego (2026-11-13): una fila = un elemento
-  físico (los repetidos son unidades, no duplicados), y `Attributes.Code` es opcional pero **único**
-  cuando viene.
+  Hecho también: `POST /api/import` (una transacción, rojas excluidas, idempotente por código) y la
+  pantalla *Importar desde Excel* con el árbol coloreado, filtros y desmarcado de amarillos.
+  Decidido con Diego (2026-11-13): una fila = un elemento físico (los repetidos son unidades, no
+  duplicados), y `Attributes.Code` es opcional pero **único** cuando viene.
+  Falta: el patrón CSV (hoy solo `.xlsx`/`.xls`) y una decisión sobre el acceso — la ruta `/dashboard`
+  está restringida a `superadmin` (`router/guards.ts`), así que un `admin` no llega a la pantalla
+  aunque el endpoint lo permita; abrirla es un cambio de matriz de seguridad, no de UI.
 
 Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case; the
 next step is a CSV/Excel template the user fills in (parent, children, attributes per row, one column
