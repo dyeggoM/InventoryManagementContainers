@@ -6,7 +6,29 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `feat/spreadsheet-import`
+## Pending — `feat/spreadsheet-import` · second round
+
+**CSV, besides Excel.** Both import calls read `.csv`: the delimiter is detected between comma,
+semicolon and tab (a Spanish-locale Excel export writes `;`), fields follow RFC 4180 including quoted
+values with newlines, a BOM is stripped, and the file name becomes the root of the tree.
+
+**An admin can reach the dashboard.** `/dashboard` was superadmin-only, so the import screen — an
+admin endpoint — was unreachable for an admin. The route takes `ADMIN_ROLES` and each panel hides
+itself according to the policy of the endpoint behind it: users, audit and archive stay
+superadmin-only; import and impersonation are for admins too.
+
+**The tree and the form each keep their own scroll.** With a long tree the page was the scrollbar, so
+the form stayed at the top of the document and picking a record at row 200 left you looking at
+nothing. Both panes now have a measured height and scroll on their own, and a new selection returns
+the form to its top.
+
+**A README that gets somebody from a clone to a running app**: requirements, quick start, every
+configuration key with its environment variable and default, how to run each half (and both on the
+LAN), build and test commands, database and file locations, the import format, the documentation map,
+the security properties and a troubleshooting table.
+
+
+## #31 and #30 — Import: look at a spreadsheet, then write it · merged 2026-11-13
 
 **A spreadsheet can be read before it is imported.** `POST /api/import/preview` (admin) reads an
 `.xlsx`/`.xls` and answers the tree it describes — sheet, subcategory, record — with every row marked
@@ -23,16 +45,6 @@ ones never. Running the same file twice creates nothing the second time: a code 
 or a nameless record that is already there, is skipped instead of duplicated. One `ItemImport` audit
 row records the counts.
 
-**An admin can reach the dashboard now.** The route was superadmin-only, so the import screen — an
-admin endpoint — was unreachable for an admin. `/dashboard` takes `ADMIN_ROLES`, and each panel hides
-itself according to the policy of the endpoint behind it: *Usuarios*, *Auditoría* and *Archivo* stay
-superadmin-only, *Importar desde Excel* and *Suplantación* are for admins too. The page opens on a tab
-the account can actually see instead of an empty card.
-
-**CSV, besides Excel.** Both calls read `.csv` as well as `.xlsx`/`.xls`: delimiter detected between
-comma, semicolon and tab (a Spanish-locale Excel export writes `;`), RFC 4180 quoting including fields
-with newlines, BOM stripped, and the file name becomes the root of the tree.
-
 **And the dashboard shows it.** The *Importar desde Excel* screen takes the file, renders the tree with
 its three colours, lets you filter to the doubtful rows and untick the yellow ones, and only then writes
 — with the counts of what went in, what was skipped, and why. Below `sm` it is the card layout.
@@ -40,13 +52,25 @@ its three colours, lets you filter to the doubtful rows and untick the yellow on
 Measured on the owner's file (560 records + 18 section titles across five sheets): 350 green, 105 yellow,
 105 red — the reds being rows that carry a code but no name.
 
-## Pending — `chore/mit-license`
+## #29 — Restoring a record gives its files back · merged 2026-11-12
+
+**Restoring a record brings its files back.** Deleting used to unlink the attachments, so an archived
+record kept the *names* of files nobody could return. Deletion now moves them to `media/trash`, mirroring
+the live tree, and `PATCH /api/item/{id}/activate` moves them back and re-creates the attachment rows
+from the ledger snapshot — so a restored record has its photos again, byte for byte. The purge is the
+only place that now destroys bytes. Headers `X-Restored-Attachments` / `X-Missing-Attachments` say how
+many came back; an archive written before this change restores with none, which is the honest answer
+rather than a 404 nobody explains.
+
+**The file route no longer trusts the path it reads.** `GET /api/attachment/{id}/file` resolved
+`FilePath` straight onto the disk; it now goes through the same confined resolver the trash uses, so a
+
+## #28 — The project is MIT licensed · merged 2026-11-12
 
 **The project is MIT licensed.** `LICENSE` carries the canonical text and AGENTS.md says so, so
 "can I use this?" now has a written answer instead of a guess.
 
-## Pending — `docs/security-gate`
-## Pending — `feat/archive-retention-and-mobile-dashboard`
+## #27 — Archive retention, paging without a per-page COUNT, and the dashboard on a phone · merged 2026-11-11
 
 **The archive can expire, when somebody says so.** `POST /api/item/archive/purge` (superadmin) removes
 ledger rows older than the retention age, which comes from `olderThanDays` or from
@@ -68,6 +92,7 @@ stacked full width, pagination at the bottom — and keep their tables at `sm` a
 
 Verified: `dotnet test` **105 passed**, `npm run test` **173 passed** (19 files), `npm run typecheck`
 and `npm run lint:check` clean.
+
 
 ## #26 — The commit gate, documented · merged 2026-11-11
 
@@ -120,6 +145,12 @@ created with the payload the page sends appears in `GET /api/constants/group/Bra
 Configuration tree under the right parent. Dark mode was checked in a real browser at 780×437: the
 inventory tree, the dashboard tables (no white panel left), the file preview modal and the login card
 all render dark with readable text, and switching back to *Sistema* returns the body to the OS mode.
+
+## #24 — The LAN script stops handing out a password that does not work
+
+`scripts/dev-lan.sh` printed the bootstrap password as if it were the account's login. On any database
+that already has a superadmin the seeder ignores that value, so the printed password answered `401`.
+It now names the account and says the value only applies to an empty database.
 
 ## #23 — Impersonation by role, the security round and the archive screen · merged 2026-11-11
 
