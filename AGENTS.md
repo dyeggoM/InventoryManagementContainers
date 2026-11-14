@@ -145,6 +145,14 @@ not.
 - **When you are assigned something**, before you touch a file: `ledger request "<the assignment,
   verbatim>"`. A `pre_tool_call` hook blocks `write_file`, `patch` and `git commit` when you have no
   open task, and the block message tells you the command.
+- **When you deliver**, `ledger result "<what landed>" --task T#### --evidence "<commit, command,
+  path:line>"`. A `result` without evidence is not a result, and it is what closes the task: state is
+  derived from the events, never typed in by hand.
+- **A dead end gets its own event**: `ledger failure "<what did not work and why it will not be tried
+  again>"`. That line is the most valuable one next session.
+- **A choice that constrains the next step**: `ledger decision "<what>" --why "<why>"`.
+- `ledger status`, `ledger search "<term>"` and `ledger team` (every agent's open work for this
+  scope) answer the rest without reading the log.
 - **When you deliver:** `ledger result --task T0001 "<what you delivered>" --evidence "<command,
   test, commit or path>"`. A result with no evidence is a claim, not a record.
 - **When you hit a dead end:** `ledger failure "<what did not work>" --evidence "<the error>"` — the
