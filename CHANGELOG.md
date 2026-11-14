@@ -15,8 +15,20 @@ description too short, a corrected subcategory spelling) or red (not importable:
 code repeated in the file). It writes **nothing**: the import is a separate decision.
 `ExcelDataReader` is the only new dependency, and it is used to read.
 
-Measured on the owner's file (578 rows across five sheets): 361 green, 94 yellow, 105 red — the reds
-being rows that carry a code but no name.
+**The import writes, once you say so.** `POST /api/import` (admin) turns the tree the preview described
+into records — sheet → root, SUB CATEGORIA → the level under it, row → a record carrying `Brand`,
+`Code`, `Reference`, `Serial`, `Notes` and `Dimensions` in its attributes — in a single transaction.
+Green rows always go in, yellow ones unless you untick them (their code travels in `skipCodes`), red
+ones never. Running the same file twice creates nothing the second time: a code already in the tree,
+or a nameless record that is already there, is skipped instead of duplicated. One `ItemImport` audit
+row records the counts.
+
+**And the dashboard shows it.** The *Importar desde Excel* screen takes the file, renders the tree with
+its three colours, lets you filter to the doubtful rows and untick the yellow ones, and only then writes
+— with the counts of what went in, what was skipped, and why. Below `sm` it is the card layout.
+
+Measured on the owner's file (560 records + 18 section titles across five sheets): 350 green, 105 yellow,
+105 red — the reds being rows that carry a code but no name.
 
 ## Pending — `chore/mit-license`
 

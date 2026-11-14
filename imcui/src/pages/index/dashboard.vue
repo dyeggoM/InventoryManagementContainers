@@ -27,6 +27,8 @@
         <q-tab name="users" icon="group" label="Usuarios" />
         <q-tab name="audit" icon="history" label="Auditoría" />
         <q-tab name="archive" icon="restore_from_trash" label="Archivo" />
+        <!-- The import writes the tree, so it is an admin screen: an operador and a lector read. -->
+        <q-tab v-if="canImport" name="import" icon="upload_file" label="Importar desde Excel" />
         <q-tab name="impersonation" icon="switch_account" label="Suplantación" />
       </q-tabs>
 
@@ -42,6 +44,9 @@
         <q-tab-panel name="archive" class="q-pa-md">
           <archive-panel />
         </q-tab-panel>
+        <q-tab-panel v-if="canImport" name="import" class="q-pa-md">
+          <import-panel />
+        </q-tab-panel>
         <q-tab-panel name="impersonation" class="q-pa-md">
           <impersonation-panel />
         </q-tab-panel>
@@ -51,15 +56,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import UsersPanel from '../../components/dashboard/UsersPanel.vue';
 import AuditPanel from '../../components/dashboard/AuditPanel.vue';
 import ArchivePanel from '../../components/dashboard/ArchivePanel.vue';
+import ImportPanel from '../../components/dashboard/ImportPanel.vue';
 import ImpersonationPanel from '../../components/dashboard/ImpersonationPanel.vue';
 import { useAuthStore } from '../../stores/auth-store';
 
 const auth = useAuthStore();
 const tab = ref('users');
+
+/** Reading a spreadsheet into the tree is an admin write: superadmin and admin, never a lector. */
+const canImport = computed(() => auth.isAdmin);
 </script>
 
 <style scoped>
