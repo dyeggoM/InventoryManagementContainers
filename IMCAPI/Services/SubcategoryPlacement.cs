@@ -15,7 +15,9 @@ public sealed class SubcategoryPlacement
     {
         ["GTAR COMBO"] = "GTR COMBO",
         ["GTR-COMBO"] = "GTR COMBO",
-        ["TECALDO SENCILLA"] = "TECLADO SENCILLA",
+        // The file writes TECALDO for TECLADO, and the configuration's label is the full one: an alias
+        // that points at a name Constants does not have resolves to nothing and lands in Other.
+        ["TECALDO SENCILLA"] = "BASE TECLADO SENCILLA",
         ["MICROFONOS"] = "MICROFONO",
     };
 
@@ -45,9 +47,37 @@ public sealed class SubcategoryPlacement
     /// so `GTR-COMBO` and `GTR COMBO` are the same subcategory and `BASE  TECLADO` is `BASE TECLADO`.
     /// The label itself is never rewritten — only what the comparison looks at.
     /// </summary>
-    private static string MatchKey(string? value) =>
-        Regex.Replace(Clean(value).Replace('-', ' ').Replace('_', ' ').Replace('.', ' ').Replace('/', ' '),
+    /// <summary>
+    /// The letters that carry a diacritic in the names this workshop writes. The API runs with
+    /// `InvariantGlobalization`, where `string.Normalize` cannot fold anything — measured: the same
+    /// method folds in the test project and silently returns its input here — so the fold is a table,
+    /// not a runtime call. Add a pair when a name needs one.
+    /// </summary>
+    private static readonly Dictionary<char, char> Diacritics = new()
+    {
+        ['Á'] = 'A', ['À'] = 'A', ['Ä'] = 'A', ['Â'] = 'A',
+        ['É'] = 'E', ['È'] = 'E', ['Ë'] = 'E', ['Ê'] = 'E',
+        ['Í'] = 'I', ['Ì'] = 'I', ['Ï'] = 'I', ['Î'] = 'I',
+        ['Ó'] = 'O', ['Ò'] = 'O', ['Ö'] = 'O', ['Ô'] = 'O',
+        ['Ú'] = 'U', ['Ù'] = 'U', ['Ü'] = 'U', ['Û'] = 'U',
+        ['Ñ'] = 'N', ['Ç'] = 'C', ['Ý'] = 'Y',
+    };
+
+    /// <summary>
+    /// The key two names are compared by: case, spacing, punctuation and accents do not distinguish
+    /// them here, so `GTR-COMBO` and `GTR COMBO` are the same subcategory, and so are `SILLA BATERÍA`
+    /// and `SILLA BATERIA`. The label itself is never rewritten — only what the comparison looks at.
+    /// </summary>
+    private static string MatchKey(string? value)
+    {
+        var folded = Clean(value);
+        var plain = new System.Text.StringBuilder(folded.Length);
+        foreach (var ch in folded) plain.Append(Diacritics.TryGetValue(ch, out var bare) ? bare : ch);
+
+        return Regex.Replace(plain.ToString()
+                .Replace('-', ' ').Replace('_', ' ').Replace('.', ' ').Replace('/', ' '),
             @"\s+", " ").Trim();
+    }
 
     /// <summary>
     /// Reads the configuration so the importer can put a row where the application would have put it:
