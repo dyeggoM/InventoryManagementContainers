@@ -37,6 +37,24 @@ describe('api transport', () => {
     expect(second?.Authorization).toBe('Bearer second');
   });
 
+  it('sends the session cookie on every call, so /api/auth routes can prove who is calling', async () => {
+    // stop-impersonation hands the actor's own token back only when the actor's refresh cookie
+    // travels with the borrowed bearer: the cookie is the proof, and a client that omits it gets a
+    // 403 and no ImpersonateEnd row.
+    const requests: RequestInit[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        requests.push(init ?? {});
+        return Promise.resolve(jsonResponse({ ok: true }));
+      }),
+    );
+
+    await api.post('/auth/stop-impersonation');
+
+    expect(requests[0]?.credentials).toBe('include');
+  });
+
   it('marks a 404 as a route the API has not built yet', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse({ title: 'Not Found' }, 404))));
 
