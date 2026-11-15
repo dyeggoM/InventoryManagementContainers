@@ -18,16 +18,19 @@ public class ItemController : BaseController<Item>
     private readonly int _maxDepth;
     private readonly AuditLogWriter _audit;
     private readonly IConfiguration _configuration;
+    private readonly ArchiveRetention _retention;
     private readonly ILogger<ItemController> _log;
 
     public ItemController(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments,
-        ApplicationContext context, IConfiguration configuration, AuditLogWriter audit, ILogger<ItemController> log)
+        ApplicationContext context, IConfiguration configuration, AuditLogWriter audit,
+        ArchiveRetention retention, ILogger<ItemController> log)
         : base(repository, logger)
     {
         _attachments = attachments;
         _context = context;
         _audit = audit;
         _configuration = configuration;
+        _retention = retention;
         _log = log;
         var environmentMaxDepth = Environment.GetEnvironmentVariable("ITEMS_MAX_DEPTH");
         _maxDepth = int.TryParse(environmentMaxDepth, out var parsedEnvironmentDepth) && parsedEnvironmentDepth > 0
@@ -301,44 +304,26 @@ public class ItemController : BaseController<Item>
     [Authorize(Policy = "RequiereSuperadmin")]
     public async Task<IActionResult> PurgeArchive([FromQuery] int? olderThanDays, CancellationToken cancellationToken = default)
     {
-        int configured;
-        if (!int.TryParse(Environment.GetEnvironmentVariable("ARCHIVE_RETENTION_DAYS"), out configured) || configured < 0)
-        {
-            configured = int.TryParse(_configuration["Archive:Retention:Days"], out var days) ? days : 0;
-        }
-        var age = olderThanDays ?? configured;
+        // The age comes from the request, the environment, the configuration, and finally the
+        // default of one month — the resolution lives in ArchiveRetention so the daily sweep and this
+        // endpoint cannot disagree about it.
+        var age = ArchiveRetention.ResolveDays(olderThanDays, _configuration);
         if (age < 1)
         {
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
-                Title = "Archive retention is not configured",
-                Detail = "Pass olderThanDays, or set Archive:Retention:Days (ARCHIVE_RETENTION_DAYS)."
+                Title = "Archive retention is disabled",
+                Detail = "Pass olderThanDays, or set Archive:Retention:Days (ARCHIVE_RETENTION_DAYS) above zero."
             });
         }
 
         var cutoff = DateTime.UtcNow.AddDays(-age);
-        var expired = await _context.ItemArchives
-            .Where(row => row.DeletedAtUtc < cutoff)
-            .ToListAsync(cancellationToken);
-        // The files these rows were holding have nobody left to restore them: this is the one
-        // place where a purged archive also gives up its bytes.
-        var purgeFilePaths = expired
-            .SelectMany(row => ReadArchivedAttachments(row.AttachmentsJson))
-            .Select(attachment => attachment.FilePath)
-            .Where(filePath => !string.IsNullOrWhiteSpace(filePath))
-            .ToArray();
-        _context.ItemArchives.RemoveRange(expired);
-        await _context.SaveChangesAsync(cancellationToken);
-        _attachments.DeleteFromTrash(purgeFilePaths);
-        await _audit.WriteAsync("ArchivePurge", "ItemArchive", cutoff.ToString("O"), cancellationToken: cancellationToken,
-            afterJson: System.Text.Json.JsonSerializer.Serialize(new
-            {
-                deleted = expired.Count, cutoffUtc = cutoff, olderThanDays = age,
-                destroyedAttachments = purgeFilePaths.Length
-            }));
+        var actorId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
+        var result = await _retention.PurgeAsync(cutoff, age, actorId ?? "superadmin", cancellationToken);
 
-        return Ok(new { deleted = expired.Count, cutoffUtc = cutoff, olderThanDays = age });
+        return Ok(new { deleted = result.Deleted, cutoffUtc = result.CutoffUtc, olderThanDays = result.OlderThanDays });
     }
 
     [HttpPatch("{id:int}/activate")]
