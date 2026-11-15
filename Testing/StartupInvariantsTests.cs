@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using IMCAPI.DB;
@@ -102,6 +103,16 @@ public sealed class StartupInvariantsTests
             "the probe endpoint is anonymous, and the dev box is allowed to run with those settings");
     }
 
+    /// <summary>The bootstrap account this factory seeded, signed in on a client of its own.</summary>
+    private static async Task SignIn(HttpClient client)
+    {
+        var login = await client.PostAsJsonAsync("/api/auth/login",
+            new { email = "bootstrap@example.test", password = "AuthTest!Secure123" });
+        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var token = (await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("access_token").GetString();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    }
+
     [Test]
     public async Task TheLoginWindowAnswersBeforeAuthenticationDoes()
     {
@@ -145,6 +156,43 @@ public sealed class StartupInvariantsTests
     }
 
     [Test]
+    public async Task TwoFactoriesDoNotShareTheirDatabase_AndNeitherWritesToTheProcess()
+    {
+        // The factory used to hand its own connection string to the whole process, so a second host
+        // inherited the first one's database — "table AspNetRoles already exists" was the symptom.
+        using var first = new ApiFactory();
+        using var second = new ApiFactory();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection"), Is.Null,
+                "a factory must not decide where the next host connects");
+            Assert.That(Environment.GetEnvironmentVariable("Media__Root"), Is.Null,
+                "nor where it stores its files");
+        });
+
+        using var one = first.CreateClient();
+        using var two = second.CreateClient();
+        await SignIn(one);
+        await SignIn(two);
+
+        using var scope = first.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        context.Items.Add(new IMCAPI.DB.Entities.Item { Label = "only in the first" });
+        await context.SaveChangesAsync();
+
+        var mine = await one.GetFromJsonAsync<JsonElement>("/api/item");
+        var theirs = await two.GetFromJsonAsync<JsonElement>("/api/item");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mine.GetRawText(), Does.Contain("only in the first"));
+            Assert.That(theirs.GetRawText(), Does.Not.Contain("only in the first"),
+                "the second host reads its own database, not the first one's");
+        });
+    }
+
+    [Test]
     public async Task TheServiceLifetimesAreTheOnesTheApiDependsOn()
     {
         // The startup refactor moved every registration; a lifetime that silently changed would only
@@ -158,8 +206,9 @@ public sealed class StartupInvariantsTests
             Assert.That(provider.GetRequiredService<IMCAPI.Services.AttachmentStorage>(),
                 Is.SameAs(scope.ServiceProvider.GetRequiredService<IMCAPI.Services.AttachmentStorage>()),
                 "storage is a singleton: it owns the media root and its caches");
-            Assert.That(provider.GetRequiredService<ApplicationContext>(),
-                Is.SameAs(provider.GetRequiredService<ApplicationContext>()),
+            var contextOnce = provider.GetRequiredService<ApplicationContext>();
+            var contextAgain = provider.GetRequiredService<ApplicationContext>();
+            Assert.That(contextOnce, Is.SameAs(contextAgain),
                 "resolved twice inside one scope, the same context comes back");
             using var other = factory.Services.CreateScope();
             Assert.That(provider.GetRequiredService<IMCAPI.Services.ItemImporter>(),

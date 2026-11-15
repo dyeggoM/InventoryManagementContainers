@@ -98,6 +98,23 @@ phone on the workshop wifi — keeps working, verified both ways.
 `Salir` would have answered `403` and quietly skipped `ImpersonateEnd`. Every call carries the cookie
 now; the cookie is HttpOnly and scoped to `/api/auth`, so it only ever reaches the auth routes.
 
+## Pending — `chore/test-smells`
+
+**Changed — the test harness stops deciding where the next host connects.** `ApiFactory` handed its
+own connection string and media root to the process as environment variables, so every host built
+afterwards inherited them: a second factory pointed at the first one's database, and a host created
+for a different purpose migrated a file another test had already migrated ("table AspNetRoles already
+exists", seen for real while writing the startup tests). Each host now receives its settings with
+`UseSetting`, which is what a value read during startup needs — `ConfigureAppConfiguration` arrives
+too late for the JWT key the API reads in `Main`. A test builds two factories and checks the second
+one does not see the first one's data, and that the process environment stays untouched.
+
+**Changed — two tests named more than they checked.** `Preview_RequiresAnAdminAndASpreadsheet`
+asserted a missing credential and nothing about the role; it is now two tests, and the second one
+signs in as a `lector` and gets 403, which is the half the old name was claiming and nobody was
+checking. `TrashOperations_RefuseAPathThatEscapesTheMediaRoot` created a file and then skipped the
+test when the platform refuses a symlink, leaving the file behind; the symlink is attempted first now.
+
 ## Pending — `feat/spreadsheet-import`
 
 **A spreadsheet can be read before it is imported.** `POST /api/import/preview` (admin) reads an
