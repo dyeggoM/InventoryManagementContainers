@@ -117,11 +117,13 @@ Desktop.ini
 # CODE INVENTORY (generated)
 ############################################
 
-# The index database is local; AI_INVENTORY.md is committed so the diff shows what changed.
+# The index database is local. AI_INVENTORY.md is committed so the diff shows what changed — and so
+# is `inventory/`: in split mode the document is a router index, so committing it without its module
+# files leaves every link in it dead for whoever reads the repository (GitHub, a fresh clone, an
+# agent that has not indexed anything yet). The pre-commit hook refreshes both and stages both.
 .code-inventory/
 ai_inventory.json
 INVENTORY.md
-inventory/
 
 # The security scanner's artifacts are local: the ledger is a database, and the matrix it renders
 # carries the HEAD of the review that produced it, so committing it would dirty the tree on every

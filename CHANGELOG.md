@@ -6,6 +6,14 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `docs/inventory-slices`
+
+**Fixed — the module map is committed with the files it points at.** `AI_INVENTORY.md` is a router
+index into `inventory/<module>.md`, and those 74 module documents were in `.gitignore`: on GitHub,
+and in any fresh clone, every link in the map was dead. They are tracked from now on (676 KB) and the
+pre-commit hook, which already staged them, now has something to stage. Six orphan slices left behind
+by renamed files went with the regeneration; the index and the directory now agree exactly.
+
 ## Pending — `fix/impersonation-escalation`
 
 **Security — a borrowed token can no longer become the actor.** `POST /api/auth/stop-impersonation`
