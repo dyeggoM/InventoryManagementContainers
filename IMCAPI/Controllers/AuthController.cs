@@ -186,16 +186,20 @@ public sealed class AuthController : ControllerBase
         var profile = await _context.UserProfiles.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == actorId, cancellationToken);
         if (profile is { IsActive: false }) return Forbid();
 
-        var session = await _context.ImpersonationSessions.SingleOrDefaultAsync(
-            row => row.Id == sessionId && row.ActorUserId == actorId, cancellationToken);
-        if (session is null || session.EndedAtUtc is not null) return Forbid();
-        session.EndedAtUtc = DateTime.UtcNow;
-        session.EndedBy = "api";
-        await _context.SaveChangesAsync(cancellationToken);
+        // Closing the borrow is one conditional statement, not a read followed by a write: two stops
+        // arriving together (a double click, a retry, two tabs) both used to see it open, and both
+        // wrote an ImpersonateEnd for the same borrow. The database decides who closes it.
+        var ended = await _context.ImpersonationSessions
+            .Where(row => row.Id == sessionId && row.ActorUserId == actorId && row.EndedAtUtc == null)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => row.EndedAtUtc, DateTime.UtcNow)
+                .SetProperty(row => row.EndedBy, "api"), cancellationToken);
+        if (ended == 0) return Forbid();
+
         await _audit.WriteAsync("ImpersonateEnd", "UserRole", targetRole, actor.Id, actor.Email,
             cancellationToken, afterJson: System.Text.Json.JsonSerializer.Serialize(
-                new { role = targetRole, impersonation_session = session.Id }),
-            impersonationSessionId: session.Id);
+                new { role = targetRole, impersonation_session = sessionId }),
+            impersonationSessionId: sessionId);
 
         // The proof of being the actor: their own refresh cookie, alive and unrevoked. A holder of the
         // borrowed token alone has nothing to show here, which is the whole point.
