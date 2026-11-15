@@ -212,9 +212,11 @@ en disco) y los cuatro bajos (**B-1..B-4**) en un solo pase.
   pantalla *Importar desde Excel* con el árbol coloreado, filtros y desmarcado de amarillos.
   Decidido con Diego (2026-11-13): una fila = un elemento físico (los repetidos son unidades, no
   duplicados), y `Attributes.Code` es opcional pero **único** cuando viene.
-  Falta: el patrón CSV (hoy solo `.xlsx`/`.xls`) y una decisión sobre el acceso — la ruta `/dashboard`
-  está restringida a `superadmin` (`router/guards.ts`), así que un `admin` no llega a la pantalla
-  aunque el endpoint lo permita; abrirla es un cambio de matriz de seguridad, no de UI.
+  Cerrado también: el patrón CSV (coma, punto y coma o tabulador) y el acceso — `/dashboard` pasa a
+  `ADMIN_ROLES` (`router/guards.ts`) y cada panel se oculta según la política de su endpoint, así que
+  un `admin` ve *Importar* y *Suplantación* y no ve usuarios, auditoría ni archivo.
+  Primera importación real sobre la base de desarrollo: 455 registros, 90 grupos, 5 raíces; la segunda
+  pasada del mismo fichero creó 0.
 
 Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case; the
 next step is a CSV/Excel template the user fills in (parent, children, attributes per row, one column

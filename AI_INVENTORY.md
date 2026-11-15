@@ -48,7 +48,9 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - **Testing/AuthTests.cs** — 1 file, 13 symbols, 4 KB → [`inventory/Testing-AuthTests-cs.md`](inventory/Testing-AuthTests-cs.md) · `AuthTests`, `Start`, `Stop`, `Login_WithValidCredentials_ReturnsAccessTokenAndRefreshCookie`, `Refresh_RotatesCookieAndPersistsOnlyTokenHashes`
 - **Testing/BaseRepositoryTests.cs** — 1 file, 7 symbols, 4 KB → [`inventory/Testing-BaseRepositoryTests-cs.md`](inventory/Testing-BaseRepositoryTests-cs.md) · `BaseRepositoryTests`, `CreateContext`, `Setup`, `TearDown`, `GetAll_ReturnsAllActiveEntities`
 - **Testing/DevCorsOriginTests.cs** — 1 file, 4 symbols, 3 KB → [`inventory/Testing-DevCorsOriginTests-cs.md`](inventory/Testing-DevCorsOriginTests-cs.md) · `DevCorsOriginTests`, `Start`, `Stop`, `OnlyLocalOriginsAreReflected`
+- **Testing/CorsPreflightTests.cs** — 1 file, 5 symbols, 3 KB → [`inventory/Testing-CorsPreflightTests-cs.md`](inventory/Testing-CorsPreflightTests-cs.md) · `CorsPreflightTests`, `Start`, `Stop`, `EveryVerbTheApiRoutesUses_SurvivesThePreflight`, `ThePreflightAnswersTheOriginAndTheHeadersTheAppSends`
 - **Testing/ItemArchiveTests.cs** — 1 file, 12 symbols, 5 KB → [`inventory/Testing-ItemArchiveTests-cs.md`](inventory/Testing-ItemArchiveTests-cs.md) · `ItemArchiveTests`, `Start`, `Stop`, `Delete_ArchivesItemAndAttachmentsAndRemovesItFromReads`, `Archive_WithoutToken_ReturnsUnauthorized`
+- **Testing/ItemImportCsvTests.cs** — 1 file, 26 symbols, 12 KB → [`inventory/Testing-ItemImportCsvTests-cs.md`](inventory/Testing-ItemImportCsvTests-cs.md) · `ItemImportCsvTests`, `Start`, `Stop`, `Preview_JudgesTheCsvRowsExactlyLikeTheEquivalentWorkbook`, `Preview_SummarisesTheCsvTheSameWayAsTheWorkbookSheetItMirrors`
 - **Testing/ItemImportTests.cs** — 1 file, 18 symbols, 7 KB → [`inventory/Testing-ItemImportTests-cs.md`](inventory/Testing-ItemImportTests-cs.md) · `ItemImportTests`, `FixturePath`, `Start`, `Stop`, `Preview_SortsEveryRowIntoGreenYellowOrRed`
 - **Testing/ItemImportWriteTests.cs** — 1 file, 14 symbols, 6 KB → [`inventory/Testing-ItemImportWriteTests-cs.md`](inventory/Testing-ItemImportWriteTests-cs.md) · `ItemImportWriteTests`, `FixturePath`, `Start`, `Stop`, `Import_BuildsTheTreeTheFileDescribes`
 - **Testing/RateLimitTests.cs** — 1 file, 3 symbols, 3 KB → [`inventory/Testing-RateLimitTests-cs.md`](inventory/Testing-RateLimitTests-cs.md) · `RateLimitTests`, `Login_IsThrottled_AndAnswers429OnceTheWindowIsSpent`, `BusinessRoutes_AreOutsideTheLoginWindow`
@@ -124,12 +126,14 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - `Testing/AttachmentTrashTests.cs` → `IMCAPI/Services` — 4 calls
 - `imcui/src/components/dashboard/ImportPanel.vue` → `imcui/src` — 4 calls
 - `Testing/BaseRepositoryTests.cs` → `IMCAPI/DB` — 3 calls
+- `Testing/CorsPreflightTests.cs` → `Testing` — 3 calls
 - `Testing/ItemArchiveTests.cs` → `Testing` — 3 calls
 - `imcui/src/components/dashboard/AuditPanel.vue` → `imcui/src` — 3 calls
 - `imcui/src/services/api.ts` → `imcui/src` — 3 calls
 - `IMCAPI/DB` → `IMCAPI/Services` — 2 calls
 - `Testing/ArchiveRetentionTests.cs` → `Testing` — 2 calls
 - `Testing/AuthTests.cs` → `IMCAPI/Services` — 2 calls
+- `Testing/ItemImportCsvTests.cs` → `Testing` — 2 calls
 - `Testing/ItemImportTests.cs` → `Testing` — 2 calls
 - `Testing/ItemImportWriteTests.cs` → `Testing` — 2 calls
 - `Testing/RateLimitTests.cs` → `Testing` — 2 calls

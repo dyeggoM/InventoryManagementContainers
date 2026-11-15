@@ -137,3 +137,6 @@ SECURITY_MATRIX.md
 *.bak
 *.swp
 *~
+
+# Hermes work ledger (local; the central copy lives in ~/.hermes/ledgers)
+.ledger/

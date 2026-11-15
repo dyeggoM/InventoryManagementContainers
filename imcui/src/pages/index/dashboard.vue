@@ -4,7 +4,7 @@
       <q-icon name="dashboard" size="28px" color="primary" />
       <div class="column">
         <div class="text-h6">Dashboard</div>
-        <div class="text-caption text-grey-7">Solo superadministradores</div>
+        <div class="text-caption text-grey-7">{{ subtitle }}</div>
       </div>
     </div>
 
@@ -24,30 +24,31 @@
         active-color="primary"
         indicator-color="primary"
       >
-        <q-tab name="users" icon="group" label="Usuarios" />
-        <q-tab name="audit" icon="history" label="Auditoría" />
-        <q-tab name="archive" icon="restore_from_trash" label="Archivo" />
+        <!-- Each tab follows the policy of the endpoint behind it, not the route it sits on. -->
+        <q-tab v-if="auth.isSuperadmin" name="users" icon="group" label="Usuarios" />
+        <q-tab v-if="auth.isSuperadmin" name="audit" icon="history" label="Auditoría" />
+        <q-tab v-if="auth.isSuperadmin" name="archive" icon="restore_from_trash" label="Archivo" />
         <!-- The import writes the tree, so it is an admin screen: an operador and a lector read. -->
         <q-tab v-if="canImport" name="import" icon="upload_file" label="Importar desde Excel" />
-        <q-tab name="impersonation" icon="switch_account" label="Suplantación" />
+        <q-tab v-if="canImpersonate" name="impersonation" icon="switch_account" label="Suplantación" />
       </q-tabs>
 
       <q-separator />
 
       <q-tab-panels v-model="tab" animated>
-        <q-tab-panel name="users" class="q-pa-md">
+        <q-tab-panel v-if="auth.isSuperadmin" name="users" class="q-pa-md">
           <users-panel />
         </q-tab-panel>
-        <q-tab-panel name="audit" class="q-pa-md">
+        <q-tab-panel v-if="auth.isSuperadmin" name="audit" class="q-pa-md">
           <audit-panel />
         </q-tab-panel>
-        <q-tab-panel name="archive" class="q-pa-md">
+        <q-tab-panel v-if="auth.isSuperadmin" name="archive" class="q-pa-md">
           <archive-panel />
         </q-tab-panel>
         <q-tab-panel v-if="canImport" name="import" class="q-pa-md">
           <import-panel />
         </q-tab-panel>
-        <q-tab-panel name="impersonation" class="q-pa-md">
+        <q-tab-panel v-if="canImpersonate" name="impersonation" class="q-pa-md">
           <impersonation-panel />
         </q-tab-panel>
       </q-tab-panels>
@@ -65,10 +66,22 @@ import ImpersonationPanel from '../../components/dashboard/ImpersonationPanel.vu
 import { useAuthStore } from '../../stores/auth-store';
 
 const auth = useAuthStore();
-const tab = ref('users');
 
 /** Reading a spreadsheet into the tree is an admin write: superadmin and admin, never a lector. */
 const canImport = computed(() => auth.isAdmin);
+/** The endpoint takes any signed-in role and enforces the hierarchy itself; a lector cannot reach
+ *  this page at all, so the picker is for superadmin and admin. */
+const canImpersonate = computed(() => auth.isAdmin);
+
+/**
+ * Open on a tab this account can actually see: an admin has no users panel, and landing on a tab
+ * that is hidden would leave an empty card.
+ */
+const tab = ref(auth.isSuperadmin ? 'users' : 'import');
+
+const subtitle = computed(() =>
+  auth.isSuperadmin ? 'Superadministrador' : 'Administrador · importación y suplantación',
+);
 </script>
 
 <style scoped>
