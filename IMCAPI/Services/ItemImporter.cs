@@ -53,11 +53,22 @@ public sealed class ItemImporter
         int SkippedRed, int SkippedYellow, int SkippedExisting, bool IncludeYellow);
 
     public sealed record ImportItem(string Label, string? Code, string? Brand, string? Reference,
-        string? Serial, string? Notes, string? Dimensions, string Status, IReadOnlyList<string> Reasons, int Row);
+        string? Serial, string? Notes, string? Dimensions, string Status, IReadOnlyList<string> Reasons, int Row,
+        string? Source = null);
 
+    /// <summary>
+    /// A group is what the file calls a SUB CATEGORIA, named the way the configuration names it: that
+    /// label is what the import creates under the category, so the tree it builds is the tree the
+    /// application already has. <paramref name="Note"/> says when the file spelled it differently.
+    /// </summary>
     public sealed record ImportGroup(string Name, string Status, int Green, int Yellow, int Red,
-        IReadOnlyList<ImportItem> Items);
+        IReadOnlyList<ImportItem> Items, string? Note = null);
 
+    /// <summary>
+    /// One configuration category and what would land under it. The name is no longer the spreadsheet
+    /// sheet: a row's parent is the Category that owns its subcategory in `Constants`, so the same
+    /// subcategory written across two sheets ends up in one place.
+    /// </summary>
     public sealed record ImportSheet(string Name, string Status, int Green, int Yellow, int Red,
         int SkippedSections, IReadOnlyList<ImportGroup> Groups);
 
@@ -69,6 +80,16 @@ public sealed class ItemImporter
         IReadOnlyList<ImportIssue> Issues, IReadOnlyList<string> Normalizations);
 
     private sealed record RawRow(int Row, string Sheet, Dictionary<string, string> Cells);
+
+    /// <summary>Where a row would land: the category, the group under it, and why it landed there.</summary>
+    private sealed record Placement(string Category, string Group, string? Note, bool Certain);
+
+    /// <summary>A configuration subcategory, with the category that owns it.</summary>
+    private sealed record CategoryValue(string Category, string Label, string Normalized);
+
+    /// <summary>The configuration as the importer needs it: what exists, and where an orphan goes.</summary>
+    private sealed record CategoryMap(IReadOnlyDictionary<string, CategoryValue> Subs,
+        IReadOnlyDictionary<string, string> CategoryByLabel, string Fallback);
 
     /// <param name="format">
     /// Which reader to use. The caller knows the extension, so this is told, never guessed.
@@ -82,7 +103,7 @@ public sealed class ItemImporter
         (await BuildAsync(stream, format, sourceName, cancellationToken)).Preview;
 
     /// <summary>The preview and the rows it is made of: one parse serves both calls.</summary>
-    private async Task<(ImportPreview Preview, List<(string Sheet, string Group, ImportItem Item)> Rows)> BuildAsync(
+    private async Task<(ImportPreview Preview, List<(string Category, string Group, ImportItem Item)> Rows)> BuildAsync(
         Stream stream, ImportFormat format, string? sourceName, CancellationToken cancellationToken)
     {
         // .xls needs the code pages; .xlsx does not, but registering once is harmless and the
@@ -91,9 +112,13 @@ public sealed class ItemImporter
 
         var brands = await KnownBrandsAsync(cancellationToken);
         var takenCodes = await ExistingCodesAsync(cancellationToken);
+        // The configuration decides the tree: a row's parent is the Category that owns its
+        // subcategory, not the sheet it happens to sit on.
+        var categories = await KnownCategoriesAsync(cancellationToken);
 
-        var sheets = new List<ImportSheet>();
         var issues = new List<ImportIssue>();
+        var planned = new List<(Placement Placement, ImportItem Item)>();
+        var skippedSections = 0;
         var normalizations = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var seenCodes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -115,7 +140,10 @@ public sealed class ItemImporter
 
             var header = HeaderMap(rows[headerIndex].Cells);
             var data = rows.Skip(headerIndex + 1).Select(row => MapCells(row, header)).ToList();
-            sheets.Add(BuildSheet(sheetName, data, brands, takenCodes, seenCodes, duplicates, issues, normalizations));
+            var (built, sections) = BuildSheet(sheetName, data, categories, brands, takenCodes,
+                seenCodes, duplicates, issues, normalizations);
+            planned.AddRange(built);
+            skippedSections += sections;
         }
 
         foreach (var duplicate in duplicates)
@@ -127,42 +155,50 @@ public sealed class ItemImporter
         // importing the first and refusing the twin would leave the file half in.
         if (duplicates.Count > 0)
         {
-            sheets = sheets.Select(sheet => sheet with
-            {
-                Groups = sheet.Groups.Select(group => group with
+            planned = planned.Select(row => row.Item.Code is not null && duplicates.Contains(row.Item.Code)
+                ? row with
                 {
-                    Items = group.Items.Select(item => item.Code is not null && duplicates.Contains(item.Code)
-                        ? item with
-                        {
-                            Status = Red,
-                            Reasons = item.Reasons
-                                .Where(reason => !reason.Contains("ya apareció", StringComparison.Ordinal))
-                                .Append($"El código {item.Code} está repetido en el fichero: ninguna de sus filas se importa.")
-                                .ToList()
-                        }
-                        : item).ToList()
-                }).Select(group => group with
-                {
-                    Green = group.Items.Count(item => item.Status == Green),
-                    Yellow = group.Items.Count(item => item.Status == Yellow),
-                    Red = group.Items.Count(item => item.Status == Red)
-                }).ToList()
-            }).Select(sheet => sheet with
-            {
-                Green = sheet.Groups.Sum(group => group.Green),
-                Yellow = sheet.Groups.Sum(group => group.Yellow),
-                Red = sheet.Groups.Sum(group => group.Red),
-                Status = sheet.Groups.Any(group => group.Red > 0) ? Red
-                    : sheet.Groups.Any(group => group.Yellow > 0) ? Yellow : Green
-            }).ToList();
+                    Item = row.Item with
+                    {
+                        Status = Red,
+                        Reasons = row.Item.Reasons
+                            .Where(reason => !reason.Contains("ya apareció", StringComparison.Ordinal))
+                            .Append($"El código {row.Item.Code} está repetido en el fichero: ninguna de sus filas se importa.")
+                            .ToList()
+                    }
+                }
+                : row).ToList();
         }
 
-        var all = sheets.SelectMany(sheet => sheet.Groups).SelectMany(group => group.Items).ToList();
+        // Rows are grouped by destination, not by source: two sheets that write the same subcategory
+        // end up in one group under one category, which is the tree the application actually has.
+        var sheets = planned
+            .GroupBy(row => row.Placement.Category, StringComparer.Ordinal)
+            .Select(category => new ImportSheet(category.Key,
+                category.Any(row => row.Item.Status == Red) ? Red
+                    : category.Any(row => row.Item.Status == Yellow) ? Yellow : Green,
+                category.Count(row => row.Item.Status == Green),
+                category.Count(row => row.Item.Status == Yellow),
+                category.Count(row => row.Item.Status == Red),
+                skippedSections,
+                category.GroupBy(row => row.Placement.Group, StringComparer.Ordinal)
+                    .Select(group => new ImportGroup(group.Key,
+                        group.Any(row => row.Item.Status == Red) ? Red
+                            : group.Any(row => row.Item.Status == Yellow) ? Yellow : Green,
+                        group.Count(row => row.Item.Status == Green),
+                        group.Count(row => row.Item.Status == Yellow),
+                        group.Count(row => row.Item.Status == Red),
+                        group.Select(row => row.Item).ToList(),
+                        group.Select(row => row.Placement.Note).FirstOrDefault(note => !string.IsNullOrWhiteSpace(note))))
+                    .ToList()))
+            .ToList();
+
+        var all = planned.Select(row => row.Item).ToList();
         // `Rows` is the records the file describes; a section title is counted apart, so
         // green + yellow + red adds up to it and nobody has to wonder where 18 rows went.
         var summary = new ImportSummary(
             Rows: all.Count,
-            Sections: sheets.Sum(sheet => sheet.SkippedSections),
+            Sections: skippedSections,
             Green: all.Count(item => item.Status == Green),
             Yellow: all.Count(item => item.Status == Yellow),
             Red: all.Count(item => item.Status == Red),
@@ -178,15 +214,16 @@ public sealed class ItemImporter
         }
 
         var preview = new ImportPreview(sheets, summary, issues, normalizations.ToList());
-        var planned = sheets
-            .SelectMany(sheet => sheet.Groups.SelectMany(group => group.Items.Select(item => (Sheet: sheet.Name, Group: group.Name, Item: item))))
+        var rowsToWrite = planned
+            .Select(row => (Category: row.Placement.Category, Group: row.Placement.Group, Item: row.Item))
             .ToList();
-        return (preview, planned);
+        return (preview, rowsToWrite);
     }
 
     /// <summary>
     /// Writes what the preview called green (and yellow, when asked) into the tree, in one
-    /// transaction: sheets become roots, SUB CATEGORIA becomes the level under them, and each row
+    /// transaction, keeping the configuration's shape: the Category becomes the root, the
+    /// subcategory — spelled the way `Constants` spells it — becomes the level under it, and each row
     /// becomes a record. Reds never go in. Running it twice on the same file creates nothing the
     /// second time — a code that already exists, or a nameless record that is already there, is
     /// skipped instead of duplicated.
@@ -227,19 +264,21 @@ public sealed class ItemImporter
         var children = await _context.Items.IgnoreQueryFilters().Where(item => item.ParentId != null)
             .ToListAsync(cancellationToken);
 
-        foreach (var sheet in wanted.GroupBy(row => row.Sheet, StringComparer.Ordinal))
+        foreach (var category in wanted.GroupBy(row => row.Category, StringComparer.Ordinal))
         {
-            var root = roots.FirstOrDefault(item => Same(item.Label, sheet.Key));
+            // The category is a record the configuration already names; if the tree has no root with
+            // that label yet, it is created once and every later import reuses it.
+            var root = roots.FirstOrDefault(item => Same(item.Label, category.Key));
             if (root is null)
             {
-                root = NewItem(sheet.Key, parentId: null);
+                root = NewItem(category.Key, parentId: null);
                 _context.Items.Add(root);
                 await _context.SaveChangesAsync(cancellationToken); // the id is needed by its children
                 roots.Add(root);
                 createdSheets++;
             }
 
-            foreach (var group in sheet.GroupBy(row => row.Group, StringComparer.Ordinal))
+            foreach (var group in category.GroupBy(row => row.Group, StringComparer.Ordinal))
             {
                 var parent = children.FirstOrDefault(item => item.ParentId == root.Id && Same(item.Label, group.Key));
                 if (parent is null)
@@ -330,28 +369,18 @@ public sealed class ItemImporter
         return rows.Select(row => (row.ParentId, Normalize(row.Label))).ToHashSet();
     }
 
-    private ImportSheet BuildSheet(string name, IEnumerable<RawRow> rows, HashSet<string> brands,
+    /// <summary>
+    /// Reads one sheet into rows that already know where they would land. Nothing is written and
+    /// nothing is created here: the placement comes from `Constants`, so the preview can show the
+    /// exact tree the import would build — `Hardware → BASE TECLADO SENCILLA → <elemento>` — and a row
+    /// whose name the configuration does not know is marked for review instead of being guessed.
+    /// </summary>
+    private (List<(Placement Placement, ImportItem Item)> Rows, int SkippedSections) BuildSheet(
+        string name, IEnumerable<RawRow> rows, CategoryMap categories, HashSet<string> brands,
         HashSet<string> takenCodes, Dictionary<string, int> seenCodes, HashSet<string> duplicates,
         List<ImportIssue> issues, SortedSet<string> normalizations)
     {
-        // Grouped by name, not by adjacency: the file interleaves subcategories, and a tree that
-        // repeats "ATRIL" every time the sheet comes back to it is not the tree the file describes.
-        var groups = new List<ImportGroup>();
-        var buckets = new Dictionary<string, List<ImportItem>>(StringComparer.Ordinal);
-        var order = new List<string>();
-
-        void Add(ImportItem item, string groupName)
-        {
-            if (!buckets.TryGetValue(groupName, out var bucket))
-            {
-                bucket = new List<ImportItem>();
-                buckets[groupName] = bucket;
-                order.Add(groupName);
-            }
-
-            bucket.Add(item);
-        }
-
+        var built = new List<(Placement, ImportItem)>();
         var skippedSections = 0;
 
         foreach (var row in rows)
@@ -365,7 +394,8 @@ public sealed class ItemImporter
                 // or a brand and no name is.
                 if (LooksLikeSectionTitle(row)) { skippedSections++; continue; }
                 var rowCode = Clean(row.Cells.GetValueOrDefault("code"));
-                Add(new ImportItem(
+                var orphan = ResolvePlacement(subcategory, name, categories, normalizations);
+                built.Add((orphan, new ImportItem(
                     Label: rowCode is { Length: > 0 } ? rowCode : "(sin nombre)",
                     Code: CleanOrNull(row.Cells.GetValueOrDefault("code")),
                     Brand: CleanOrNull(row.Cells.GetValueOrDefault("brand")),
@@ -373,48 +403,28 @@ public sealed class ItemImporter
                     Serial: CleanOrNull(row.Cells.GetValueOrDefault("serial")),
                     Notes: CleanOrNull(row.Cells.GetValueOrDefault("notes")),
                     Dimensions: CleanOrNull(row.Cells.GetValueOrDefault("dimensions")),
-                    Status: Red, Reasons: new[] { "Sin descripción." }, Row: row.Row),
-                    subcategory.Length > 0
-                        ? NormalizeSubcategory(subcategory, normalizations, out _)
-                        : Normalize(name));
+                    Status: Red, Reasons: new[] { "Sin descripción." }, Row: row.Row, Source: name)));
                 issues.Add(new ImportIssue(name, row.Row, Red, "Fila sin descripción: no se puede nombrar el elemento."));
                 continue;
             }
 
-            var corrected = false;
-            var groupName = subcategory.Length > 0
-                ? NormalizeSubcategory(subcategory, normalizations, out corrected)
-                : Normalize(name);
+            var placement = ResolvePlacement(subcategory, name, categories, normalizations);
             var judged = Judge(name, row, description, brands, takenCodes, seenCodes, duplicates, issues);
-            if (corrected)
+            if (!placement.Certain)
             {
-                // A corrected spelling is importable, but the user should see that the file said
-                // something else before it went in.
+                // Importable, but the destination came from a rule rather than from the configuration
+                // matching the file: the user sees the rule and can object before anything is written.
                 judged = judged with
                 {
-                    Status = judged.Status == Green ? Yellow : judged.Status,
-                    Reasons = judged.Reasons.Append($"Subcategoría corregida a «{groupName}».").ToList()
+                    Status = judged.Status == Red ? Red : Yellow,
+                    Reasons = judged.Reasons.Append(placement.Note ?? $"Se coloca en «{placement.Category} / {placement.Group}».").ToList()
                 };
             }
 
-            Add(judged, groupName);
+            built.Add((placement, judged with { Source = name }));
         }
 
-        foreach (var groupName in order)
-        {
-            var bucket = buckets[groupName];
-            groups.Add(new ImportGroup(groupName,
-                bucket.Any(item => item.Status == Red) ? Red : bucket.Any(item => item.Status == Yellow) ? Yellow : Green,
-                bucket.Count(item => item.Status == Green),
-                bucket.Count(item => item.Status == Yellow),
-                bucket.Count(item => item.Status == Red),
-                bucket));
-        }
-
-        return new ImportSheet(name,
-            groups.Any(group => group.Status == Red) ? Red : groups.Any(group => group.Status == Yellow) ? Yellow : Green,
-            groups.Sum(group => group.Green), groups.Sum(group => group.Yellow), groups.Sum(group => group.Red),
-            skippedSections, groups);
+        return (built, skippedSections);
     }
 
     private ImportItem Judge(string sheet, RawRow row, string description, HashSet<string> brands,
@@ -481,17 +491,6 @@ public sealed class ItemImporter
             CleanOrNull(row.Cells.GetValueOrDefault("notes")),
             CleanOrNull(row.Cells.GetValueOrDefault("dimensions")),
             status, reasons, row.Row);
-    }
-
-    /// <summary>Applies the alias table, recording each correction so the user sees what changed.</summary>
-    private static string NormalizeSubcategory(string subcategory, SortedSet<string> normalizations, out bool corrected)
-    {
-        var normalized = Normalize(subcategory);
-        corrected = false;
-        if (!SubcategoryAliases.TryGetValue(normalized, out var target) || target == normalized) return normalized;
-        normalizations.Add($"«{normalized}» → «{target}»");
-        corrected = true;
-        return target;
     }
 
     private static bool LooksLikeSectionTitle(RawRow row)
@@ -640,10 +639,127 @@ public sealed class ItemImporter
 
     private static string Clean(string? value) => Normalize(value);
 
+    /// <summary>
+    /// The key two names are compared by: case, spacing and punctuation do not distinguish them here,
+    /// so `GTR-COMBO` and `GTR COMBO` are the same subcategory and `BASE  TECLADO` is `BASE TECLADO`.
+    /// The label itself is never rewritten — only what the comparison looks at.
+    /// </summary>
+    private static string MatchKey(string? value) =>
+        Regex.Replace(Normalize(value).Replace('-', ' ').Replace('_', ' ').Replace('.', ' ').Replace('/', ' '),
+            @"\s+", " ").Trim();
+
     private static string? CleanOrNull(string? value)
     {
         var normalized = Normalize(value);
         return normalized.Length == 0 ? null : normalized;
+    }
+
+    /// <summary>
+    /// Reads the configuration so the importer can put a row where the application would have put it:
+    /// the categories (`Group = Category`) and, under each one, the subcategories the workshop
+    /// actually uses. `Other` catches what the file has and the configuration does not.
+    /// </summary>
+    private async Task<CategoryMap> KnownCategoriesAsync(CancellationToken cancellationToken)
+    {
+        var rows = await _context.Constants.AsNoTracking()
+            .Where(row => row.Group != null)
+            .Select(row => new { row.Group, row.Label })
+            .ToListAsync(cancellationToken);
+
+        var categoryLabels = rows
+            .Where(row => string.Equals(row.Group, "Category", StringComparison.OrdinalIgnoreCase))
+            .Select(row => row.Label)
+            .Where(label => !string.IsNullOrWhiteSpace(label))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var byLabel = categoryLabels.ToDictionary(MatchKey, label => label, StringComparer.Ordinal);
+
+        // A subcategory row belongs to the category its Group names ("Hardware", "Sonido", …). The
+        // Category rows themselves are not values: they are the level above.
+        var subcategories = rows
+            .Where(row => !string.Equals(row.Group, "Category", StringComparison.OrdinalIgnoreCase))
+            .Where(row => byLabel.ContainsKey(MatchKey(row.Group)))
+            .Select(row => new CategoryValue(byLabel[MatchKey(row.Group)], Clean(row.Label), MatchKey(row.Label)))
+            .Where(value => value.Normalized.Length > 0)
+            .ToList();
+
+        var subs = new Dictionary<string, CategoryValue>(StringComparer.Ordinal);
+        foreach (var value in subcategories) subs.TryAdd(value.Normalized, value);
+
+        var fallback = categoryLabels.FirstOrDefault(label => MatchKey(label) == "OTHER")
+            ?? categoryLabels.FirstOrDefault()
+            ?? "Other";
+
+        return new CategoryMap(subs, byLabel, fallback);
+    }
+
+    /// <summary>
+    /// Decides where a row goes, in the order the evidence deserves: the configuration spells it that
+    /// way, then the known misspellings, then the value is itself a category, then the file wrote a
+    /// shortened or extended form of a name the configuration has. What is left has no home and says
+    /// so instead of being guessed into one.
+    /// </summary>
+    private static Placement ResolvePlacement(string? subcategory, string sheet, CategoryMap map,
+        SortedSet<string> normalizations)
+    {
+        var input = MatchKey(subcategory);
+        if (input.Length == 0)
+        {
+            // No subcategory in the row: the sheet it came from is the best hint the file gives.
+            return new Placement(map.Fallback, Clean(sheet), $"La fila no trae subcategoría: se agrupa por su hoja «{Clean(sheet)}».", false);
+        }
+
+        if (map.Subs.TryGetValue(input, out var exact))
+            return new Placement(exact.Category, exact.Label, null, true);
+
+        if (SubcategoryAliases.TryGetValue(input, out var alias) && map.Subs.TryGetValue(MatchKey(alias), out var aliased))
+        {
+            normalizations.Add($"«{Clean(subcategory)}» → «{aliased.Label}»");
+            return new Placement(aliased.Category, aliased.Label, $"Subcategoría corregida «{Clean(subcategory)}» → «{aliased.Label}».", true);
+        }
+
+        if (map.CategoryByLabel.TryGetValue(input, out var asCategory))
+            return new Placement(asCategory, asCategory, $"«{Clean(subcategory)}» es una categoría: el elemento cuelga directamente de ella.", false);
+
+        // The file writes a name the configuration has in a shorter or longer form: "CONGA DOBLE"
+        // for BASE CONGA DOBLE, "MESA" for MESA PERCUSION, "MICROFONO" for MICROFONOS, "UPS 750 AMP"
+        // for UPS. Whole words only, and the order is the confidence: a name the file *completes*
+        // first, then the singular/plural of the same word, then a name the file *truncates* — so
+        // "CONGA DOBLE" is not read as the shorter "CONGA".
+        var completes = new List<CategoryValue>();
+        var plurals = new List<CategoryValue>();
+        var truncates = new List<CategoryValue>();
+        foreach (var candidate in map.Subs.Values)
+        {
+            if (candidate.Normalized == input) continue;
+            if (candidate.Normalized.EndsWith(" " + input, StringComparison.Ordinal)
+                || candidate.Normalized.StartsWith(input + " ", StringComparison.Ordinal)) completes.Add(candidate);
+            else if (candidate.Normalized == input + "S" || input == candidate.Normalized + "S") plurals.Add(candidate);
+            else if (input.EndsWith(" " + candidate.Normalized, StringComparison.Ordinal)
+                || input.StartsWith(candidate.Normalized + " ", StringComparison.Ordinal)) truncates.Add(candidate);
+        }
+
+        var pool = completes.Count > 0 ? completes : plurals.Count > 0 ? plurals : truncates;
+        if (pool.Count > 0 && pool.Select(candidate => candidate.Category).Distinct(StringComparer.Ordinal).Count() == 1)
+        {
+            var category = pool[0].Category;
+            // The shortest name that still contains the row is the one the file meant; when two are
+            // equally short there is no way to tell, so the group keeps the file's own words.
+            var words = pool.Min(candidate => candidate.Normalized.Split(' ').Length);
+            var best = pool.Where(candidate => candidate.Normalized.Split(' ').Length == words).ToList();
+            if (best.Count == 1)
+            {
+                normalizations.Add($"«{Clean(subcategory)}» → «{best[0].Label}»");
+                return new Placement(category, best[0].Label, $"«{Clean(subcategory)}» se coloca en «{best[0].Label}».", false);
+            }
+
+            return new Placement(category, Clean(subcategory),
+                $"«{Clean(subcategory)}» encaja con varias subcategorías de «{category}»: se agrupa con su propio nombre.", false);
+        }
+
+        return new Placement(map.Fallback, Clean(subcategory),
+            $"«{Clean(subcategory)}» no está en la configuración: se coloca en «{map.Fallback}» para revisarla.", false);
     }
 
     private async Task<HashSet<string>> KnownBrandsAsync(CancellationToken cancellationToken)

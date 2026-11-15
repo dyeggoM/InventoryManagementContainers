@@ -49,21 +49,30 @@ public sealed class ItemImportWriteTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.GetProperty("createdSheets").GetInt32(), Is.EqualTo(2), "STOCK and CASES");
+            Assert.That(result.GetProperty("createdSheets").GetInt32(), Is.EqualTo(4),
+                "Hardware, Amplifiers, Cymbals and Other — the categories the rows belong to");
             Assert.That(result.GetProperty("createdGroups").GetInt32(), Is.EqualTo(4),
-                "BASE, GTR COMBO and HIHAT under STOCK, plus CASE PARA CONGAS under CASES: ATRIL only "
-                + "held the row whose code was duplicated, and a red row opens no group");
+                "BASE under Hardware, GTR-COMBO under Amplifiers, HIHAT under Cymbals and CASE PARA CONGAS "
+                + "under Other: ATRIL only held the row whose code was duplicated, and a red row opens no group");
             Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(6),
-                "one green and four yellow in STOCK, one green in CASES");
+                "one green and four yellow in the workbook sheet, one yellow in the case sheet");
             Assert.That(result.GetProperty("skippedRed").GetInt32(), Is.EqualTo(3));
         });
 
         var tree = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
-        var stock = tree.GetProperty("tree").EnumerateArray()
-            .Single(node => node.GetProperty("label").GetString() == "STOCK");
-        Assert.That(stock.GetProperty("children").EnumerateArray().Select(child => child.GetProperty("label").GetString()),
-            Is.EquivalentTo(new[] { "BASE", "GTR COMBO", "HIHAT" }),
-            "the corrected spelling is what the tree carries, not the one in the file");
+        var hardware = tree.GetProperty("tree").EnumerateArray()
+            .Single(node => node.GetProperty("label").GetString() == "Hardware");
+        var amplifiers = tree.GetProperty("tree").EnumerateArray()
+            .Single(node => node.GetProperty("label").GetString() == "Amplifiers");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hardware.GetProperty("children").EnumerateArray().Select(child => child.GetProperty("label").GetString()),
+                Is.EqualTo(new[] { "BASE" }), "the abbreviation keeps its own words, under the category that owns it");
+            Assert.That(amplifiers.GetProperty("children").EnumerateArray().Select(child => child.GetProperty("label").GetString()),
+                Is.EqualTo(new[] { "GTR-COMBO" }),
+                "the corrected spelling is what the tree carries, not the one in the file");
+        });
     }
 
     [Test]
@@ -109,8 +118,8 @@ public sealed class ItemImportWriteTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(2), "only the green rows");
-            Assert.That(result.GetProperty("skippedYellow").GetInt32(), Is.EqualTo(4));
+            Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(1), "only the green row");
+            Assert.That(result.GetProperty("skippedYellow").GetInt32(), Is.EqualTo(5));
         });
     }
 
@@ -135,7 +144,7 @@ public sealed class ItemImportWriteTests
         {
             Assert.That(first.GetProperty("createdItems").GetInt32(), Is.EqualTo(6));
             Assert.That(second.GetProperty("createdItems").GetInt32(), Is.EqualTo(0), "the file is already in");
-            Assert.That(second.GetProperty("createdSheets").GetInt32(), Is.EqualTo(0), "no second STOCK");
+            Assert.That(second.GetProperty("createdSheets").GetInt32(), Is.EqualTo(0), "no second Hardware");
             Assert.That(second.GetProperty("createdGroups").GetInt32(), Is.EqualTo(0));
             Assert.That(afterSecond, Is.EqualTo(afterFirst), "the tree did not grow");
         });
@@ -156,7 +165,7 @@ public sealed class ItemImportWriteTests
         // The interceptor writes at the persistence layer, so each created node also leaves its own
         // Create row: the summary says what the import was, the per-entity rows say what it made.
         var created = await context.AuditLogs.CountAsync(row => row.Action == "Create" && row.Entity == "Item");
-        Assert.That(created, Is.EqualTo(6 + 4 + 2), "six records, four groups and two sheets were created");
+        Assert.That(created, Is.EqualTo(6 + 4 + 4), "six records, four groups and four categories were created");
     }
 
     [Test]

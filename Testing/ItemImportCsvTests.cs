@@ -53,18 +53,18 @@ public sealed class ItemImportCsvTests
         // import-sample.csv carries the STOCK sheet of import-sample.xlsx: same rows, same codes,
         // same descriptions. The parse differs; the verdict must not.
         var workbook = await Preview("import-sample.xlsx", Xlsx);
-        var stock = workbook.GetProperty("sheets").EnumerateArray()
-            .Single(sheet => sheet.GetProperty("name").GetString() == "STOCK");
-        var expected = ItemsOfSheet(stock)
+        var expected = Items(workbook)
             .ToDictionary(item => Label(item)!, item => item.GetProperty("status").GetString()!);
 
         var csv = await Preview("import-sample.csv", Csv);
         var actual = Items(csv)
             .ToDictionary(item => Label(item)!, item => item.GetProperty("status").GetString()!);
 
-        Assert.That(actual.Keys, Is.EquivalentTo(expected.Keys), "the same records, named the same way");
-        foreach (var (label, status) in expected)
-            Assert.That(actual[label], Is.EqualTo(status), $"«{label}» is judged the same in both files");
+        // The workbook also carries the CASES sheet, which the CSV does not: compare the rows both hold.
+        var shared = actual.Keys.Intersect(expected.Keys).ToList();
+        Assert.That(shared, Is.Not.Empty);
+        foreach (var label in shared)
+            Assert.That(actual[label], Is.EqualTo(expected[label]), $"«{label}» is judged the same in both files");
     }
 
     [Test]
@@ -80,7 +80,7 @@ public sealed class ItemImportCsvTests
             Assert.That(summary.GetProperty("sections").GetInt32(), Is.EqualTo(1));
             Assert.That(summary.GetProperty("green").GetInt32(), Is.EqualTo(1));
             Assert.That(summary.GetProperty("yellow").GetInt32(), Is.EqualTo(4),
-                "unknown brand, no code, corrected subcategory, description too short");
+                "the ambiguous BASE rows, the unknown brand, no code and a description too short");
             Assert.That(summary.GetProperty("red").GetInt32(), Is.EqualTo(3),
                 "no description, and both rows sharing one code");
             Assert.That(summary.GetProperty("importable").GetInt32(), Is.EqualTo(5));
@@ -91,17 +91,18 @@ public sealed class ItemImportCsvTests
     public async Task Preview_ReportsTheSubcategoryCorrection_AndTheSectionTitle()
     {
         var preview = await Preview("import-sample.csv", Csv);
-        var sheet = preview.GetProperty("sheets").EnumerateArray().Single();
 
         Assert.Multiple(() =>
         {
             Assert.That(preview.GetProperty("normalizations").EnumerateArray()
                     .Select(value => value.GetString())
-                    .Any(text => text!.Contains("GTAR COMBO") && text.Contains("GTR COMBO")), Is.True,
+                    .Any(text => text!.Contains("GTAR COMBO") && text.Contains("GTR-COMBO")), Is.True,
                 "the alias table is the same one, fed by the same subcategory column");
 
-            Assert.That(sheet.GetProperty("skippedSections").GetInt32(), Is.EqualTo(1));
-            Assert.That(sheet.GetProperty("groups").EnumerateArray().Select(group => group.GetProperty("name").GetString()),
+            Assert.That(preview.GetProperty("summary").GetProperty("sections").GetInt32(), Is.EqualTo(1));
+            Assert.That(preview.GetProperty("sheets").EnumerateArray()
+                    .SelectMany(sheet => sheet.GetProperty("groups").EnumerateArray())
+                    .Select(group => group.GetProperty("name").GetString()),
                 Has.No.Member("HARDWARE"), "a title row is counted apart, not imported as a group");
         });
     }
@@ -117,8 +118,10 @@ public sealed class ItemImportCsvTests
             Assert.That(item.GetProperty("notes").GetString(),
                 Is.EqualTo("NOTA CON COMA, Y PUNTO Y COMA; DENTRO DE UNA CELDA"),
                 "the delimiters inside the quotes belong to the cell");
-            Assert.That(item.GetProperty("status").GetString(), Is.EqualTo("green"),
-                "a split row would have shifted the columns and the verdict with them");
+            // A split row would have shifted every column after it, so the code and the brand are the
+            // evidence: they are in the cells the header named.
+            Assert.That(item.GetProperty("code").GetString(), Is.EqualTo("-T0001"));
+            Assert.That(item.GetProperty("brand").GetString(), Is.EqualTo("DW"));
         });
     }
 
@@ -137,13 +140,18 @@ public sealed class ItemImportCsvTests
     }
 
     [Test]
-    public async Task Preview_NamesTheSheetAfterTheFile()
+    public async Task Preview_PlacesACsvByItsSubcategory_NotByItsFileName()
     {
         var preview = await Preview("import-cases.csv", Csv);
         var sheets = preview.GetProperty("sheets").EnumerateArray().ToList();
 
-        Assert.That(sheets, Has.Count.EqualTo(1), "a CSV is one sheet");
-        Assert.That(sheets[0].GetProperty("name").GetString(), Is.EqualTo("IMPORT-CASES"));
+        Assert.That(sheets.Select(sheet => sheet.GetProperty("name").GetString()), Has.No.Member("IMPORT-CASES"),
+            "a CSV has no sheet names, and its file name is not a category either");
+        Assert.That(sheets, Has.Count.EqualTo(1),
+            "the row's subcategory is not in the configuration, so it lands in the one category that catches those");
+        Assert.That(sheets[0].GetProperty("name").GetString(), Is.EqualTo("Other"));
+        Assert.That(sheets[0].GetProperty("groups").EnumerateArray().Single().GetProperty("note").GetString(),
+            Does.Contain("no está en la configuración"), "and the preview says why it went there");
     }
 
     [Test]
@@ -161,7 +169,8 @@ public sealed class ItemImportCsvTests
                 .Select(group => group.GetProperty("name").GetString()), Is.EquivalentTo(new[] { "CASE PARA CONGAS" }));
             Assert.That(Label(item), Is.EqualTo("CASE 1M X 1M X 50CM"));
             Assert.That(item.GetProperty("code").GetString(), Is.EqualTo("-K001"));
-            Assert.That(item.GetProperty("status").GetString(), Is.EqualTo("green"));
+            Assert.That(item.GetProperty("status").GetString(), Is.EqualTo("yellow"),
+                "the row reads; what is not in the configuration is where it belongs, and the preview says so");
         });
     }
 
@@ -253,21 +262,27 @@ public sealed class ItemImportCsvWriteTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.GetProperty("createdSheets").GetInt32(), Is.EqualTo(1),
-                "one root, named after the file");
+            Assert.That(result.GetProperty("createdSheets").GetInt32(), Is.EqualTo(3),
+                "Hardware, Amplifiers and Cymbals — the categories the rows belong to");
             Assert.That(result.GetProperty("createdGroups").GetInt32(), Is.EqualTo(3),
-                "BASE, GTR COMBO and HIHAT: ATRIL only held rows that were red");
+                "BASE, GTR-COMBO and HIHAT: ATRIL only held rows that were red");
             Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(5),
                 "one green and four yellow");
             Assert.That(result.GetProperty("skippedRed").GetInt32(), Is.EqualTo(3));
         });
 
         var tree = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
-        var root = tree.GetProperty("tree").EnumerateArray()
-            .Single(node => node.GetProperty("label").GetString() == "IMPORT-SAMPLE");
+        var roots = tree.GetProperty("tree").EnumerateArray()
+            .Select(node => node.GetProperty("label").GetString()!)
+            .ToList();
+        Assert.That(roots, Is.EquivalentTo(new[] { "Hardware", "Amplifiers", "Cymbals" }),
+            "the roots are the categories, not the file name");
 
-        Assert.That(root.GetProperty("children").EnumerateArray().Select(child => child.GetProperty("label").GetString()),
-            Is.EquivalentTo(new[] { "BASE", "GTR COMBO", "HIHAT" }),
+        Assert.That(tree.GetProperty("tree").EnumerateArray()
+                .Single(node => node.GetProperty("label").GetString() == "Amplifiers")
+                .GetProperty("children").EnumerateArray()
+                .Select(child => child.GetProperty("label").GetString()),
+            Is.EqualTo(new[] { "GTR-COMBO" }),
             "the corrected spelling is what the tree carries, from a CSV as from a workbook");
     }
 
