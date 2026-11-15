@@ -36,6 +36,18 @@ suite, with the 161 tests as the only proof that nothing moved underneath:
   rate limiting still sits before authentication; the anonymous probe endpoint answers; and the
   service lifetimes the API depends on are still what they were.
 
+## Pending — `chore/archive-retention`
+
+**Changed — the delete ledger keeps a month, and now something enforces it.** `Archive:Retention:Days`
+had no default, so `POST /api/item/archive/purge` answered `400` unless somebody configured an age or
+passed one; the policy existed in a document. The default is now **30 days**, and a daily sweep
+(`ArchiveRetentionSweeper`) applies it without anyone calling the endpoint: the rows older than the
+cutoff go, the files they were the last owner of go with them, and the purge leaves an `ArchivePurge`
+audit row either way — `by: "archive-retention"` for the sweep, the caller's id for the endpoint. The
+age resolves in one place for both: request → `ARCHIVE_RETENTION_DAYS` → `Archive:Retention:Days` →
+30. Setting `0` turns the sweep off and leaves the endpoint as the only way in, which is what a dev box
+may prefer.
+
 ## #42 — The module map is committed with its files · merged 2026-11-15
 
 **Fixed — the module map is committed with the files it points at.** `AI_INVENTORY.md` is a router
