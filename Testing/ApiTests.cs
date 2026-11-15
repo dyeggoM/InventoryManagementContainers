@@ -16,41 +16,13 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public class ApiTests
+public class ApiTests : ApiTestBase
 {
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
-    [OneTimeSetUp]
-    public async Task StartApi()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-        var response = await _client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email = "bootstrap@example.test",
-            password = "AuthTest!Secure123",
-        });
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        var auth = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Bearer", auth.GetProperty("access_token").GetString());
-    }
-
-    [OneTimeTearDown]
-    public void StopApi()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
-
     private static string Unique(string prefix) => $"{prefix} {Guid.NewGuid():N}";
 
     private async Task<JsonElement> PostItem(string label, int? parentId = null, string? attributes = null)
     {
-        var response = await _client.PostAsJsonAsync("/api/item", new
+        var response = await Client.PostAsJsonAsync("/api/item", new
         {
             label,
             icon = "",
@@ -70,7 +42,7 @@ public class ApiTests
         var label = Unique("Root");
         await PostItem(label);
 
-        var payload = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var payload = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
 
         Assert.Multiple(() =>
         {
@@ -102,7 +74,7 @@ public class ApiTests
         var parentId = parent.GetProperty("id").GetInt32();
         await PostItem(Unique("Part"), parentId);
 
-        var detail = await _client.GetFromJsonAsync<JsonElement>($"/api/item/{parentId}", Json);
+        var detail = await Client.GetFromJsonAsync<JsonElement>($"/api/item/{parentId}", Json);
 
         Assert.Multiple(() =>
         {
@@ -119,7 +91,7 @@ public class ApiTests
         var id = item.GetProperty("id").GetInt32();
         var attributes = "{\"Brand\":\"DW\",\"Serial\":\"SN-0042\"}";
 
-        var put = await _client.PutAsJsonAsync($"/api/item/{id}", new
+        var put = await Client.PutAsJsonAsync($"/api/item/{id}", new
         {
             id,
             label = "Renamed",
@@ -132,7 +104,7 @@ public class ApiTests
 
         Assert.That(put.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), await put.Content.ReadAsStringAsync());
 
-        var stored = await _client.GetFromJsonAsync<JsonElement>($"/api/item/{id}", Json);
+        var stored = await Client.GetFromJsonAsync<JsonElement>($"/api/item/{id}", Json);
         Assert.Multiple(() =>
         {
             Assert.That(stored.GetProperty("label").GetString(), Is.EqualTo("Renamed"));
@@ -148,7 +120,7 @@ public class ApiTests
         var child = await PostItem(Unique("CycleChild"), parentId);
         var childId = child.GetProperty("id").GetInt32();
 
-        var response = await _client.PutAsJsonAsync($"/api/item/{parentId}", new
+        var response = await Client.PutAsJsonAsync($"/api/item/{parentId}", new
         {
             id = parentId,
             label = parent.GetProperty("label").GetString(),
@@ -162,7 +134,7 @@ public class ApiTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest),
             await response.Content.ReadAsStringAsync());
 
-        var get = await _client.GetAsync("/api/item");
+        var get = await Client.GetAsync("/api/item");
         Assert.That(get.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var payload = await get.Content.ReadFromJsonAsync<JsonElement>(Json);
         var tree = payload.GetProperty("tree").EnumerateArray().Single(n => n.GetProperty("id").GetInt32() == parentId);
@@ -176,10 +148,10 @@ public class ApiTests
         var item = await PostItem(Unique("Temporary"));
         var id = item.GetProperty("id").GetInt32();
 
-        var deleted = await _client.DeleteAsync($"/api/item/{id}");
+        var deleted = await Client.DeleteAsync($"/api/item/{id}");
         Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
-        var list = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var list = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
         var labels = list.GetProperty("panels").EnumerateArray()
             .Select(p => p.GetProperty("label").GetString())
             .ToList();
@@ -193,7 +165,7 @@ public class ApiTests
         var itemId = item.GetProperty("id").GetInt32();
         var bytes = Png(24, 16);
 
-        var created = await _client.PostAsJsonAsync("/api/attachment", new
+        var created = await Client.PostAsJsonAsync("/api/attachment", new
         {
             itemId,
             type = "Photo",
@@ -212,7 +184,7 @@ public class ApiTests
                 "the row keeps a small preview");
         });
 
-        var file = await _client.GetAsync($"/api/attachment/{id}/file");
+        var file = await Client.GetAsync($"/api/attachment/{id}/file");
         file.EnsureSuccessStatusCode();
         var served = await file.Content.ReadAsByteArrayAsync();
         Assert.Multiple(() =>
@@ -223,7 +195,7 @@ public class ApiTests
                 "the endpoint must return the original bytes");
         });
 
-        var onDisk = Path.Combine(_factory.MediaRoot, attachment.GetProperty("filePath").GetString()!
+        var onDisk = Path.Combine(Factory.MediaRoot, attachment.GetProperty("filePath").GetString()!
             .Replace('/', Path.DirectorySeparatorChar));
         Assert.That(File.Exists(onDisk), Is.True, "the original lives in the media folder, not the row");
     }
@@ -237,7 +209,7 @@ public class ApiTests
         var before = await TreeAttachmentCount(itemId);
         Assert.That(before, Is.EqualTo(0));
 
-        var created = await _client.PostAsJsonAsync("/api/attachment", new
+        var created = await Client.PostAsJsonAsync("/api/attachment", new
         {
             itemId,
             type = "Photo",
@@ -255,7 +227,7 @@ public class ApiTests
         var item = await PostItem(Unique("Deleting"));
         var itemId = item.GetProperty("id").GetInt32();
 
-        var created = await _client.PostAsJsonAsync("/api/attachment", new
+        var created = await Client.PostAsJsonAsync("/api/attachment", new
         {
             itemId,
             type = "Photo",
@@ -265,13 +237,13 @@ public class ApiTests
         created.EnsureSuccessStatusCode();
         var attachment = await created.Content.ReadFromJsonAsync<JsonElement>(Json);
         var id = attachment.GetProperty("id").GetInt32();
-        var path = Path.Combine(_factory.MediaRoot, attachment.GetProperty("filePath").GetString()!
+        var path = Path.Combine(Factory.MediaRoot, attachment.GetProperty("filePath").GetString()!
             .Replace('/', Path.DirectorySeparatorChar));
 
-        var deleted = await _client.DeleteAsync($"/api/attachment/{id}");
+        var deleted = await Client.DeleteAsync($"/api/attachment/{id}");
         Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
-        var file = await _client.GetAsync($"/api/attachment/{id}/file");
+        var file = await Client.GetAsync($"/api/attachment/{id}/file");
         Assert.Multiple(() =>
         {
             Assert.That(file.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
@@ -282,7 +254,7 @@ public class ApiTests
     [Test]
     public async Task GetConstants_ReturnsTheSeededCatalogueWithDataTypes()
     {
-        var payload = await _client.GetFromJsonAsync<JsonElement>("/api/constants", Json);
+        var payload = await Client.GetFromJsonAsync<JsonElement>("/api/constants", Json);
         var panels = payload.GetProperty("panels").EnumerateArray().ToList();
 
         Assert.That(panels, Is.Not.Empty, "a fresh database is seeded on startup");
@@ -309,7 +281,7 @@ public class ApiTests
     [Test]
     public async Task PostItem_WithoutALabel_IsRejected()
     {
-        var response = await _client.PostAsJsonAsync("/api/item", new
+        var response = await Client.PostAsJsonAsync("/api/item", new
         {
             label = "",
             icon = "",
@@ -322,11 +294,10 @@ public class ApiTests
             "a record without a label cannot be stored");
     }
 
-
     [Test]
     public async Task GetItemById_UnknownId_Returns404()
     {
-        var response = await _client.GetAsync("/api/item/987654");
+        var response = await Client.GetAsync("/api/item/987654");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
@@ -337,7 +308,7 @@ public class ApiTests
         var item = await PostItem(Unique("Mismatch"));
         var id = item.GetProperty("id").GetInt32();
 
-        var response = await _client.PutAsJsonAsync($"/api/item/{id + 1}", new
+        var response = await Client.PutAsJsonAsync($"/api/item/{id + 1}", new
         {
             id,
             label = "Should not land",
@@ -356,7 +327,7 @@ public class ApiTests
         var item = await PostItem(Unique("Cascade"));
         var itemId = item.GetProperty("id").GetInt32();
 
-        var created = await _client.PostAsJsonAsync("/api/attachment", new
+        var created = await Client.PostAsJsonAsync("/api/attachment", new
         {
             itemId,
             type = "Photo",
@@ -366,18 +337,18 @@ public class ApiTests
         created.EnsureSuccessStatusCode();
         var attachment = await created.Content.ReadFromJsonAsync<JsonElement>(Json);
         var attachmentId = attachment.GetProperty("id").GetInt32();
-        var path = Path.Combine(_factory.MediaRoot, attachment.GetProperty("filePath").GetString()!
+        var path = Path.Combine(Factory.MediaRoot, attachment.GetProperty("filePath").GetString()!
             .Replace('/', Path.DirectorySeparatorChar));
         Assert.That(File.Exists(path), Is.True);
 
-        var deleted = await _client.DeleteAsync($"/api/item/{itemId}");
+        var deleted = await Client.DeleteAsync($"/api/item/{itemId}");
         Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
         Assert.Multiple(() =>
         {
             Assert.That(File.Exists(path), Is.False, "the file goes with the record");
             Assert.That(
-                _client.GetAsync($"/api/attachment/item/{itemId}").GetAwaiter().GetResult().StatusCode,
+                Client.GetAsync($"/api/attachment/item/{itemId}").GetAwaiter().GetResult().StatusCode,
                 Is.EqualTo(HttpStatusCode.NoContent), "and so does the row");
         });
     }
@@ -389,7 +360,7 @@ public class ApiTests
         var itemId = item.GetProperty("id").GetInt32();
         var bytes = Png(20, 20);
 
-        var created = await _client.PostAsJsonAsync("/api/attachment", new
+        var created = await Client.PostAsJsonAsync("/api/attachment", new
         {
             itemId,
             type = "Photo",
@@ -402,7 +373,7 @@ public class ApiTests
 
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/attachment/{id}/file");
         request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 9);
-        var response = await _client.SendAsync(request);
+        var response = await Client.SendAsync(request);
         var body = await response.Content.ReadAsByteArrayAsync();
 
         Assert.Multiple(() =>
@@ -418,12 +389,12 @@ public class ApiTests
     {
         var empty = await PostItem(Unique("NoFiles"));
         var emptyId = empty.GetProperty("id").GetInt32();
-        Assert.That((await _client.GetAsync($"/api/attachment/item/{emptyId}")).StatusCode,
+        Assert.That((await Client.GetAsync($"/api/attachment/item/{emptyId}")).StatusCode,
             Is.EqualTo(HttpStatusCode.NoContent));
 
         var item = await PostItem(Unique("Files"));
         var itemId = item.GetProperty("id").GetInt32();
-        (await _client.PostAsJsonAsync("/api/attachment", new
+        (await Client.PostAsJsonAsync("/api/attachment", new
         {
             itemId,
             type = "User Manual",
@@ -431,7 +402,7 @@ public class ApiTests
             uploadBase64 = "data:application/pdf;base64," + Convert.ToBase64String(new byte[] { 1, 2, 3 }),
         })).EnsureSuccessStatusCode();
 
-        var list = await _client.GetFromJsonAsync<JsonElement>($"/api/attachment/item/{itemId}", Json);
+        var list = await Client.GetFromJsonAsync<JsonElement>($"/api/attachment/item/{itemId}", Json);
         Assert.Multiple(() =>
         {
             Assert.That(list.GetArrayLength(), Is.EqualTo(1));
@@ -443,7 +414,7 @@ public class ApiTests
     [Test]
     public async Task GetConstantsByGroup_ReturnsOnlyThatGroup()
     {
-        var attributes = await _client.GetFromJsonAsync<JsonElement>("/api/constants/group/Attribute", Json);
+        var attributes = await Client.GetFromJsonAsync<JsonElement>("/api/constants/group/Attribute", Json);
 
         Assert.That(attributes.GetArrayLength(), Is.GreaterThan(0));
         Assert.That(
@@ -454,7 +425,7 @@ public class ApiTests
     [Test]
     public async Task PostItem_WithALabelBeyondTheColumn_IsRejected()
     {
-        var response = await _client.PostAsJsonAsync("/api/item", new
+        var response = await Client.PostAsJsonAsync("/api/item", new
         {
             label = new string('x', 1001),
             icon = "",
@@ -473,7 +444,7 @@ public class ApiTests
         var item = await PostItem(Unique("NoPayload"));
         var itemId = item.GetProperty("id").GetInt32();
 
-        var response = await _client.PostAsJsonAsync("/api/attachment", new
+        var response = await Client.PostAsJsonAsync("/api/attachment", new
         {
             itemId,
             type = "Photo",
@@ -483,7 +454,6 @@ public class ApiTests
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
-
 
     [Test]
     public async Task PostAttachmentMultipart_StoresTheFileAndServesItBack()
@@ -500,7 +470,7 @@ public class ApiTests
             { new ByteArrayContent(bytes), "file", "streamed.png" },
         };
 
-        var response = await _client.PostAsync("/api/attachment/upload", form);
+        var response = await Client.PostAsync("/api/attachment/upload", form);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         var attachment = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
         var id = attachment.GetProperty("id").GetInt32();
@@ -512,7 +482,7 @@ public class ApiTests
             Assert.That(attachment.GetProperty("thumbnailBase64").GetString(), Is.Not.Null.And.Not.Empty);
         });
 
-        var file = await _client.GetAsync($"/api/attachment/{id}/file");
+        var file = await Client.GetAsync($"/api/attachment/{id}/file");
         file.EnsureSuccessStatusCode();
         Assert.That(
             Convert.ToHexString(SHA256.HashData(await file.Content.ReadAsByteArrayAsync())),
@@ -532,7 +502,7 @@ public class ApiTests
             { new StringContent("Photo"), "type" },
         };
 
-        var response = await _client.PostAsync("/api/attachment/upload", form);
+        var response = await Client.PostAsync("/api/attachment/upload", form);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
@@ -552,20 +522,20 @@ public class ApiTests
             { new ByteArrayContent(oversized), "file", "huge.png" },
         };
 
-        var response = await _client.PostAsync("/api/attachment/upload", form);
+        var response = await Client.PostAsync("/api/attachment/upload", form);
 
         Assert.Multiple(() =>
         {
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
             Assert.That(
-              _client.GetAsync($"/api/attachment/item/{itemId}").GetAwaiter().GetResult().StatusCode,
+              Client.GetAsync($"/api/attachment/item/{itemId}").GetAwaiter().GetResult().StatusCode,
               Is.EqualTo(HttpStatusCode.NoContent), "nothing was stored");
         });
     }
 
     private async Task<int> TreeAttachmentCount(int itemId)
     {
-        var payload = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var payload = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
         return FindCount(payload.GetProperty("tree"), itemId);
     }
 
@@ -613,7 +583,7 @@ public class ApiTests
         var b = (await PostItem(Unique("PoisonB"), a)).GetProperty("id").GetInt32();
         var c = (await PostItem(Unique("PoisonC"), b)).GetProperty("id").GetInt32();
 
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = Factory.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             await context.Database.ExecuteSqlRawAsync("UPDATE Items SET ParentId = {0} WHERE Id = {1}", c, a);
@@ -622,7 +592,7 @@ public class ApiTests
         }
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        var response = await _client.GetAsync("/api/item", timeout.Token);
+        var response = await Client.GetAsync("/api/item", timeout.Token);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK),
             "a cycle in the data is a projection problem, not a reason for the process to die");
@@ -646,7 +616,7 @@ public class ApiTests
         var childLabel = Unique("ChildChain");
         await PostItem(childLabel, parentId);
 
-        var payload = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var payload = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
         var child = payload.GetProperty("tree").EnumerateArray()
             .SelectMany(node => node.GetProperty("children").EnumerateArray())
             .Single(node => node.GetProperty("label").GetString() == childLabel);
@@ -666,13 +636,13 @@ public class ApiTests
         var b = (await PostItem(Unique("HiddenB"), a)).GetProperty("id").GetInt32();
         var c = (await PostItem(Unique("HiddenC"), b)).GetProperty("id").GetInt32();
 
-        var deleted = await _client.DeleteAsync($"/api/item/{b}");
+        var deleted = await Client.DeleteAsync($"/api/item/{b}");
         Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
         var problem = await deleted.Content.ReadFromJsonAsync<JsonElement>(Json);
         Assert.That(problem.GetProperty("detail").GetString(), Does.Contain("1"));
         Assert.That(problem.GetProperty("detail").GetString(), Does.Contain("move").Or.Contain("Move"));
 
-        var payload = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var payload = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
         var treeRoot = payload.GetProperty("tree").EnumerateArray().Single(node => node.GetProperty("id").GetInt32() == a);
         var childB = treeRoot.GetProperty("children").EnumerateArray().Single(node => node.GetProperty("id").GetInt32() == b);
         Assert.That(childB.GetProperty("children")[0].GetProperty("id").GetInt32(), Is.EqualTo(c));
@@ -682,12 +652,12 @@ public class ApiTests
     public async Task PutItem_RejectsSelfParentAndThreeNodeCycle()
     {
         var a = (await PostItem(Unique("CycleA"))).GetProperty("id").GetInt32();
-        var self = await _client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "CycleA", icon = "", parentId = a, attributes = "{}" });
+        var self = await Client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "CycleA", icon = "", parentId = a, attributes = "{}" });
         Assert.That(self.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         var b = (await PostItem(Unique("CycleB"), a)).GetProperty("id").GetInt32();
         var c = (await PostItem(Unique("CycleC"), b)).GetProperty("id").GetInt32();
-        var cycle = await _client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "CycleA", icon = "", parentId = c, attributes = "{}" });
+        var cycle = await Client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "CycleA", icon = "", parentId = c, attributes = "{}" });
         Assert.That(cycle.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
@@ -698,10 +668,10 @@ public class ApiTests
         var b = (await PostItem(Unique("Cycle4B"), a)).GetProperty("id").GetInt32();
         var c = (await PostItem(Unique("Cycle4C"), b)).GetProperty("id").GetInt32();
         var d = (await PostItem(Unique("Cycle4D"), c)).GetProperty("id").GetInt32();
-        var cycle = await _client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "Cycle4A", icon = "", parentId = d, attributes = "{}" });
+        var cycle = await Client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "Cycle4A", icon = "", parentId = d, attributes = "{}" });
         Assert.That(cycle.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
-        var move = await _client.PutAsJsonAsync($"/api/item/{b}", new { id = b, label = "Cycle4B", icon = "", parentId = d, attributes = "{}" });
+        var move = await Client.PutAsJsonAsync($"/api/item/{b}", new { id = b, label = "Cycle4B", icon = "", parentId = d, attributes = "{}" });
         Assert.That(move.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
@@ -721,7 +691,7 @@ public class ApiTests
             parentId = (await PostItem(label, parentId)).GetProperty("id").GetInt32();
         }
 
-        var rejected = await _client.PostAsJsonAsync("/api/item", new
+        var rejected = await Client.PostAsJsonAsync("/api/item", new
         {
             label = "nivel trece", icon = "", parentId, attributes = "{}",
             children = Array.Empty<object>(), attachments = Array.Empty<object>()
@@ -740,7 +710,7 @@ public class ApiTests
         for (var level = 2; level <= 11; level++)
             parentId = (await PostItem(Unique($"Deep{level}"), parentId)).GetProperty("id").GetInt32();
 
-        var response = await _client.PutAsJsonAsync($"/api/item/{subtreeRoot}", new
+        var response = await Client.PutAsJsonAsync($"/api/item/{subtreeRoot}", new
         {
             id = subtreeRoot, label = "MovableRoot", icon = "", parentId, attributes = "{}"
         });

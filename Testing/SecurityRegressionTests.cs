@@ -17,22 +17,14 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class SecurityRegressionTests
+public sealed class SecurityRegressionTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private ApiFactory _factory = null!;
-
-    [OneTimeSetUp]
-    public void Start() => _factory = new ApiFactory();
-
-    [OneTimeTearDown]
-    public void Stop() => _factory.Dispose();
+    protected override bool SignsInAtStartup => false;
 
     [Test]
     public async Task Upload_ToAMissingRecord_IsRefusedBeforeAnythingIsWrittenToDisk()
     {
-        using var client = await SuperadminClient();
+        using var client = await LoginAsSuperadmin();
         using var form = new MultipartFormDataContent
         {
             { new StringContent("999999"), "itemId" },
@@ -45,7 +37,7 @@ public sealed class SecurityRegressionTests
         var response = await client.PostAsync("/api/attachment/upload", form);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest), await response.Content.ReadAsStringAsync());
 
-        var orphanDirectory = Path.Combine(_factory.MediaRoot, "items", "999999");
+        var orphanDirectory = Path.Combine(Factory.MediaRoot, "items", "999999");
         Assert.That(Directory.Exists(orphanDirectory), Is.False,
             "the record was checked before the bytes were written, so no folder is left behind");
     }
@@ -53,7 +45,7 @@ public sealed class SecurityRegressionTests
     [Test]
     public async Task Upload_DoesNotKeepAClientSuppliedHostileExtension()
     {
-        using var client = await SuperadminClient();
+        using var client = await LoginAsSuperadmin();
         var itemId = await CreateItem(client, "extension probe");
 
         using var form = new MultipartFormDataContent
@@ -71,13 +63,13 @@ public sealed class SecurityRegressionTests
 
         Assert.That(storedPath.EndsWith(".html", StringComparison.OrdinalIgnoreCase), Is.False,
             "an extension outside the allow-list is re-detected from the content");
-        Assert.That(File.Exists(Path.Combine(_factory.MediaRoot, storedPath.Replace('/', Path.DirectorySeparatorChar))), Is.True);
+        Assert.That(File.Exists(Path.Combine(Factory.MediaRoot, storedPath.Replace('/', Path.DirectorySeparatorChar))), Is.True);
     }
 
     [Test]
     public async Task Logs_RejectsASegmentThatIsNotADate()
     {
-        using var client = await SuperadminClient();
+        using var client = await LoginAsSuperadmin();
         foreach (var attempt in new[] { "not-a-date", "2026-13-45", "..%2F..%2Fappsettings", "2026-11-11%20" })
         {
             var response = await client.GetAsync($"/api/logs/{attempt}");
@@ -95,7 +87,7 @@ public sealed class SecurityRegressionTests
     [Test]
     public async Task RefreshTokenReuse_KillsTheWholeFamily_NotOnlyTheRetiredToken()
     {
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/auth/login",
             new { email = "bootstrap@example.test", password = Password });
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -106,13 +98,13 @@ public sealed class SecurityRegressionTests
         var rotatedCookie = rotated.Headers.GetValues("Set-Cookie").Single().Split(';', 2)[0];
 
         // Somebody replays the retired cookie: that is the signal the token was copied.
-        using var thief = _factory.CreateClient();
+        using var thief = Factory.CreateClient();
         using var replay = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         replay.Headers.Add("Cookie", firstCookie);
         Assert.That((await thief.SendAsync(replay)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
 
         // The family is gone: the token the honest client is holding stops working too.
-        using var honest = _factory.CreateClient();
+        using var honest = Factory.CreateClient();
         using var next = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         next.Headers.Add("Cookie", rotatedCookie);
         Assert.That((await honest.SendAsync(next)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
@@ -122,14 +114,14 @@ public sealed class SecurityRegressionTests
     [Test]
     public async Task Delete_ReachedTheRowBehindTheQueryFilter_SoASoftDeletedRowCanBeRemovedForGood()
     {
-        using var client = await SuperadminClient();
+        using var client = await LoginAsSuperadmin();
         var created = await client.PostAsJsonAsync("/api/constants",
             new { label = $"delete-probe-{Guid.NewGuid():N}", value = "x", group = "Test", parentId = (int?)null });
         Assert.That(created.StatusCode, Is.EqualTo(HttpStatusCode.OK), await created.Content.ReadAsStringAsync());
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetInt32();
 
         Assert.That((await client.DeleteAsync($"/api/constants/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await context.Constants.IgnoreQueryFilters().AnyAsync(row => row.Id == id), Is.True,
             "the first delete is logical and the row stays");
@@ -142,7 +134,7 @@ public sealed class SecurityRegressionTests
     [Test]
     public async Task JsonUpload_ToAMissingRecord_IsRefusedBeforeTheFileIsWritten()
     {
-        using var client = await SuperadminClient();
+        using var client = await LoginAsSuperadmin();
         var payload = new
         {
             itemId = 888888,
@@ -152,17 +144,17 @@ public sealed class SecurityRegressionTests
         };
         var response = await client.PostAsJsonAsync("/api/attachment", payload);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest), await response.Content.ReadAsStringAsync());
-        Assert.That(Directory.Exists(Path.Combine(_factory.MediaRoot, "items", "888888")), Is.False,
+        Assert.That(Directory.Exists(Path.Combine(Factory.MediaRoot, "items", "888888")), Is.False,
             "the JSON route runs the same existence check as the multipart one");
     }
 
     [Test]
     public async Task JsonUpload_WhenTheInsertFails_RemovesTheFileItJustWrote()
     {
-        using var client = await SuperadminClient();
+        using var client = await LoginAsSuperadmin();
         var itemId = await CreateItem(client, "orphan probe");
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         // Break the insert on purpose: the row cannot be written, so the bytes must not stay.
         await context.Database.ExecuteSqlRawAsync("ALTER TABLE Attachments RENAME TO Attachments_bak");
@@ -178,7 +170,7 @@ public sealed class SecurityRegressionTests
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError),
                 await response.Content.ReadAsStringAsync());
 
-            var directory = Path.Combine(_factory.MediaRoot, "items", itemId.ToString());
+            var directory = Path.Combine(Factory.MediaRoot, "items", itemId.ToString());
             var files = Directory.Exists(directory) ? Directory.GetFiles(directory) : Array.Empty<string>();
             Assert.That(files, Is.Empty, "a failed insert removes the file it just wrote");
         }
@@ -191,7 +183,7 @@ public sealed class SecurityRegressionTests
     [Test]
     public async Task SecondDelete_OfAParentWithLiveChildren_DoesNotAnswer500()
     {
-        using var client = await SuperadminClient();
+        using var client = await LoginAsSuperadmin();
         var parentId = await CreateConstant(client, "delete-parent", null);
         await CreateConstant(client, "delete-child", parentId);
 
@@ -199,7 +191,7 @@ public sealed class SecurityRegressionTests
         Assert.That((await client.DeleteAsync($"/api/constants/{parentId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent),
             "the database refuses the hard delete while children point at the row; that is a no-op, not a 500");
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var row = await context.Constants.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.Id == parentId);
         Assert.That(row, Is.Not.Null);
@@ -211,7 +203,7 @@ public sealed class SecurityRegressionTests
     {
         // The writer names its files yyyyMMdd_Logs.txt; the reader used to ask for yyyy-MM-dd_Logs.txt,
         // so a well-formed date answered 404 while the log sat next to it.
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
         var directory = Path.Combine(environment.ContentRootPath, "Logs");
         Directory.CreateDirectory(directory);
@@ -219,7 +211,7 @@ public sealed class SecurityRegressionTests
         await File.WriteAllTextAsync(file, "log-marker-1999");
         try
         {
-            using var client = await SuperadminClient();
+            using var client = await LoginAsSuperadmin();
             var response = await client.GetAsync("/api/logs/1999-01-01");
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
             Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("log-marker-1999"));
@@ -238,22 +230,4 @@ public sealed class SecurityRegressionTests
         return (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetInt32();
     }
 
-    private async Task<int> CreateItem(HttpClient client, string label)
-    {
-        var response = await client.PostAsJsonAsync("/api/item",
-            new { label, icon = "", attributes = "{}" });
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        return (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetInt32();
     }
-
-    private async Task<HttpClient> SuperadminClient()
-    {
-        var client = _factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/login",
-            new { email = "bootstrap@example.test", password = Password });
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        var token = (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return client;
-    }
-}

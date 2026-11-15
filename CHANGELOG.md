@@ -6,7 +6,24 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `docs/inventory-slices`
+## Pending — `refactor/readability-and-tests`
+
+**Changed — no behaviour change, and that is the point.** A readability pass over the API and the
+suite, with the 161 tests as the only proof that nothing moved underneath:
+
+- `Program.cs`: 389 lines with a 337-line `Main` → **54 lines**, with the composition in
+  `IMCAPI/Startup/` (`CorsSetup`, `ApiServices`, `AuthSetup`, `AuthorizationSetup`,
+  `RateLimitingSetup`, `BootWarnings`, `ImpersonationSetup`, `StartupTasks`). Same registrations, same
+  lifetimes, same middleware order.
+- `Controllers.cs` (759 lines, three controllers in it) → `ItemController.cs`,
+  `AttachmentController.cs`, `ConstantsController.cs`, bodies unchanged.
+- `ItemImporter` (822 lines) lost its middle responsibility: `SubcategoryPlacement` owns the
+  configuration map and the placement ladder as a scoped service, and is now testable without HTTP.
+- The suite: `Testing/ApiTestBase.cs` owns the factory lifetime, the login plumbing and the eight
+  helpers that existed two or three times — 846 lines out, 318 in, 161 tests still green, none removed
+  or weakened.
+
+## #42 — The module map is committed with its files · merged 2026-11-15
 
 **Fixed — the module map is committed with the files it points at.** `AI_INVENTORY.md` is a router
 index into `inventory/<module>.md`, and those 74 module documents were in `.gitignore`: on GitHub,
@@ -14,7 +31,7 @@ and in any fresh clone, every link in the map was dead. They are tracked from no
 pre-commit hook, which already staged them, now has something to stage. Six orphan slices left behind
 by renamed files went with the regeneration; the index and the directory now agree exactly.
 
-## Pending — `feat/import-config-tree`
+## #43 — The import keeps the configuration's tree · merged 2026-11-15
 
 **Changed — the import builds the configuration's tree, not the spreadsheet's.** A row used to land
 under its sheet name (`BACKLINE`, `SONIDO`), which turned the file's layout into invented roots. A
@@ -35,7 +52,7 @@ yellow, saying why — measured on the sample file: `CASE PARA CONGAS` there, `I
 yellow, three red on the sample workbook — and every count in the tests was re-derived from a real
 preview, not adjusted until it passed.
 
-## Pending — `fix/impersonation-escalation`
+## #41 — A borrowed token cannot become the actor · merged 2026-11-15
 
 **Security — a borrowed token can no longer become the actor.** `POST /api/auth/stop-impersonation`
 minted the actor's own token from the `act` claim alone, so anyone holding a borrowed token — seven

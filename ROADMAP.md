@@ -232,3 +232,18 @@ per attribute key) and uploads, with a preview of what will be created before an
 Waits on (b): an import endpoint is the last thing to leave open, and it has to respect the cycle
 validation C-2 introduces — an imported row whose parent points at its own child is the same DoS
 entering by a different door.
+
+## Deuda de la suite de pruebas
+
+Lo que salió del refactor de legibilidad (2026-11-15), en orden de daño:
+
+- [ ] **(j) `ApiFactory` escribe variables de entorno del proceso en su constructor** — `todo` · dueño:
+  openai-coder. Cada factoría las reescribe, así que hoy no rompe nada; pero un test que cree una
+  segunda factoría deja `ConnectionStrings__DefaultConnection` apuntando a una base ya borrada hasta
+  la siguiente construcción. Es la causa documentada del `imc.db` suelto que ya apareció una vez.
+- [ ] **(k) Tres avisos pequeños** — `todo` · dueño: opencode-coder. `Preview()` de
+  `ItemImportPlacementTests` tenía una rama muerta que enmascararía un cambio de forma;
+  `Preview_RequiresAnAdminAndASpreadsheet` promete dos cosas y comprueba una; y
+  `TrashOperations_RefuseAPathThatEscapesTheMediaRoot` hace `Assert.Ignore` después de crear un
+  directorio, que queda sin limpiar.
+

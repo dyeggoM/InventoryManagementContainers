@@ -1,10 +1,6 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using IMCAPI.DB;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Testing;
 
@@ -18,34 +14,8 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class ItemImportCsvTests
+public sealed class ItemImportCsvTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
-    private const string Csv = "text/csv";
-    private const string Xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    [OneTimeSetUp]
-    public async Task Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-        var login = await _client.PostAsJsonAsync("/api/auth/login",
-            new { email = "bootstrap@example.test", password = Password });
-        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
 
     [Test]
     public async Task Preview_JudgesTheCsvRowsExactlyLikeTheEquivalentWorkbook()
@@ -177,7 +147,7 @@ public sealed class ItemImportCsvTests
     [Test]
     public async Task Preview_RefusesACsvThatOnlyHasAHeader()
     {
-        var response = await Send("/api/import/preview", "import-header-only.csv", Csv);
+        var response = await PostFixture("/api/import/preview", "import-header-only.csv", Csv);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("filas de datos"),
@@ -187,38 +157,11 @@ public sealed class ItemImportCsvTests
     [Test]
     public async Task Preview_RefusesAnEmptyCsv()
     {
-        var response = await Send("/api/import/preview", "import-blank.csv", Csv);
+        var response = await PostFixture("/api/import/preview", "import-blank.csv", Csv);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    private static string FixturePath(string name) =>
-        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
-
-    private async Task<HttpResponseMessage> Send(string route, string fixture, string contentType)
-    {
-        using var payload = new MultipartFormDataContent();
-        var file = new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath(fixture)));
-        file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        payload.Add(file, "file", fixture);
-        return await _client.PostAsync(route, payload);
-    }
-
-    private async Task<JsonElement> Preview(string fixture, string contentType)
-    {
-        var response = await Send("/api/import/preview", fixture, contentType);
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        return await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-    }
-
-    private static IEnumerable<JsonElement> ItemsOfSheet(JsonElement sheet) =>
-        sheet.GetProperty("groups").EnumerateArray()
-            .SelectMany(group => group.GetProperty("items").EnumerateArray());
-
-    private static IEnumerable<JsonElement> Items(JsonElement preview) =>
-        preview.GetProperty("sheets").EnumerateArray().SelectMany(ItemsOfSheet);
-
-    private static string? Label(JsonElement item) => item.GetProperty("label").GetString();
 }
 
 /// <summary>
@@ -227,38 +170,17 @@ public sealed class ItemImportCsvTests
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class ItemImportCsvWriteTests
+public sealed class ItemImportCsvWriteTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
-    private const string Csv = "text/csv";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    [SetUp]
-    public async Task Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-        var login = await _client.PostAsJsonAsync("/api/auth/login",
-            new { email = "bootstrap@example.test", password = Password });
-        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    [TearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
+    /// <summary>
+    /// Each test writes to the tree, so each one needs a database nothing else has touched.
+    /// </summary>
+    protected override bool FreshApiPerTest => true;
 
     [Test]
     public async Task Import_BuildsTheTreeTheCsvDescribes()
     {
-        var result = await Import("import-sample.csv");
+        var result = await Import("import-sample.csv", Csv);
 
         Assert.Multiple(() =>
         {
@@ -271,7 +193,7 @@ public sealed class ItemImportCsvWriteTests
             Assert.That(result.GetProperty("skippedRed").GetInt32(), Is.EqualTo(3));
         });
 
-        var tree = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var tree = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
         var roots = tree.GetProperty("tree").EnumerateArray()
             .Select(node => node.GetProperty("label").GetString()!)
             .ToList();
@@ -289,34 +211,10 @@ public sealed class ItemImportCsvWriteTests
     [Test]
     public async Task Import_RefusesACsvWithNoDataRows_AndWritesNothing()
     {
-        var response = await ImportRaw("import-header-only.csv");
+        var response = await PostImport("import-header-only.csv", Csv, includeYellow: true);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(await CountItems(), Is.EqualTo(0), "a refused file leaves the tree exactly as it was");
     }
 
-    private async Task<int> CountItems()
-    {
-        using var scope = _factory.Services.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        return await context.Items.IgnoreQueryFilters().CountAsync();
-    }
-
-    private async Task<HttpResponseMessage> ImportRaw(string fixture)
-    {
-        using var payload = new MultipartFormDataContent();
-        var file = new ByteArrayContent(await File.ReadAllBytesAsync(
-            Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", fixture)));
-        file.Headers.ContentType = new MediaTypeHeaderValue(Csv);
-        payload.Add(file, "file", fixture);
-        payload.Add(new StringContent("true"), "includeYellow");
-        return await _client.PostAsync("/api/import", payload);
-    }
-
-    private async Task<JsonElement> Import(string fixture)
-    {
-        var response = await ImportRaw(fixture);
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        return await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-    }
 }

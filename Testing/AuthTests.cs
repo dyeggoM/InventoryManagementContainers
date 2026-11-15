@@ -15,30 +15,14 @@ namespace Testing;
 
 [NonParallelizable]
 [TestFixture]
-public sealed class AuthTests
+public sealed class AuthTests : ApiTestBase
 {
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-    private const string Password = "AuthTest!Secure123";
-
-    [OneTimeSetUp]
-    public void Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
+    protected override bool SignsInAtStartup => false;
 
     [Test]
     public async Task Login_WithValidCredentials_ReturnsAccessTokenAndRefreshCookie()
     {
-        var response = await _client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = Password });
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = Password });
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Multiple(() =>
         {
@@ -51,7 +35,7 @@ public sealed class AuthTests
     [Test]
     public async Task Refresh_RotatesCookieAndPersistsOnlyTokenHashes()
     {
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = Password });
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var oldCookie = CookieValue(login);
@@ -61,7 +45,7 @@ public sealed class AuthTests
         var newCookie = CookieValue(refresh);
         Assert.That(newCookie, Is.Not.EqualTo(oldCookie));
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var storedTokens = (await context.RefreshTokens.OrderBy(token => token.Id).ToListAsync()).TakeLast(2).ToArray();
         Assert.Multiple(() =>
@@ -77,7 +61,7 @@ public sealed class AuthTests
     [Test]
     public async Task Logout_RevokesRefreshToken()
     {
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         (await client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = Password })).EnsureSuccessStatusCode();
         Assert.That((await client.PostAsync("/api/auth/logout", content: null)).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
         Assert.That((await client.PostAsync("/api/auth/refresh", content: null)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
@@ -89,28 +73,28 @@ public sealed class AuthTests
     [Test]
     public async Task Login_WithInvalidCredentials_ReturnsUnauthorized()
     {
-        var response = await _client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = "wrong" });
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = "wrong" });
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
     }
 
     [Test]
     public async Task ProtectedItemRoute_WithoutToken_ReturnsUnauthorized()
     {
-        using var anonymous = _factory.CreateClient();
+        using var anonymous = Factory.CreateClient();
         Assert.That((await anonymous.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
     }
 
     [Test]
     public async Task AdminRoute_WithOperatorToken_ReturnsForbidden()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var user = new IdentityUser { UserName = "operator@example.test", Email = "operator@example.test", EmailConfirmed = true };
         var created = await userManager.CreateAsync(user, Password);
         Assert.That(created.Succeeded, Is.True, string.Join("; ", created.Errors.Select(e => e.Description)));
         Assert.That((await userManager.AddToRoleAsync(user, "operador")).Succeeded, Is.True);
 
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/auth/login", new { email = user.Email, password = Password });
         var payload = await login.Content.ReadFromJsonAsync<JsonElement>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", payload.GetProperty("access_token").GetString());
@@ -121,14 +105,14 @@ public sealed class AuthTests
     [Test]
     public async Task DeclaredAnonymousRoute_WithoutToken_ReturnsOk()
     {
-        using var anonymous = _factory.CreateClient();
+        using var anonymous = Factory.CreateClient();
         Assert.That((await anonymous.GetAsync("/api/constants")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
     [Test]
     public void AnonymousEndpoints_MatchTheAllowAnonymousManifest()
     {
-        var source = _factory.Services.GetRequiredService<EndpointDataSource>();
+        var source = Factory.Services.GetRequiredService<EndpointDataSource>();
         var actual = source.Endpoints
             .Where(endpoint => endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null
                 || !endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any())
@@ -150,7 +134,7 @@ public sealed class AuthTests
     [Test]
     public async Task StartupInvariant_RejectsMoreThanOneSuperadmin()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var duplicate = new IdentityUser { UserName = "another-root@example.test", Email = "another-root@example.test", EmailConfirmed = true };
         Assert.That((await userManager.CreateAsync(duplicate, Password)).Succeeded, Is.True);

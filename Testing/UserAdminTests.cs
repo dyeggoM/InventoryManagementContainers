@@ -13,22 +13,14 @@ namespace Testing;
 
 [NonParallelizable]
 [TestFixture]
-public sealed class UserAdminTests
+public sealed class UserAdminTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private ApiFactory _factory = null!;
-
-    [OneTimeSetUp]
-    public void Start() => _factory = new ApiFactory();
-
-    [OneTimeTearDown]
-    public void Stop() => _factory.Dispose();
+    protected override bool SignsInAtStartup => false;
 
     [Test]
     public async Task Superadmin_CreatesAndListsUser_AndDuplicateEmailConflicts()
     {
-        using var client = await SuperadminClient();
+        using var client = await LoginAsSuperadmin();
         var email = $"created-{Guid.NewGuid():N}@example.test";
 
         var created = await client.PostAsJsonAsync("/api/users", new { email, roles = new[] { "lector" } });
@@ -49,7 +41,7 @@ public sealed class UserAdminTests
 
         var list = await client.GetFromJsonAsync<JsonElement>("/api/users", Json);
         Assert.That(list.GetProperty("items").EnumerateArray().Any(user => user.GetProperty("id").GetString() == id), Is.True);
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await context.AuditLogs.AnyAsync(row => row.Entity == "IdentityUser" && row.EntityId == id && row.Action == "Create"), Is.True);
         Assert.That(await context.AuditLogs.AnyAsync(row => row.Action == "RoleChange" && row.EntityId == id), Is.True);
@@ -58,8 +50,8 @@ public sealed class UserAdminTests
     [Test]
     public async Task RoleChanges_RejectSelfAndSuperadminAssignment_AndAreAudited()
     {
-        using var client = await SuperadminClient();
-        using var scope = _factory.Services.CreateScope();
+        using var client = await LoginAsSuperadmin();
+        using var scope = Factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var root = await users.FindByEmailAsync("bootstrap@example.test");
         Assert.That(root, Is.Not.Null);
@@ -85,8 +77,8 @@ public sealed class UserAdminTests
     [Test]
     public async Task Delete_SoftDeactivatesUserAndCannotDeleteSoleSuperadmin()
     {
-        using var client = await SuperadminClient();
-        using var scope = _factory.Services.CreateScope();
+        using var client = await LoginAsSuperadmin();
+        using var scope = Factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var root = await users.FindByEmailAsync("bootstrap@example.test");
         var rootDelete = await client.DeleteAsync($"/api/users/{root!.Id}");
@@ -107,7 +99,7 @@ public sealed class UserAdminTests
     [Test]
     public async Task Impersonation_IsByRole_ReadOnly_AndCannotImpersonateAgain()
     {
-        using var admin = await SuperadminClient();
+        using var admin = await LoginAsSuperadmin();
         var start = await admin.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
         Assert.That(start.StatusCode, Is.EqualTo(HttpStatusCode.OK), await start.Content.ReadAsStringAsync());
         var payload = await start.Content.ReadFromJsonAsync<JsonElement>(Json);
@@ -126,7 +118,7 @@ public sealed class UserAdminTests
         string? Claim(string type) => claims.FirstOrDefault(claim => claim.Type == type)?.Value;
         var roleClaims = claims.Where(claim => claim.Type == ClaimTypes.Role || claim.Type == "role")
             .Select(claim => claim.Value).ToList();
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var actor = await scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>()
             .FindByEmailAsync("bootstrap@example.test");
         Assert.Multiple(() =>
@@ -141,7 +133,7 @@ public sealed class UserAdminTests
             Assert.That(roleClaims, Is.EqualTo(new[] { "lector" }), "only the target role is carried");
         });
 
-        using var impersonated = _factory.CreateClient();
+        using var impersonated = Factory.CreateClient();
         impersonated.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         Assert.That((await impersonated.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That((await impersonated.PostAsJsonAsync("/api/item",
@@ -189,7 +181,7 @@ public sealed class UserAdminTests
     [Test]
     public async Task Impersonation_FollowsTheHierarchy_AndNeverTargetsSuperadmin()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
         Assert.That((await root.PostAsJsonAsync("/api/users/impersonate", new { role = "superadmin" })).StatusCode,
             Is.EqualTo(HttpStatusCode.BadRequest), "the superadmin role is never impersonable");
         Assert.That((await root.PostAsJsonAsync("/api/users/impersonate", new { role = "wizard" })).StatusCode,
@@ -219,7 +211,7 @@ public sealed class UserAdminTests
     [Test]
     public async Task CreateUser_WithOrWithoutPassword_ProducesAnAccountThatCanLogIn()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
 
         var chosenEmail = $"chosen-{Guid.NewGuid():N}@example.test";
         var created = await root.PostAsJsonAsync("/api/users",
@@ -252,7 +244,7 @@ public sealed class UserAdminTests
     [Test]
     public async Task ResetPassword_ChangesTheUsablePassword_AndRevokesRefreshTokens()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
         var email = $"reset-{Guid.NewGuid():N}@example.test";
         var created = await root.PostAsJsonAsync("/api/users",
             new { email, roles = new[] { "lector" }, password = "OriginalPass!1" });
@@ -270,13 +262,13 @@ public sealed class UserAdminTests
         Assert.That((await before.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
             "a reset invalidates the access tokens minted against the old security stamp");
 
-        using var stale = _factory.CreateClient();
+        using var stale = Factory.CreateClient();
         var staleLogin = await stale.PostAsJsonAsync("/api/auth/login", new { email, password = "OriginalPass!1" });
         Assert.That(staleLogin.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized), "the old password stops working");
 
         // The revocation is checked before logging in again, or the new session's own refresh token
         // would make the assertion meaningless.
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = Factory.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             Assert.That(await context.RefreshTokens.AnyAsync(row => row.UserId == id && row.RevokedAtUtc == null), Is.False,
@@ -304,7 +296,7 @@ public sealed class UserAdminTests
     [Test]
     public async Task RoleChange_RotatesTheSecurityStamp_SoTheOldTokenStopsWorking()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
         var email = $"demote-{Guid.NewGuid():N}@example.test";
         var created = await root.PostAsJsonAsync("/api/users",
             new { email, roles = new[] { "lector" }, password = "RoleChange!1" });
@@ -340,14 +332,14 @@ public sealed class UserAdminTests
     [Test]
     public async Task StopImpersonation_WithoutTheActorsSession_DoesNotHandOutTheActorsToken()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
         var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
         Assert.That(start.StatusCode, Is.EqualTo(HttpStatusCode.OK), await start.Content.ReadAsStringAsync());
         var borrowed = (await start.Content.ReadFromJsonAsync<JsonElement>(Json))
             .GetProperty("access_token").GetString()!;
 
         // A holder of the borrowed token and nothing else: fresh client, so no refresh cookie.
-        using var holder = _factory.CreateClient();
+        using var holder = Factory.CreateClient();
         holder.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
         var exchange = await holder.PostAsync("/api/auth/stop-impersonation", content: null);
 
@@ -367,7 +359,7 @@ public sealed class UserAdminTests
     [Test]
     public async Task StopImpersonation_WithTheActorsOwnSession_ReturnsTheirToken()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
         var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "operador" });
         Assert.That(start.StatusCode, Is.EqualTo(HttpStatusCode.OK), await start.Content.ReadAsStringAsync());
         var borrowed = (await start.Content.ReadFromJsonAsync<JsonElement>(Json))
@@ -393,14 +385,14 @@ public sealed class UserAdminTests
     [Test]
     public async Task Impersonation_EndsOnce_AndTheBorrowedTokenDiesWithIt()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
         var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
         var payload = await start.Content.ReadFromJsonAsync<JsonElement>(Json);
         var borrowed = payload.GetProperty("access_token").GetString()!;
         var sessionId = payload.GetProperty("impersonation_session").GetString();
         Assert.That(sessionId, Is.Not.Null.And.Not.Empty, "the borrow names itself so it can be paired and revoked");
 
-        using var holder = _factory.CreateClient();
+        using var holder = Factory.CreateClient();
         holder.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
         Assert.That((await holder.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.OK), "live borrow reads");
 
@@ -415,13 +407,13 @@ public sealed class UserAdminTests
             "an ended borrow is a dead token");
 
         // A second stop finds nothing to end: single use, from any holder.
-        using var actor = await SuperadminClient();
+        using var actor = await LoginAsSuperadmin();
         using var second = new HttpRequestMessage(HttpMethod.Post, "/api/auth/stop-impersonation");
         second.Headers.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
         Assert.That((await actor.SendAsync(second)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
             "a borrow is ended once: the second attempt has no live token to make it with");
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var session = await context.ImpersonationSessions.SingleAsync(row => row.Id == sessionId);
         Assert.That(session.EndedAtUtc, Is.Not.Null);
@@ -431,14 +423,14 @@ public sealed class UserAdminTests
     [Test]
     public async Task Impersonation_TokenStopsWorkingWhenTheSessionExpires()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
         var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "operador" });
         var payload = await start.Content.ReadFromJsonAsync<JsonElement>(Json);
         var borrowed = payload.GetProperty("access_token").GetString()!;
         var sessionId = payload.GetProperty("impersonation_session").GetString()!;
 
         // Let the borrow run out without waiting seven minutes for it.
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = Factory.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             var session = await context.ImpersonationSessions.SingleAsync(row => row.Id == sessionId);
@@ -446,7 +438,7 @@ public sealed class UserAdminTests
             await context.SaveChangesAsync();
         }
 
-        using var holder = _factory.CreateClient();
+        using var holder = Factory.CreateClient();
         holder.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
         Assert.That((await holder.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
     }
@@ -454,7 +446,7 @@ public sealed class UserAdminTests
     [Test]
     public async Task Impersonation_AuditNamesTheSessionThatFramedIt()
     {
-        using var root = await SuperadminClient();
+        using var root = await LoginAsSuperadmin();
         var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
         var payload = await start.Content.ReadFromJsonAsync<JsonElement>(Json);
         var sessionId = payload.GetProperty("impersonation_session").GetString()!;
@@ -464,7 +456,7 @@ public sealed class UserAdminTests
         stopRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
         Assert.That((await root.SendAsync(stopRequest)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var startRow = await context.AuditLogs.SingleAsync(row => row.Action == "ImpersonateStart" && row.ImpersonationSessionId == sessionId);
         var endRow = await context.AuditLogs.SingleAsync(row => row.Action == "ImpersonateEnd" && row.ImpersonationSessionId == sessionId);
@@ -488,23 +480,4 @@ public sealed class UserAdminTests
         return await LoginAs(email, password);
     }
 
-    private async Task<HttpClient> LoginAs(string email, string password)
-    {
-        var client = _factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/login", new { email, password });
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        var token = (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return client;
-    }
-
-    private async Task<HttpClient> SuperadminClient()
-    {
-        var client = _factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = Password });
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        var token = (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return client;
-    }
 }

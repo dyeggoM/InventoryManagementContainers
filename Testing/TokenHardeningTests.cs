@@ -20,33 +20,10 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class TokenHardeningTests
+public sealed class TokenHardeningTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
     private const string Key = "test-signing-key-with-at-least-32-bytes-123456";
     private const string Issuer = "InventoryManagementContainers.Tests";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    [OneTimeSetUp]
-    public async Task Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-        var login = await _client.PostAsJsonAsync("/api/auth/login",
-            new { email = "bootstrap@example.test", password = Password });
-        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
 
     /// <summary>
     /// A token this API did not mint: same key, same issuer, plausible claims — and whatever the test
@@ -72,7 +49,7 @@ public sealed class TokenHardeningTests
 
     private async Task<(string Subject, string Stamp)> BootstrapClaims()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var user = await context.Users.SingleAsync(row => row.Email == "bootstrap@example.test");
         return (user.Id, user.SecurityStamp!);
@@ -86,17 +63,17 @@ public sealed class TokenHardeningTests
         // The control: the same forged token, with the stamp the account has, authenticates.
         using var withStamp = new HttpRequestMessage(HttpMethod.Get, "/api/item");
         withStamp.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Forge(subject, stamp));
-        Assert.That((await _client.SendAsync(withStamp)).StatusCode, Is.EqualTo(HttpStatusCode.OK),
+        Assert.That((await Client.SendAsync(withStamp)).StatusCode, Is.EqualTo(HttpStatusCode.OK),
             "the forging itself is not what is being tested: a complete token works");
 
         using var without = new HttpRequestMessage(HttpMethod.Get, "/api/item");
         without.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Forge(subject, stamp: null));
-        Assert.That((await _client.SendAsync(without)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
+        Assert.That((await Client.SendAsync(without)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
             "a token that omits the stamp would skip the check that a password reset relies on");
 
         using var empty = new HttpRequestMessage(HttpMethod.Get, "/api/item");
         empty.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Forge(subject, string.Empty));
-        Assert.That((await _client.SendAsync(empty)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
+        Assert.That((await Client.SendAsync(empty)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
             "an empty stamp is not a stamp");
     }
 
@@ -106,13 +83,13 @@ public sealed class TokenHardeningTests
         var (subject, _) = await BootstrapClaims();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/item");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Forge(subject, "stamp-from-before-the-reset"));
-        Assert.That((await _client.SendAsync(request)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That((await Client.SendAsync(request)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
     }
 
     [Test]
     public async Task TwoStopsAtOnce_EndTheBorrowOnce_AndAuditItOnce()
     {
-        var start = await _client.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
+        var start = await Client.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
         var payload = await start.Content.ReadFromJsonAsync<JsonElement>(Json);
         var borrowed = payload.GetProperty("access_token").GetString()!;
         var sessionId = payload.GetProperty("impersonation_session").GetString()!;
@@ -123,9 +100,9 @@ public sealed class TokenHardeningTests
         one.Headers.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
         two.Headers.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
 
-        var responses = await Task.WhenAll(_client.SendAsync(one), _client.SendAsync(two));
+        var responses = await Task.WhenAll(Client.SendAsync(one), Client.SendAsync(two));
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var ends = await context.AuditLogs.CountAsync(row =>
             row.Action == "ImpersonateEnd" && row.ImpersonationSessionId == sessionId);

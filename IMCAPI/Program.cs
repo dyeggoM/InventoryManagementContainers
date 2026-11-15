@@ -1,312 +1,27 @@
 
-using IMCAPI.DB;
-using IMCAPI.DB.Repositories;
 using IMCAPI.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
-using System.Text;
-using System.Text.Json.Serialization;
+using IMCAPI.Startup;
 
 namespace IMCAPI
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Logging.ClearProviders();
             builder.Logging.AddProvider(new FileLoggerProvider(builder.Environment));
 
-            #region CORS
-            var allowedOrigins = (builder.Configuration["CORS:AllowedCors"] ?? string.Empty)
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            var allowAnyOrigin = allowedOrigins.Contains("*", StringComparer.Ordinal);
-            if (allowAnyOrigin)
-            {
-                // `*` is what an operator writes when they mean "everything". With credentials the
-                // browser forbids the literal wildcard, so it has to become the predicate the policy
-                // uses anyway — and it stops being an implicit decision.
-                allowedOrigins = allowedOrigins.Where(origin => origin != "*").ToArray();
-            }
-            if (allowedOrigins.Length == 0 && !allowAnyOrigin && !builder.Environment.IsDevelopment())
-            {
-                // The refresh token travels in a cookie and the policy allows credentials, so an empty
-                // list outside Development cannot be widened to "any origin": refuse to boot instead.
-                throw new InvalidOperationException(
-                    "CORS:AllowedCors must name at least one origin, or '*' to accept any origin, outside Development.");
-            }
-
-            builder.Services.AddCors(confg =>
-                confg.AddPolicy("AllowCors",
-                    p =>
-                    {
-                        if (builder.Environment.IsDevelopment())
-                        {
-                            // A dev box is reached from other machines (LAN IP, dev-server port), and a
-                            // pinned list turns that into an opaque browser failure — measured: the
-                            // phone on the workshop network stopped seeing CORS headers the moment the
-                            // list won. So Development reflects — but only origins that are this
-                            // machine or its private network: reflecting any origin *with credentials*
-                            // lets a page on the internet read the API with the tester's cookie.
-                            p.SetIsOriginAllowed(origin =>
-                                IsLocalDevelopmentOrigin(origin)
-                                || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase));
-                        }
-                        else if (allowAnyOrigin)
-                        {
-                            p.SetIsOriginAllowed(_ => true);
-                        }
-                        else
-                        {
-                            p.WithOrigins(allowedOrigins);
-                        }
-
-                        // Every verb the routes actually use: the archive's restore is a PATCH, and a
-                        // verb missing here is a call a browser refuses before it reaches the server,
-                        // while curl keeps working — which is why it survives review. Pinned by
-                        // Testing/CorsPreflightTests.
-                        p.WithMethods("POST", "PUT", "PATCH", "GET", "DELETE")
-                         .AllowAnyHeader()
-                         .AllowCredentials();
-
-                    }));
-            #endregion
-
-            builder.Services.AddControllers().AddJsonOptions(options =>
-            {
-                options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-                options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-            });
-            builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(c =>
-            {
-                //c.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, new OpenApiSecurityScheme
-                //{
-                //    Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
-                //    Name = "Bearer",
-                //    In = ParameterLocation.Header,
-                //    Type = SecuritySchemeType.Http,
-                //    Scheme = JwtBearerDefaults.AuthenticationScheme,
-                //    BearerFormat = "JTW"
-                //});
-                //c.AddSecurityRequirement(new OpenApiSecurityRequirement {
-                //    {
-                //        new OpenApiSecurityScheme
-                //        {
-                //            Reference = new OpenApiReference
-                //            {
-                //                Type = ReferenceType.SecurityScheme,
-                //                Id = JwtBearerDefaults.AuthenticationScheme,
-                //            }
-                //        },
-                //        new string[] { }
-                //    }
-                //});
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "IMCAPI", Version = "v1" });
-            });
-
-            #region DB
-            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-            builder.Services.AddHttpContextAccessor();
-            builder.Services.AddSingleton<AuditSaveChangesInterceptor>();
-            builder.Services.AddDbContext<ApplicationContext>((services, options) =>
-                options.UseSqlite(connectionString)
-                    .AddInterceptors(services.GetRequiredService<AuditSaveChangesInterceptor>()));
-
-            var jwtKey = builder.Configuration["Auth:Jwt:Key"] ?? Environment.GetEnvironmentVariable("AUTH_JWT_KEY")
-                ?? throw new InvalidOperationException("Configure Auth:Jwt:Key or AUTH_JWT_KEY.");
-
-            // The key that `scripts/dev-lan.sh` used to ship as a constant is in every clone of this
-            // repository, so anyone who can read it and reach the API can mint a superadmin token.
-            // Development may keep using its own key, but it is generated per machine now — a
-            // deployment that answers with the published one is a mistake, not a configuration.
-            const string publishedDevelopmentKey = "dev-lan-signing-key-at-least-32-bytes-long";
-            if (!builder.Environment.IsDevelopment() && string.Equals(jwtKey, publishedDevelopmentKey, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    "AUTH_JWT_KEY is the development key published in scripts/dev-lan.sh: any reader of the "
-                    + "repository could mint tokens with it. Set a key of its own outside Development.");
-            }
-            var jwtIssuer = builder.Configuration["Auth:Jwt:Issuer"] ?? Environment.GetEnvironmentVariable("AUTH_JWT_ISSUER")
-                ?? throw new InvalidOperationException("Configure Auth:Jwt:Issuer or AUTH_JWT_ISSUER.");
-            if (Encoding.UTF8.GetByteCount(jwtKey) < 32)
-                throw new InvalidOperationException("Auth:Jwt:Key must contain at least 32 UTF-8 bytes.");
-            var authEnforce = !bool.TryParse(builder.Configuration["Auth:Enforce"], out var configuredEnforce) || configuredEnforce;
-
-            builder.Services.AddIdentityCore<IdentityUser>(options => options.User.RequireUniqueEmail = true)
-                .AddRoles<IdentityRole>()
-                .AddEntityFrameworkStores<ApplicationContext>()
-                .AddSignInManager()
-                .AddDefaultTokenProviders();
-            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(options =>
-                {
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidIssuer = jwtIssuer,
-                        ValidateAudience = true,
-                        ValidAudience = jwtIssuer,
-                        ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-                        ValidateLifetime = true,
-                        ClockSkew = TimeSpan.FromSeconds(30),
-                        NameClaimType = System.Security.Claims.ClaimTypes.Name,
-                        RoleClaimType = System.Security.Claims.ClaimTypes.Role,
-                    };
-                    options.Events = new JwtBearerEvents
-                    {
-                        OnTokenValidated = async context =>
-                        {
-                            var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationContext>();
-                            var principal = context.Principal!;
-                            var subjectId = principal.FindFirst("sub")?.Value
-                                ?? principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                            var actorId = principal.FindFirst("act")?.Value;
-                            var stoppingImpersonation = string.Equals(context.Request.Path.Value?.TrimEnd('/'),
-                                "/api/auth/stop-impersonation", StringComparison.OrdinalIgnoreCase);
-                            var ids = (stoppingImpersonation && actorId is not null ? new[] { actorId }
-                                : new[] { subjectId, actorId })
-                                .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToArray();
-                            var inactive = await db.UserProfiles.AsNoTracking()
-                                .AnyAsync(profile => ids.Contains(profile.UserId) && !profile.IsActive);
-                            if (inactive) context.Fail("The user account is inactive.");
-
-                            // A borrowed token is only good while its borrow is alive. Ending it (or
-                            // letting the seven minutes run out) kills the token on the next request,
-                            // instead of leaving it usable until it expires on its own.
-                            if (actorId is not null)
-                            {
-                                var sessionId = principal.FindFirst("imp_sid")?.Value;
-                                var live = !string.IsNullOrWhiteSpace(sessionId) && await db.ImpersonationSessions
-                                    .AsNoTracking()
-                                    .AnyAsync(session => session.Id == sessionId
-                                        && session.ActorUserId == actorId
-                                        && session.EndedAtUtc == null
-                                        && session.ExpiresAtUtc > DateTime.UtcNow);
-                                if (!live) context.Fail("The impersonation has ended.");
-                            }
-
-                            // A rotated security stamp (password reset, forced sign-out) has to kill the
-                            // tokens that were minted against the old one. Without this a reset revokes
-                            // the refresh tokens and leaves every live access token working.
-                            //
-                            // The stamp is required, not optional: `stamp is not null` made its absence a
-                            // way around the check, so a token written without the claim — by hand, with
-                            // a leaked key — survived every reset. Every token this API mints carries it.
-                            var stamp = principal.FindFirst("sstamp")?.Value;
-                            if (string.IsNullOrEmpty(stamp) || string.IsNullOrEmpty(subjectId))
-                            {
-                                context.Fail("The session is no longer valid.");
-                            }
-                            else
-                            {
-                                var users = context.HttpContext.RequestServices
-                                    .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Microsoft.AspNetCore.Identity.IdentityUser>>();
-                                var subject = await users.FindByIdAsync(subjectId);
-                                if (subject is null
-                                    || !string.Equals(subject.SecurityStamp, stamp, StringComparison.Ordinal))
-                                    context.Fail("The session is no longer valid.");
-                            }
-                        }
-                    };
-                });
-            builder.Services.AddAuthorization(options =>
-            {
-                AddRolePolicy(options, "RequiereLectura", ["superadmin", "admin", "operador", "lector"], authEnforce, allowImpersonationRead: true);
-                AddRolePolicy(options, "RequiereEscritura", ["superadmin", "admin", "operador"], authEnforce);
-                AddRolePolicy(options, "RequiereAdmin", ["superadmin", "admin"], authEnforce);
-                AddRolePolicy(options, "RequiereSuperadmin", ["superadmin"], authEnforce);
-            });
-            builder.Services.AddProblemDetails();
-
-            // The login form is the one door an unauthenticated caller can knock on, and until now the
-            // only brake was Identity's lockout. A fixed window per client address is enough to stop a
-            // credential-stuffing script without punishing a shared workshop network: the limit is
-            // configuration, and the suite raises it so a run is never throttled.
-            builder.Services.AddRateLimiter(options =>
-            {
-                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-                options.AddPolicy("auth", context =>
-                {
-                    // Read from the request's configuration, not from the builder: a test host adds its
-                    // own settings after this line runs, and limits captured here would ignore them.
-                    var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
-                    var permitLimit = configuration.GetValue<int?>("Auth:RateLimit:PermitLimit") ?? 10;
-                    var windowSeconds = configuration.GetValue<int?>("Auth:RateLimit:WindowSeconds") ?? 60;
-                    return System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
-                        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = permitLimit,
-                            Window = TimeSpan.FromSeconds(windowSeconds),
-                            QueueLimit = 0,
-                        });
-                });
-            });
-            builder.Services.AddScoped<AuthTokenService>();
-            builder.Services.AddScoped<AuditLogWriter>();
-
-
-            #endregion
-
-            #region Services
-            builder.Services.AddTransient(typeof(IRepository<>),typeof(BaseRepository<>));
-            // Attachment bytes live on disk; only a compressed preview stays in the row.
-            builder.Services.AddSingleton<AttachmentStorage>();
-            builder.Services.AddScoped<ItemImporter>();
-            #endregion
+            builder.AddConfiguredCors();
+            builder.AddApiServices();
+            builder.AddJwtAuthentication();
+            builder.AddAppAuthorization();
+            builder.AddAuthRateLimiting();
 
             var app = builder.Build();
 
-            // Configuration that quietly removes a control has to say so in the log the operator reads.
-            if (!authEnforce)
-            {
-                app.Logger.LogWarning(
-                    "Auth:Enforce is FALSE: every role policy is a no-op and any authenticated caller can " +
-                    "perform any action. This is a local diagnostic switch, never a deployment setting.");
-                if (!app.Environment.IsDevelopment())
-                {
-                    throw new InvalidOperationException(
-                        "Auth:Enforce=false is refused outside Development: it disables every role check.");
-                }
-            }
-            if (builder.Environment.IsDevelopment() || allowAnyOrigin)
-            {
-                app.Logger.LogWarning(
-                    "CORS accepts any origin with credentials enabled ({Reason}). Pin CORS:AllowedCors " +
-                    "before this leaves a dev box.",
-                    allowAnyOrigin ? "CORS:AllowedCors is '*'" : "Development");
-            }
-
-            #region Migrations
-            using (var serviceScope = app.Services.CreateScope())
-            {
-                var context = serviceScope.ServiceProvider.GetService<ApplicationContext>();
-                context?.Database.Migrate();
-
-                // The database is not in source control: build the configuration tree on first run.
-                if (context is not null)
-                {
-                    DatabaseSeeder.SeedConfiguration(context, app.Environment.ContentRootPath);
-                    var userManager = serviceScope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
-                    var roleManager = serviceScope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-                    DatabaseSeeder.SeedIdentityAsync(userManager, roleManager, app.Configuration).GetAwaiter().GetResult();
-                    DatabaseSeeder.EnsureUserProfilesAsync(context, userManager).GetAwaiter().GetResult();
-
-                    // Older rows carry the whole image; move it to disk once.
-                    var storage = serviceScope.ServiceProvider.GetRequiredService<AttachmentStorage>();
-                    DatabaseSeeder.BackfillAttachmentsAsync(context, storage).GetAwaiter().GetResult();
-
-                    // Attribute definitions predate typed values; give them sensible types once.
-                    DatabaseSeeder.BackfillAttributeTypesAsync(context).GetAwaiter().GetResult();
-                }
-            }
-            #endregion
+            app.LogConfigurationWarnings();
 
             if (app.Environment.IsDevelopment())
             {
@@ -326,64 +41,14 @@ namespace IMCAPI
             app.UseRateLimiter();
 
             app.UseAuthentication();
-            app.Use(async (context, next) =>
-            {
-                var isImpersonating = context.User.HasClaim(claim => claim.Type == "act");
-                var path = context.Request.Path.Value?.TrimEnd('/');
-                var isStopImpersonation = string.Equals(path, "/api/auth/stop-impersonation",
-                    StringComparison.OrdinalIgnoreCase);
-                // A non-browser client that refreshes with the borrowed bearer in hand must not be
-                // answered 403: the refresh trades the cookie for the caller's own token.
-                var isRefresh = string.Equals(path, "/api/auth/refresh", StringComparison.OrdinalIgnoreCase);
-                var isSafeMethod = HttpMethods.IsGet(context.Request.Method)
-                    || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method);
-                if (isImpersonating && !isSafeMethod && !isStopImpersonation && !isRefresh)
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    return;
-                }
-                await next();
-            });
+            app.UseReadOnlyImpersonation();
             app.UseAuthorization();
-
 
             app.MapControllers();
 
+            await app.RunStartupTasksAsync();
+
             app.Run();
-        }
-        /// <summary>
-        /// True for the origins a development box is actually reached from: loopback, a private
-        /// network address (RFC 1918, link-local, IPv6 unique-local) — the phone on the workshop wifi
-        /// or the laptop next to it. `<origin>` is what the browser sent, so an unparseable one is not
-        /// trusted.
-        /// </summary>
-        private static bool IsLocalDevelopmentOrigin(string origin)
-        {
-            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
-            if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)) return true;
-            if (!System.Net.IPAddress.TryParse(uri.Host, out var address)) return false;
-            if (System.Net.IPAddress.IsLoopback(address)) return true;
-
-            var bytes = address.GetAddressBytes();
-            if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-            {
-                return bytes[0] == 10
-                    || (bytes[0] == 192 && bytes[1] == 168)
-                    || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
-                    || (bytes[0] == 169 && bytes[1] == 254);
-            }
-
-            return address.IsIPv6LinkLocal || (bytes[0] & 0xFE) == 0xFC;
-        }
-
-        private static void AddRolePolicy(Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
-            string name, string[] roles, bool enforce, bool allowImpersonationRead = false)
-        {
-            options.AddPolicy(name, policy => policy.RequireAssertion(context =>
-            {
-                var impersonating = context.User.HasClaim(claim => claim.Type == "act");
-                return (!impersonating || allowImpersonationRead) && (!enforce || roles.Any(context.User.IsInRole));
-            }));
         }
     }
 }
