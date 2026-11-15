@@ -12,14 +12,6 @@ namespace Testing;
 /// </summary>
 public sealed class ApiFactory : WebApplicationFactory<IMCAPI.Program>
 {
-    static ApiFactory()
-    {
-        Environment.SetEnvironmentVariable("AUTH_JWT_KEY", "test-signing-key-with-at-least-32-bytes-123456");
-        Environment.SetEnvironmentVariable("AUTH_JWT_ISSUER", "InventoryManagementContainers.Tests");
-        Environment.SetEnvironmentVariable("AUTH_BOOTSTRAP_EMAIL", "bootstrap@example.test");
-        Environment.SetEnvironmentVariable("AUTH_BOOTSTRAP_PASSWORD", "AuthTest!Secure123");
-    }
-
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "imc-api-tests", Guid.NewGuid().ToString("N"));
 
@@ -40,45 +32,49 @@ public sealed class ApiFactory : WebApplicationFactory<IMCAPI.Program>
     {
         _authPermitLimit = authPermitLimit;
         Directory.CreateDirectory(MediaRoot);
-        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", $"Data Source={DatabasePath}");
-        Environment.SetEnvironmentVariable("Media__Root", MediaRoot);
     }
 
     public string DatabasePath => Path.Combine(_root, "test.db");
 
     public string MediaRoot => Path.Combine(_root, "media-store");
 
-    public new HttpClient CreateClient()
-    {
-        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", $"Data Source={DatabasePath}");
-        Environment.SetEnvironmentVariable("Media__Root", MediaRoot);
-        return base.CreateClient();
-    }
+    public new HttpClient CreateClient() => base.CreateClient();
 
+    /// <summary>
+    /// Every setting this host needs, per host. It used to write them as process-wide environment
+    /// variables instead, which every later host inherited: a second factory pointed at the first
+    /// one's database, and a host created for a different purpose migrated a file another test had
+    /// already migrated ("table AspNetRoles already exists"). Nothing here touches the environment.
+    /// </summary>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         Directory.CreateDirectory(MediaRoot);
 
         builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration((_, configuration) =>
-        {
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] = $"Data Source={DatabasePath}",
-                ["Media:Root"] = MediaRoot,
-                ["CORS:AllowedCors"] = "http://localhost",
-                ["Auth:Jwt:Key"] = "test-signing-key-with-at-least-32-bytes-123456",
-                ["Auth:Jwt:Issuer"] = "InventoryManagementContainers.Tests",
-                ["Auth:Enforce"] = "true",
-                ["Auth:Bootstrap:Email"] = "bootstrap@example.test",
-                ["Auth:Bootstrap:Password"] = "AuthTest!Secure123",
-                // The limiter is a production guard; a suite that logs in a hundred times must not
-                // trip it. The test that exercises it raises its own factory with a tiny window.
-                ["Auth:RateLimit:PermitLimit"] = (_authPermitLimit ?? 100000).ToString(),
-                ["Auth:RateLimit:WindowSeconds"] = "60",
-            });
-        });
+
+        // `UseSetting`, not `ConfigureAppConfiguration`: the API reads these in `Main` — the JWT key
+        // before the host is built — and a provider added to the application configuration arrives
+        // too late for that read. Host settings are there from the start, which is what a value read
+        // during startup needs.
+        foreach (var (key, value) in Settings())
+            builder.UseSetting(key, value);
     }
+
+    private Dictionary<string, string> Settings() => new()
+    {
+        ["ConnectionStrings:DefaultConnection"] = $"Data Source={DatabasePath}",
+        ["Media:Root"] = MediaRoot,
+        ["CORS:AllowedCors"] = "http://localhost",
+        ["Auth:Jwt:Key"] = "test-signing-key-with-at-least-32-bytes-123456",
+        ["Auth:Jwt:Issuer"] = "InventoryManagementContainers.Tests",
+        ["Auth:Enforce"] = "true",
+        ["Auth:Bootstrap:Email"] = "bootstrap@example.test",
+        ["Auth:Bootstrap:Password"] = "AuthTest!Secure123",
+        // The limiter is a production guard; a suite that logs in a hundred times must not trip it.
+        // The test that exercises it raises its own factory with a tiny window.
+        ["Auth:RateLimit:PermitLimit"] = (_authPermitLimit ?? 100000).ToString(),
+        ["Auth:RateLimit:WindowSeconds"] = "60",
+    };
 
     protected override void Dispose(bool disposing)
     {
