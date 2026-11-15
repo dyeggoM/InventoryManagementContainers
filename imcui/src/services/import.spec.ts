@@ -146,6 +146,7 @@ describe('importService.preview', () => {
       status: 'green',
       reasons: [],
       row: 12,
+      source: null,
     });
   });
 
@@ -158,6 +159,32 @@ describe('importService.preview', () => {
     expect(red.code).toBeNull();
     expect(red.brand).toBeNull();
     expect(red.reasons).toEqual(['Código duplicado en la hoja']);
+    // The two placement fields are optional on the wire, so an answer without them is not an error.
+    expect(red.source).toBeNull();
+    expect(preview.sheets[0]!.groups[0]!.note).toBeNull();
+  });
+
+  it('reads the group note and the row source when the API sends them', () => {
+    const preview = toPreview({
+      sheets: [
+        {
+          name: 'Other',
+          groups: [
+            {
+              name: 'CASE PARA CONGAS',
+              note: '«CASE PARA CONGAS» no está en la configuración: se coloca en «Other» para revisarla.',
+              items: [{ label: 'Case 1m x 1m', row: 2, status: 'yellow', source: 'CASES' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const group = preview.sheets[0]!.groups[0]!;
+    expect(group.note).toBe(
+      '«CASE PARA CONGAS» no está en la configuración: se coloca en «Other» para revisarla.',
+    );
+    expect(group.items[0]!.source).toBe('CASES');
   });
 
   it('gives every row a key of its own, even when two rows claim the same line', () => {

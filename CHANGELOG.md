@@ -14,6 +14,27 @@ and in any fresh clone, every link in the map was dead. They are tracked from no
 pre-commit hook, which already staged them, now has something to stage. Six orphan slices left behind
 by renamed files went with the regeneration; the index and the directory now agree exactly.
 
+## Pending — `feat/import-config-tree`
+
+**Changed — the import builds the configuration's tree, not the spreadsheet's.** A row used to land
+under its sheet name (`BACKLINE`, `SONIDO`), which turned the file's layout into invented roots. A
+row's parent is now the *Category* that owns its SUB CATEGORIA in `Constants`: `BASE TECLADO SENCILLA`
+goes under `Hardware`, `MICROFONOS` under `Sonido`, a case under `Cases`. The subcategory is written
+with the configuration's spelling — `CONGA DOBLE` → `BASE CONGA DOBLE`, `MESA` → `MESA PERCUSION`,
+`MICROFONO` → `MICROFONOS`, `GTAR COMBO` → `GTR-COMBO`, `CASES` → the category itself — and two sheets
+that write the same subcategory now share one group instead of two.
+
+**Changed — a placement says how it was decided.** A row the configuration spells exactly is green; a
+row placed by a rule (truncated name, singular/plural, category-as-subcategory) is yellow and carries
+the rule in its own reasons, with the group's `note` repeating it. An abbreviation that fits several
+subcategories of one category (`BASE`) keeps its own words under that category instead of being read
+as the shortest match. A name the configuration does not know lands in `Other`, named as it came,
+yellow, saying why — measured on the sample file: `CASE PARA CONGAS` there, `INVENTO NUEVO` too.
+
+**Measured**: `dotnet test` 158 passed. The fixtures' verdicts moved with the rule — one green, five
+yellow, three red on the sample workbook — and every count in the tests was re-derived from a real
+preview, not adjusted until it passed.
+
 ## Pending — `fix/impersonation-escalation`
 
 **Security — a borrowed token can no longer become the actor.** `POST /api/auth/stop-impersonation`

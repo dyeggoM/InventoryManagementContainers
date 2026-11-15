@@ -36,11 +36,23 @@ export interface ImportItem {
   reasons: string[];
   /** The line in the sheet it came from, as the file numbers it. */
   row: number;
+  /**
+   * The spreadsheet sheet the row came from (`STOCK`, `CASES`, or the CSV file name uppercased).
+   * The tree groups by category and subcategory now, so this is what keeps the original layout of
+   * the file traceable. Absent when the reader did not record one.
+   */
+  source?: string | null;
 }
 
 export interface ImportGroup {
   name: string;
   status: ImportStatus;
+  /**
+   * Why this group landed where it did, when a rule decided it: `«CONGA DOBLE» se coloca en «BASE
+   * CONGA DOBLE»`, `«CASE PARA CONGAS» no está en la configuración: se coloca en «Other»…`. Absent
+   * for a group the reader placed by name alone, which is the common case.
+   */
+  note?: string | null;
   green: number;
   yellow: number;
   red: number;
@@ -153,6 +165,8 @@ function toItem(raw: unknown, sheet: string, used: Set<string>): ImportItem {
     status: toStatus(source.status),
     reasons: toReasons(source.reasons),
     row,
+    // `source.source` is the sheet the row came from: the record is `source`, the field is `source`.
+    source: toNullableText(source.source),
   };
 }
 
@@ -161,6 +175,8 @@ function toGroup(raw: unknown, sheet: string, used: Set<string>): ImportGroup {
   return {
     name: asText(source.name).trim(),
     status: toStatus(source.status),
+    // Only a rule-decided placement carries one; absent and empty both read as "nothing to explain".
+    note: toNullableText(source.note),
     green: toNumber(source.green),
     yellow: toNumber(source.yellow),
     red: toNumber(source.red),

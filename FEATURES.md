@@ -16,6 +16,13 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - Delete from an overflow menu that names what it deletes, with confirmation. A record with children
   is refused (`409` with a message that says how many), so the tree never loses a branch by accident;
   a record without them is moved to the archive instead of disappearing.
+- **The import keeps the configuration's shape**: a row's parent is the *Category* that owns its
+  SUB CATEGORIA in `Constants`, so `BASE TECLADO SENCILLA` lands under `Hardware`, not under whatever
+  the spreadsheet called its sheet. The subcategory is written the way the configuration spells it
+  (`CONGA DOBLE` → `BASE CONGA DOBLE`, `MICROFONO` → `MICROFONOS`, `CASES` → the category itself), the
+  row says so when a rule placed it, and a name the configuration does not know goes to `Other`
+  marked for review instead of being guessed. Two sheets that write the same subcategory end up in
+  one group, under one category (`Services/ItemImporter.cs`).
 - **Stock can be imported from a spreadsheet** (`POST /api/import/preview` to look, `POST /api/import`
   to write; admin): the file's sheets become the top of the tree, `SUB CATEGORIA` the level below and
   each row a record. The *Importar desde Excel* screen renders that tree in three colours — green
