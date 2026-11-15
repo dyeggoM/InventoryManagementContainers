@@ -36,15 +36,15 @@ Indexed: **5 symbols** across **1 file** (0 C#, 0 Python, 5 JS/TS/Vue) · **38 r
 - `toEntry.number(value)` (imcui/src/services/archive.ts:84) → asText(value)`(L85)`
 - `toEntry.text(value)` (imcui/src/services/archive.ts:86) → asText(value)`(L87)`
 - `toEntry(raw)` (imcui/src/services/audit.ts:67) → asText(value)`(L72)`
-- `toStatus(value)` (imcui/src/services/import.ts:106) → asText(value)`(L107)`
-- `toNumber(value)` (imcui/src/services/import.ts:111) → asText(value)`(L113)`
-- `toNullableText(value)` (imcui/src/services/import.ts:117) → asText(value)`(L118)`
-- `toReasons(value)` (imcui/src/services/import.ts:122) → asText(value)`(L124)`
-- `toItem(raw, sheet, used)` (imcui/src/services/import.ts:135) → asText(value)`(L146)`
-- `toGroup(raw, sheet, used)` (imcui/src/services/import.ts:159) → asText(value)`(L162)`
-- `toSheet(raw)` (imcui/src/services/import.ts:171) → asText(value)`(L173)`
-- `toIssue(raw)` (imcui/src/services/import.ts:200) → asText(value)`(L203)`
-- `toPreview(raw)` (imcui/src/services/import.ts:210) → asText(value)`(L217)`
+- `toStatus(value)` (imcui/src/services/import.ts:118) → asText(value)`(L119)`
+- `toNumber(value)` (imcui/src/services/import.ts:123) → asText(value)`(L125)`
+- `toNullableText(value)` (imcui/src/services/import.ts:129) → asText(value)`(L130)`
+- `toReasons(value)` (imcui/src/services/import.ts:134) → asText(value)`(L136)`
+- `toItem(raw, sheet, used)` (imcui/src/services/import.ts:147) → asText(value)`(L158)`
+- `toGroup(raw, sheet, used)` (imcui/src/services/import.ts:173) → asText(value)`(L176)`
+- `toSheet(raw)` (imcui/src/services/import.ts:187) → asText(value)`(L189)`
+- `toIssue(raw)` (imcui/src/services/import.ts:216) → asText(value)`(L219)`
+- `toPreview(raw)` (imcui/src/services/import.ts:226) → asText(value)`(L233)`
 - `decodeAccessToken(token)` (imcui/src/services/session.ts:107) → asText(value)`(L116)`
 - `toUser(raw)` (imcui/src/services/users.ts:54) → asText(value)`(L63)`
 - `usersService.impersonate(role)` (imcui/src/services/users.ts:112) → asText(value)`(L114)`

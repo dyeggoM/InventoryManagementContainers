@@ -50,8 +50,8 @@ Indexed: **25 symbols** across **1 file** (0 C#, 0 Python, 25 JS/TS/Vue) · **10
 - `FilePreviewDialog.load()` (imcui/src/components/FilePreviewDialog.vue:151) → getErrorMessage(error)`(L171)`
 - `AuditPanel.load()` (imcui/src/components/dashboard/AuditPanel.vue:231) → isApiPending(error)`(L252)`
 - `<module>` (imcui/src/components/dashboard/ImpersonationPanel.spec.ts) → setLoginRedirect(handler)`(L148)`
-- `ImportPanel.analyse()` (imcui/src/components/dashboard/ImportPanel.vue:558) → getErrorMessage(error)`(L575)`
-- `ImportPanel.runImport()` (imcui/src/components/dashboard/ImportPanel.vue:582) → getErrorMessage(error)`(L608)`
+- `ImportPanel.analyse()` (imcui/src/components/dashboard/ImportPanel.vue:579) → getErrorMessage(error)`(L596)`
+- `ImportPanel.runImport()` (imcui/src/components/dashboard/ImportPanel.vue:603) → getErrorMessage(error)`(L629)`
 - `UsersPanel.load()` (imcui/src/components/dashboard/UsersPanel.vue:360) → isApiPending(error)`(L367)`, getErrorMessage(error)`(L371)`
 - `UsersPanel.create()` (imcui/src/components/dashboard/UsersPanel.vue:386) → isApiPending(error)`(L407)`, getErrorMessage(error)`(L409)`
 - `UsersPanel.submitReset()` (imcui/src/components/dashboard/UsersPanel.vue:422) → isApiPending(error)`(L432)`, getErrorMessage(error)`(L434)`
@@ -91,8 +91,8 @@ Indexed: **25 symbols** across **1 file** (0 C#, 0 Python, 25 JS/TS/Vue) · **10
 - `constantsService.create(constant)` (imcui/src/services/constants.ts:43) → api.post(endpoint, body, options)`(L44)`
 - `constantsService.update(id, constant)` (imcui/src/services/constants.ts:47) → api.put(endpoint, body, options)`(L48)`
 - `constantsService.delete(id)` (imcui/src/services/constants.ts:51) → api.delete(endpoint, options)`(L52)`
-- `importService.preview(file)` (imcui/src/services/import.ts:261) → api.postForm(endpoint, form)`(L262)`
-- `importService.run(file, request)` (imcui/src/services/import.ts:266) → api.postForm(endpoint, form)`(L267)`
+- `importService.preview(file)` (imcui/src/services/import.ts:277) → api.postForm(endpoint, form)`(L278)`
+- `importService.run(file, request)` (imcui/src/services/import.ts:282) → api.postForm(endpoint, form)`(L283)`
 - `itemsService.getAll()` (imcui/src/services/items.ts:36) → api.get(endpoint, options)`(L37)`
 - `itemsService.getById(id)` (imcui/src/services/items.ts:40) → api.get(endpoint, options)`(L41)`
 - `itemsService.create(item)` (imcui/src/services/items.ts:44) → api.post(endpoint, body, options)`(L45)`
@@ -117,13 +117,13 @@ Indexed: **25 symbols** across **1 file** (0 C#, 0 Python, 25 JS/TS/Vue) · **10
 Changing a symbol means checking every symbol on its right-hand side.
 
 - `api.get(endpoint, options)` ← <module>`(imcui/src/services/api.spec.ts:29)`, archiveService.list(query)`(imcui/src/services/archive.ts:116)`, attachmentsService.getAll()`(imcui/src/services/attachment.ts:18)`, attachmentsService.getById(id)`(imcui/src/services/attachment.ts:22)`, attachmentsService.getAllByItemId(id)`(imcui/src/services/attachment.ts:26)`, auditService.search(query)`(imcui/src/services/audit.ts:100)` +7 more
-- `getErrorMessage(error)` ← FilePreviewDialog.load()`(imcui/src/components/FilePreviewDialog.vue:171)`, ImportPanel.analyse()`(imcui/src/components/dashboard/ImportPanel.vue:575)`, ImportPanel.runImport()`(imcui/src/components/dashboard/ImportPanel.vue:608)`, UsersPanel.load()`(imcui/src/components/dashboard/UsersPanel.vue:371)`, UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:409)`, UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:434)` +5 more
+- `getErrorMessage(error)` ← FilePreviewDialog.load()`(imcui/src/components/FilePreviewDialog.vue:171)`, ImportPanel.analyse()`(imcui/src/components/dashboard/ImportPanel.vue:596)`, ImportPanel.runImport()`(imcui/src/components/dashboard/ImportPanel.vue:629)`, UsersPanel.load()`(imcui/src/components/dashboard/UsersPanel.vue:371)`, UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:409)`, UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:434)` +5 more
 - `api.post(endpoint, body, options)` ← <module>`(imcui/src/services/api.spec.ts:53)`, attachmentsService.create(attachment)`(imcui/src/services/attachment.ts:30)`, constantsService.create(constant)`(imcui/src/services/constants.ts:44)`, itemsService.create(item)`(imcui/src/services/items.ts:45)`, usersService.create(request)`(imcui/src/services/users.ts:85)`, usersService.resetPassword(id, password)`(imcui/src/services/users.ts:101)` +5 more
 - `isApiPending(error)` ← AuditPanel.load()`(imcui/src/components/dashboard/AuditPanel.vue:252)`, UsersPanel.load()`(imcui/src/components/dashboard/UsersPanel.vue:367)`, UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:407)`, UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:432)`, UsersPanel.changeRoles(user, roles)`(imcui/src/components/dashboard/UsersPanel.vue:471)`, UsersPanel.deactivate(user)`(imcui/src/components/dashboard/UsersPanel.vue:486)` +2 more
 - `request(endpoint, options)` ← api.get(endpoint, options)`(imcui/src/services/api.ts:233)`, api.postForm(endpoint, form)`(imcui/src/services/api.ts:249)`, api.post(endpoint, body, options)`(imcui/src/services/api.ts:262)`, api.put(endpoint, body, options)`(imcui/src/services/api.ts:275)`, api.patch(endpoint, body, options)`(imcui/src/services/api.ts:289)`, api.delete(endpoint, options)`(imcui/src/services/api.ts:293)`
 - `setLoginRedirect(handler)` ← <module>`(imcui/src/components/dashboard/ImpersonationPanel.spec.ts:148)`, <module>`(imcui/src/router/index.ts:64)`, <module>`(imcui/src/services/api.spec.ts:17)`, <module>`(imcui/src/services/attachment.spec.ts:20)`, <module>`(imcui/src/stores/auth-store.spec.ts:47)`
 - `api.delete(endpoint, options)` ← <module>`(imcui/src/services/api.spec.ts:73)`, attachmentsService.delete(id)`(imcui/src/services/attachment.ts:48)`, constantsService.delete(id)`(imcui/src/services/constants.ts:52)`, itemsService.delete(id)`(imcui/src/services/items.ts:53)`, usersService.deactivate(id)`(imcui/src/services/users.ts:130)`
-- `api.postForm(endpoint, form)` ← attachmentsService.upload(itemId, file, type)`(imcui/src/services/attachment.ts:40)`, importService.preview(file)`(imcui/src/services/import.ts:262)`, importService.run(file, request)`(imcui/src/services/import.ts:267)`
+- `api.postForm(endpoint, form)` ← attachmentsService.upload(itemId, file, type)`(imcui/src/services/attachment.ts:40)`, importService.preview(file)`(imcui/src/services/import.ts:278)`, importService.run(file, request)`(imcui/src/services/import.ts:283)`
 - `api.put(endpoint, body, options)` ← constantsService.update(id, constant)`(imcui/src/services/constants.ts:48)`, itemsService.update(id, item)`(imcui/src/services/items.ts:49)`, usersService.updateRoles(id, roles)`(imcui/src/services/users.ts:91)`
 - `emitSessionEvent(event)` ← expireSession()`(imcui/src/services/api.ts:100)`, performRefresh()`(imcui/src/services/api.ts:135)`
 - `sendWithSession(endpoint, options, isFormData)` ← request(endpoint, options)`(imcui/src/services/api.ts:211)`, requestBlob(endpoint, options)`(imcui/src/services/api.ts:227)`

@@ -38,7 +38,7 @@
           outlined
           accept=".xlsx,.xls,.csv"
           label="Inventario (.xlsx, .xls o .csv)"
-          hint="Una hoja por grupo raíz. El archivo se lee completo antes de escribir nada."
+          hint="Una categoría por grupo raíz. El archivo se lee completo antes de escribir nada."
           :disable="analysing || importing"
           @update:model-value="onFile"
         >
@@ -79,7 +79,7 @@
         <div class="text-subtitle2">Importación terminada</div>
         <div class="text-body2">
           <span class="result-created">{{ result.createdItems }}</span> elemento(s) creados:
-          {{ result.createdSheets }} hoja(s) y {{ result.createdGroups }} grupo(s) nuevos.
+          {{ result.createdSheets }} categoría(s) y {{ result.createdGroups }} grupo(s) nuevos.
         </div>
         <div class="result-skipped row q-gutter-x-md text-caption text-grey-8 q-mt-xs">
           <span v-for="fact in resultFacts" :key="fact.label" class="result-fact">
@@ -154,7 +154,7 @@
           dense
           outlined
           clearable
-          label="Hoja, grupo o elemento"
+          label="Categoría, grupo o elemento"
           class="filter-search"
           :class="$q.screen.lt.sm ? 'full-width' : ''"
         >
@@ -197,6 +197,12 @@
                 <span class="count-yellow text-warning">{{ group.counts.yellow }}</span>
                 <span class="count-red text-negative">{{ group.counts.red }}</span>
               </span>
+            </div>
+
+            <!-- A group that a rule placed carries one line saying why: full text, it is the
+                 explanation, not a label to be shortened. -->
+            <div v-if="group.note" class="group-note text-caption">
+              {{ group.note }}
             </div>
 
             <!-- One row of markup, two layouts: a line above `sm`, a card below it. -->
@@ -336,12 +342,15 @@ interface FlatRow {
   sheet: string;
   groupIndex: number;
   group: string;
+  /** The group's own explanation, when the API placed it by a rule rather than by its name. */
+  groupNote: string | null;
   item: ImportItem;
 }
 
 interface VisibleGroup {
   key: string;
   name: string;
+  note: string | null;
   counts: Counts;
   rows: FlatRow[];
 }
@@ -378,7 +387,13 @@ const rows = computed<FlatRow[]>(() => {
   for (const sheet of preview.value?.sheets ?? []) {
     sheet.groups.forEach((group, groupIndex) => {
       for (const item of group.items) {
-        flat.push({ sheet: sheet.name, groupIndex, group: group.name, item });
+        flat.push({
+          sheet: sheet.name,
+          groupIndex,
+          group: group.name,
+          groupNote: group.note ?? null,
+          item,
+        });
       }
     });
   }
@@ -455,7 +470,13 @@ const visibleSheets = computed<VisibleSheet[]>(() => {
     const groupKey = `${sheetKey}##${row.groupIndex}`;
     let group = sheet.groups.find((candidate) => candidate.key === groupKey);
     if (!group) {
-      group = { key: groupKey, name: row.group, counts: emptyCounts(), rows: [] };
+      group = {
+        key: groupKey,
+        name: row.group,
+        note: row.groupNote,
+        counts: emptyCounts(),
+        rows: [],
+      };
       sheet.groups.push(group);
     }
 
@@ -654,6 +675,14 @@ function reset(): void {
 
 .group-row {
   padding-left: 28px;
+}
+
+/* The one line that explains a rule-made placement. It sits under the header, aligned with the
+   group name (28px padding + 16px icon + 8px gutter), and wraps instead of truncating: it is the
+   reasoning, so losing its end loses the answer. */
+.group-note {
+  padding: 0 12px 6px 52px;
+  color: var(--imc-text-muted, rgba(0, 0, 0, 0.6));
 }
 
 .level-counts {

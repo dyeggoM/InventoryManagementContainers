@@ -33,6 +33,7 @@ const QFile = defineComponent({
   name: 'QFile',
   props: {
     label: { type: String, default: '' },
+    hint: { type: String, default: '' },
     accept: { type: String, default: undefined },
     disable: { type: Boolean, default: false },
     modelValue: { type: Object as PropType<File | null>, default: null },
@@ -43,6 +44,7 @@ const QFile = defineComponent({
       h('input', {
         type: 'file',
         'data-label': props.label,
+        'data-hint': props.hint,
         'data-accept': props.accept,
         disabled: props.disable,
         onChange: (event: Event) =>
@@ -267,6 +269,24 @@ function previewFixture(): ImportPreview {
   };
 }
 
+/**
+ * The same tree, with the group the API placed by a rule: it carries the line that says why, and
+ * every other field stays exactly as in the fixture above.
+ */
+function previewWithNote(note: string): ImportPreview {
+  const preview = previewFixture();
+  const group = preview.sheets[0]!.groups[0]!;
+  return {
+    ...preview,
+    sheets: [
+      {
+        ...preview.sheets[0]!,
+        groups: [{ ...group, note }],
+      },
+    ],
+  };
+}
+
 function outcomeFixture(overrides: Partial<ImportOutcome> = {}): ImportOutcome {
   return {
     createdSheets: 1,
@@ -416,6 +436,50 @@ describe('ImportPanel — the tree', () => {
     expect(group.find('.count-yellow').text()).toBe('2');
     expect(group.find('.count-red').text()).toBe('1');
     expect(group.find('.status-marker').attributes('data-color')).toBe('negative');
+  });
+
+  it('shows the note under the group header when the API explains where a group landed', async () => {
+    const note =
+      '«CASE PARA CONGAS» no está en la configuración: se coloca en «Other» para revisarla.';
+    mocks.preview.mockResolvedValue(previewWithNote(note));
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+
+    const group = wrapper.find('.import-group');
+    // It belongs to the header, not to a row: the explanation is about the group.
+    expect(group.find('.group-row + .group-note').exists()).toBe(true);
+    const line = group.find('.group-note');
+    expect(line.text()).toBe(note);
+    expect(line.classes()).toContain('text-caption');
+    expect(itemRows(wrapper)).toHaveLength(4);
+
+    // The filters narrow the rows, not the explanation: one visible row still carries it.
+    wrapper.findComponent({ name: 'QInput' }).vm.$emit('update:modelValue', 'soporte');
+    await flushPromises();
+    expect(itemRows(wrapper)).toHaveLength(1);
+    expect(wrapper.find('.group-note').text()).toBe(note);
+  });
+
+  it('shows no note line for a group the reader placed by its own name', async () => {
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+
+    expect(wrapper.find('.group-note').exists()).toBe(false);
+  });
+
+  it('calls the top level a categoría, never a hoja', async () => {
+    const wrapper = await mountPanel();
+
+    expect(wrapper.findComponent({ name: 'QFile' }).attributes('data-hint')).toContain(
+      'Una categoría por grupo raíz',
+    );
+
+    await analyse(wrapper);
+    expect(wrapper.findComponent({ name: 'QInput' }).attributes('data-label')).toBe(
+      'Categoría, grupo o elemento',
+    );
+    expect(wrapper.text()).not.toContain('hoja(s)');
   });
 
   it('shows each row with its label, code, brand and colour', async () => {
@@ -705,6 +769,7 @@ describe('ImportPanel — the import', () => {
     const result = wrapper.find('.result-card');
     expect(result.text()).toContain('Importación terminada');
     expect(result.find('.result-created').text()).toBe('3');
+    expect(result.text()).toContain('1 categoría(s) y 1 grupo(s) nuevos');
     expect(result.text()).toContain('Rojos omitidos: 1');
     expect(result.text()).toContain('Amarillos omitidos: 0');
     expect(result.text()).toContain('Ya existían: 2');
@@ -745,6 +810,20 @@ describe('ImportPanel — below sm', () => {
     expect(wrapper.find('.filters').classes()).toContain('column');
     expect(wrapper.find('.filter-chips').classes()).toContain('column');
     expect(wrapper.find('.import-button').classes()).toContain('full-width');
+  });
+
+  it('keeps the note line under the header on a card layout too', async () => {
+    mocks.preview.mockResolvedValue(
+      previewWithNote('«CONGA DOBLE» se coloca en «BASE CONGA DOBLE»'),
+    );
+
+    const wrapper = await mountPanel(true);
+    await analyse(wrapper);
+
+    expect(wrapper.findAll('.import-card')).toHaveLength(4);
+    expect(wrapper.find('.import-group .group-row + .group-note').text()).toBe(
+      '«CONGA DOBLE» se coloca en «BASE CONGA DOBLE»',
+    );
   });
 
   it('keeps the line layout at sm and above', async () => {
