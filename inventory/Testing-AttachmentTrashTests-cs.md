@@ -17,7 +17,7 @@ Indexed: **10 symbols** across **1 file** (10 C#, 0 Python, 0 JS/TS/Vue) · **15
 
 ## Symbols by file
 
-### `Testing/AttachmentTrashTests.cs` — 246 lines, 10 symbols
+### `Testing/AttachmentTrashTests.cs` — 249 lines, 10 symbols
 
 - `L21` **type** `AttachmentTrashTests` : ApiTestBase — Deleting a record used to unlink its files, so restoring the record from the archive handed it back with its attachments silently gone. These tests pin the new contract: a delete moves the files to a trash that mirrors the live tree, a rest
 - `L24` **method** `AttachmentTrashTests.Delete_MovesTheFileToTheTrashAndKeepsItInTheLedger`() → Task · → 4 (AttachmentTrashTests.Live, AttachmentTrashTests.PhotoBytes, AttachmentTrashTests.Trashed, AttachmentTrashTests.UploadAsync)
@@ -25,10 +25,10 @@ Indexed: **10 symbols** across **1 file** (10 C#, 0 Python, 0 JS/TS/Vue) · **15
 - `L95` **method** `AttachmentTrashTests.Purge_DestroysTheFilesTheLedgerWasHolding`() → Task · → 4 (AttachmentTrashTests.PhotoBytes, AttachmentTrashTests.Trashed, AttachmentTrashTests.UploadAsync)
 - `L124` **method** `AttachmentTrashTests.Restore_WhenTheTrashedFileIsGone_SucceedsAndSaysHowManyAreLost`() → Task · → 3 (AttachmentTrashTests.PhotoBytes, AttachmentTrashTests.Trashed, AttachmentTrashTests.UploadAsync)
 - `L159` **method** `AttachmentTrashTests.TrashOperations_RefuseAPathThatEscapesTheMediaRoot`() → void — A path read back from the database is client output until proven otherwise, and every trash operation resolves it under the media root: `..`, a rooted path and a symlink pointing out of the tree are refused instead of moving or deleting som
-- `L201` **method** `AttachmentTrashTests.UploadAsync`(int itemId, string fileName, byte[] bytes) → Task<JsonElement> · ← 4
-- `L218` **method** `AttachmentTrashTests.Live`(string relativePath) → string — Where a stored relative path lives: media/items/7/a.png under the media root. · ← 2
-- `L222` **method** `AttachmentTrashTests.Trashed`(string relativePath) → string — The mirrored trash location: media/items/7/a.png is media/trash/items/7/a.png. · ← 5
-- `L232` **method** `AttachmentTrashTests.PhotoBytes`() → byte[] · ← 4
+- `L204` **method** `AttachmentTrashTests.UploadAsync`(int itemId, string fileName, byte[] bytes) → Task<JsonElement> · ← 4
+- `L221` **method** `AttachmentTrashTests.Live`(string relativePath) → string — Where a stored relative path lives: media/items/7/a.png under the media root. · ← 2
+- `L225` **method** `AttachmentTrashTests.Trashed`(string relativePath) → string — The mirrored trash location: media/items/7/a.png is media/trash/items/7/a.png. · ← 5
+- `L235` **method** `AttachmentTrashTests.PhotoBytes`() → byte[] · ← 4
 
 ## Call graph (resolved, in-project)
 

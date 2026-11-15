@@ -165,12 +165,11 @@ public sealed class AttachmentTrashTests : ApiTestBase
         // The victim sits exactly where `../loot` from the media root points, so this test fails if
         // the guard lets the move through — not merely because the path looked odd.
         var outside = Path.Combine(Path.GetDirectoryName(mediaRoot)!, "loot");
-        Directory.CreateDirectory(Path.Combine(media, "items"));
-        Directory.CreateDirectory(outside);
-        var victim = Path.Combine(outside, "keep-me.png");
-        File.WriteAllBytes(victim, new byte[] { 1, 2, 3 });
-
         var link = Path.Combine(media, "items", "link");
+        Directory.CreateDirectory(Path.Combine(media, "items"));
+
+        // The symlink is attempted before anything is written: a platform that refuses it skips the
+        // test with a clean temporary tree instead of leaving `loot/keep-me.png` behind.
         try
         {
             Directory.CreateSymbolicLink(link, outside);
@@ -179,6 +178,10 @@ public sealed class AttachmentTrashTests : ApiTestBase
         {
             Assert.Ignore("This platform does not let the test create a directory symlink.");
         }
+
+        Directory.CreateDirectory(outside);
+        var victim = Path.Combine(outside, "keep-me.png");
+        File.WriteAllBytes(victim, new byte[] { 1, 2, 3 });
 
         var escaped = new[] { "../loot/keep-me.png", victim, Path.Combine("media", "items", "link", "keep-me.png") };
         storage.MoveToTrash(escaped);

@@ -50,8 +50,8 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - **IMCAPI/Services/ItemImporter.cs** — 1 file, 34 symbols, 25 KB → [`inventory/IMCAPI-Services-ItemImporter-cs.md`](inventory/IMCAPI-Services-ItemImporter-cs.md) · `ItemImporter`, `.ctor`, `ImportResult`, `ImportItem`, `ImportGroup`
 - **IMCAPI/Services/SubcategoryPlacement.cs** — 1 file, 9 symbols, 9 KB → [`inventory/IMCAPI-Services-SubcategoryPlacement-cs.md`](inventory/IMCAPI-Services-SubcategoryPlacement-cs.md) · `SubcategoryPlacement`, `.ctor`, `Placement`, `CategoryValue`, `CategoryMap`
 - **IMCAPI/Startup** — 8 files, 21 symbols, 9 KB → [`inventory/IMCAPI-Startup.md`](inventory/IMCAPI-Startup.md) · `ApiServices`, `AddApiServices`, `AuthSetup`, `AddJwtAuthentication`, `ValidateTokenAsync`
-- **Testing/ApiFactory.cs** — 1 file, 8 symbols, 10 KB → [`inventory/Testing-ApiFactory-cs.md`](inventory/Testing-ApiFactory-cs.md) · `ApiFactory`, `.cctor`, `.ctor`, `DatabasePath`, `MediaRoot`
-- **Testing/ApiTestBase.cs** — 1 file, 27 symbols, 30 KB → [`inventory/Testing-ApiTestBase-cs.md`](inventory/Testing-ApiTestBase-cs.md) · `ApiTestBase`, `Factory`, `Client`, `SignsInAtStartup`, `FreshApiPerTest`
+- **Testing/ApiFactory.cs** — 1 file, 9 symbols, 11 KB → [`inventory/Testing-ApiFactory-cs.md`](inventory/Testing-ApiFactory-cs.md) · `ApiFactory`, `.cctor`, `.ctor`, `DatabasePath`, `MediaRoot`
+- **Testing/ApiTestBase.cs** — 1 file, 27 symbols, 31 KB → [`inventory/Testing-ApiTestBase-cs.md`](inventory/Testing-ApiTestBase-cs.md) · `ApiTestBase`, `Factory`, `Client`, `SignsInAtStartup`, `FreshApiPerTest`
 - **Testing/ApiTests.cs** — 1 file, 37 symbols, 15 KB → [`inventory/Testing-ApiTests-cs.md`](inventory/Testing-ApiTests-cs.md) · `ApiTests`, `Unique`, `PostItem`, `StartApi`, `GetItems_ReturnsARootTreeAndPanels`
 - **Testing/ArchiveRetentionTests.cs** — 1 file, 9 symbols, 6 KB → [`inventory/Testing-ArchiveRetentionTests-cs.md`](inventory/Testing-ArchiveRetentionTests-cs.md) · `ArchiveRetentionTests`, `ArchivePage_CountsOnceAndEveryPageSaysWhetherAnotherExists`, `Purge_RemovesOnlyTheRowsOlderThanTheCutoff_AndIsAudited`, `Purge_WithNoQueryValueUsesTheOneMonthDefault`, `TheSweeperPurgesWhatTheEndpointWould`
 - **Testing/AttachmentStorageTests.cs** — 1 file, 16 symbols, 5 KB → [`inventory/Testing-AttachmentStorageTests-cs.md`](inventory/Testing-AttachmentStorageTests-cs.md) · `AttachmentStorageTests`, `TempEnvironment`, `ContentRootPath`, `ContentRootFileProvider`, `EnvironmentName`
@@ -65,11 +65,11 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - **Testing/ItemArchiveTests.cs** — 1 file, 12 symbols, 5 KB → [`inventory/Testing-ItemArchiveTests-cs.md`](inventory/Testing-ItemArchiveTests-cs.md) · `ItemArchiveTests`, `Delete_ArchivesItemAndAttachmentsAndRemovesItFromReads`, `Start`, `Stop`, `Archive_WithoutToken_ReturnsUnauthorized`
 - **Testing/ItemImportCsvTests.cs** — 1 file, 14 symbols, 4 KB → [`inventory/Testing-ItemImportCsvTests-cs.md`](inventory/Testing-ItemImportCsvTests-cs.md) · `ItemImportCsvTests`, `Preview_JudgesTheCsvRowsExactlyLikeTheEquivalentWorkbook`, `Preview_SummarisesTheCsvTheSameWayAsTheWorkbookSheetItMirrors`, `Preview_ReportsTheSubcategoryCorrection_AndTheSectionTitle`, `Preview_ReadsAQuotedSemicolonAndCommaAsOneField`
 - **Testing/ItemImportPlacementTests.cs** — 1 file, 6 symbols, 4 KB → [`inventory/Testing-ItemImportPlacementTests-cs.md`](inventory/Testing-ItemImportPlacementTests-cs.md) · `ItemImportPlacementTests`, `Tree`, `Preview_PlacesEveryRowUnderTheCategoryThatOwnsItsSubcategory`, `Preview_OnlyCallsAPlacementGreenWhenTheConfigurationNamedIt`, `Import_WritesTheConfigurationTree_NotTheSheetNames`
-- **Testing/ItemImportTests.cs** — 1 file, 12 symbols, 4 KB → [`inventory/Testing-ItemImportTests-cs.md`](inventory/Testing-ItemImportTests-cs.md) · `ItemImportTests`, `Preview_SortsEveryRowIntoGreenYellowOrRed`, `Preview_ExplainsEveryYellowRow`, `Preview_MarksBothRowsOfARepeatedCode_Red`, `Preview_ReportsTheSubcategoryCorrections`
+- **Testing/ItemImportTests.cs** — 1 file, 13 symbols, 4 KB → [`inventory/Testing-ItemImportTests-cs.md`](inventory/Testing-ItemImportTests-cs.md) · `ItemImportTests`, `Preview_SortsEveryRowIntoGreenYellowOrRed`, `Preview_ExplainsEveryYellowRow`, `Preview_MarksBothRowsOfARepeatedCode_Red`, `Preview_ReportsTheSubcategoryCorrections`
 - **Testing/ItemImportWriteTests.cs** — 1 file, 10 symbols, 4 KB → [`inventory/Testing-ItemImportWriteTests-cs.md`](inventory/Testing-ItemImportWriteTests-cs.md) · `ItemImportWriteTests`, `FreshApiPerTest`, `Import_BuildsTheTreeTheFileDescribes`, `Import_KeepsTheCodeAndTheBrandInTheAttributes`, `Import_NeverWritesARedRow`
 - **Testing/RateLimitTests.cs** — 1 file, 6 symbols, 3 KB → [`inventory/Testing-RateLimitTests-cs.md`](inventory/Testing-RateLimitTests-cs.md) · `RateLimitTests`, `SignsInAtStartup`, `FreshApiPerTest`, `CreateFactory`, `Login_IsThrottled_AndAnswers429OnceTheWindowIsSpent`
 - **Testing/SecurityRegressionTests.cs** — 1 file, 16 symbols, 7 KB → [`inventory/Testing-SecurityRegressionTests-cs.md`](inventory/Testing-SecurityRegressionTests-cs.md) · `SecurityRegressionTests`, `SignsInAtStartup`, `Upload_ToAMissingRecord_IsRefusedBeforeAnythingIsWrittenToDisk`, `Start`, `Stop`
-- **Testing/StartupInvariantsTests.cs** — 1 file, 10 symbols, 6 KB → [`inventory/Testing-StartupInvariantsTests-cs.md`](inventory/Testing-StartupInvariantsTests-cs.md) · `StartupInvariantsTests`, `Host`, `Boot`, `OutsideDevelopment_ThePublishedDevelopmentKeyIsRefused`, `OutsideDevelopment_AnEmptyCorsListIsRefused`
+- **Testing/StartupInvariantsTests.cs** — 1 file, 12 symbols, 7 KB → [`inventory/Testing-StartupInvariantsTests-cs.md`](inventory/Testing-StartupInvariantsTests-cs.md) · `StartupInvariantsTests`, `Host`, `Boot`, `OutsideDevelopment_ThePublishedDevelopmentKeyIsRefused`, `OutsideDevelopment_AnEmptyCorsListIsRefused`
 - **Testing/SubcategoryPlacementTests.cs** — 1 file, 17 symbols, 9 KB → [`inventory/Testing-SubcategoryPlacementTests-cs.md`](inventory/Testing-SubcategoryPlacementTests-cs.md) · `SubcategoryPlacementTests`, `Map`, `Key`, `Add`, `Resolve`
 - **Testing/TokenHardeningTests.cs** — 1 file, 7 symbols, 5 KB → [`inventory/Testing-TokenHardeningTests-cs.md`](inventory/Testing-TokenHardeningTests-cs.md) · `TokenHardeningTests`, `Forge`, `B64`, `BootstrapClaims`, `ATokenWithoutTheSecurityStamp_IsRefused`
 - **Testing/UserAdminTests.cs** — 1 file, 21 symbols, 9 KB → [`inventory/Testing-UserAdminTests-cs.md`](inventory/Testing-UserAdminTests-cs.md) · `UserAdminTests`, `SignsInAtStartup`, `Superadmin_CreatesAndListsUser_AndDuplicateEmailConflicts`, `Start`, `Stop`
@@ -127,9 +127,9 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - `Testing/AuditTests.cs` → `Testing` — 27 calls
 - `Testing/AuthMatrixTests.cs` → `Testing` — 25 calls
 - `Testing/ItemImportCsvTests.cs` → `Testing` — 24 calls
+- `Testing/ItemImportTests.cs` → `Testing` — 18 calls
 - `IMCAPI/Controllers` → `IMCAPI/DB` — 17 calls
 - `Testing/SecurityRegressionTests.cs` → `Testing` — 17 calls
-- `Testing/ItemImportTests.cs` → `Testing` — 16 calls
 - `Testing/AttachmentStorageTests.cs` → `IMCAPI/Services` — 15 calls
 - `imcui/src/components/dashboard/UsersPanel.vue` → `imcui/src` — 15 calls
 - `imcui/src/services/users.ts` → `imcui/src` — 14 calls
@@ -145,17 +145,17 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - `IMCAPI` → `IMCAPI/DB` — 5 calls
 - `IMCAPI/Services/ItemImporter.cs` → `IMCAPI/Services` — 5 calls
 - `IMCAPI/Startup` → `IMCAPI/DB` — 5 calls
+- `Testing/SubcategoryPlacementTests.cs` → `IMCAPI/Services` — 5 calls
 - `imcui/src/services/audit.ts` → `imcui/src` — 5 calls
 - `imcui/src/services/items.ts` → `imcui/src` — 5 calls
 - `Testing/ArchiveRetentionTests.cs` → `IMCAPI/Services` — 4 calls
 - `Testing/AttachmentTrashTests.cs` → `Testing` — 4 calls
 - `Testing/AttachmentTrashTests.cs` → `IMCAPI/Services` — 4 calls
 - `Testing/AuthTests.cs` → `IMCAPI/Services` — 4 calls
+- `Testing/StartupInvariantsTests.cs` → `Testing` — 4 calls
 - `imcui/src/components/dashboard/ImportPanel.vue` → `imcui/src` — 4 calls
 - `Testing/BaseRepositoryTests.cs` → `IMCAPI/DB` — 3 calls
-- `Testing/ItemImportPlacementTests.cs` → `Testing` — 3 calls
 - `Testing/RateLimitTests.cs` → `Testing` — 3 calls
-- `Testing/SubcategoryPlacementTests.cs` → `IMCAPI/Services` — 3 calls
 - `imcui/src/components/dashboard/AuditPanel.vue` → `imcui/src` — 3 calls
 - `imcui/src/services/api.ts` → `imcui/src` — 3 calls
 - `IMCAPI/DB` → `IMCAPI/Services` — 2 calls

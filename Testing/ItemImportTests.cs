@@ -120,13 +120,30 @@ public sealed class ItemImportTests : ApiTestBase
     }
 
     [Test]
-    public async Task Preview_RequiresAnAdminAndASpreadsheet()
+    public async Task Preview_RefusesACallerWithoutACredential()
     {
+        // The name says what it asserts. The other half of what it used to claim — that a file which
+        // is not a spreadsheet is refused — has its own test below.
         using var anonymous = Factory.CreateClient();
         using var payload = new MultipartFormDataContent();
         payload.Add(new ByteArrayContent(new byte[] { 1, 2, 3 }), "file", "sample.xlsx");
         var unauthenticated = await anonymous.PostAsync("/api/import/preview", payload);
         Assert.That(unauthenticated.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+    }
+
+    [Test]
+    public async Task Preview_RefusesACredentialWithoutTheAdminRole()
+    {
+        // A reader who is signed in is not an importer: the preview reads the whole stock file, and the
+        // policy that protects it is the one thing the old name promised and nothing tested.
+        using var reader = await CreateAccountAndLogin("reader@example.test", "lector");
+
+        using var payload = new MultipartFormDataContent();
+        payload.Add(new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath("import-sample.xlsx"))), "file", "sample.xlsx");
+        var response = await reader.PostAsync("/api/import/preview", payload);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden),
+            "logged in is not the same as allowed to import");
     }
 
     [Test]
