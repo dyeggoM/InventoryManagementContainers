@@ -160,10 +160,10 @@ public sealed class StartupInvariantsTests
                 "storage is a singleton: it owns the media root and its caches");
             Assert.That(provider.GetRequiredService<ApplicationContext>(),
                 Is.SameAs(provider.GetRequiredService<ApplicationContext>()),
-                "the DbContext is scoped: one per request, never shared");
+                "resolved twice inside one scope, the same context comes back");
+            using var other = factory.Services.CreateScope();
             Assert.That(provider.GetRequiredService<IMCAPI.Services.ItemImporter>(),
-                Is.Not.SameAs(factory.Services.CreateScope().ServiceProvider
-                    .GetRequiredService<IMCAPI.Services.ItemImporter>()),
+                Is.Not.SameAs(other.ServiceProvider.GetRequiredService<IMCAPI.Services.ItemImporter>()),
                 "the importer is scoped: two requests never share one");
         });
     }

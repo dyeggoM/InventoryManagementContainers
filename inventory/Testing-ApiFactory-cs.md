@@ -60,7 +60,7 @@ Indexed: **8 symbols** across **1 file** (8 C#, 0 Python, 0 JS/TS/Vue) · **82 r
 - `ItemArchiveTests.Start()` (Testing/ItemArchiveTests.cs:22) → ApiFactory.CreateClient()`(L26)`
 - `ItemArchiveTests.Archive_WithoutToken_ReturnsUnauthorized()` (Testing/ItemArchiveTests.cs:54) → ApiFactory.CreateClient()`(L57)`
 - `ItemArchiveTests.ItemsMaxDepthEnvironmentVariableOverridesTheDefault()` (Testing/ItemArchiveTests.cs:119) → ApiFactory.CreateClient()`(L127)`
-- `ItemImportTests.Preview_RequiresAnAdminAndASpreadsheet()` (Testing/ItemImportTests.cs:122) → ApiFactory.CreateClient()`(L125)`
+- `ItemImportTests.Preview_RefusesACallerWithoutACredential()` (Testing/ItemImportTests.cs:122) → ApiFactory.CreateClient()`(L127)`
 - `ItemImportWriteTests.Import_RequiresAnAdmin()` (Testing/ItemImportWriteTests.cs:150) → ApiFactory.CreateClient()`(L153)`
 - `RateLimitTests.Login_IsThrottled_AndAnswers429OnceTheWindowIsSpent()` (Testing/RateLimitTests.cs:24) → ApiFactory.CreateClient()`(L21)`
 - `RateLimitTests.BusinessRoutes_AreOutsideTheLoginWindow()` (Testing/RateLimitTests.cs:44) → ApiFactory.CreateClient()`(L44)`

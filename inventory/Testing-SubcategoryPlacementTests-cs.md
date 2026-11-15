@@ -22,7 +22,7 @@ Indexed: **17 symbols** across **1 file** (17 C#, 0 Python, 0 JS/TS/Vue) · **26
 - `L15` **type** `SubcategoryPlacementTests` — The placement ladder, on its own. It used to be reachable only through the import endpoint, so a rule could be wrong in a way the fixture never happened to exercise. These tests build the configuration by hand and ask the ladder directly. T
 - `L17` **method** `SubcategoryPlacementTests.Map`() → CategoryMap · → 13 (SubcategoryPlacementTests.Add) · ← 1
 - `L24` **local_function** `SubcategoryPlacementTests.Key` · ← 1
-- `L31` **local_function** `SubcategoryPlacementTests.Add` · → 1 (SubcategoryPlacementTests.Key) · ← 13
+- `L31` **local_function** `SubcategoryPlacementTests.Add` · ← 13
 - `L59` **method** `SubcategoryPlacementTests.Resolve`(string? subcategory, out SortedSet<string> notes) → Placement · → 1 (SubcategoryPlacementTests.Map) · ← 11
 - `L65` **method** `SubcategoryPlacementTests.AnExactNameIsPlacedWithoutADoubt`() → void · → 1 (SubcategoryPlacementTests.Resolve)
 - `L80` **method** `SubcategoryPlacementTests.PunctuationAndSpacingDoNotDistinguishTwoNames`() → void · → 1 (SubcategoryPlacementTests.Resolve)
