@@ -24,17 +24,20 @@ public sealed class AuthTokenService
     }
 
     public async Task<(string Token, DateTime ExpiresAtUtc)> CreateImpersonationTokenAsync(
-        IdentityUser actor, string role)
+        IdentityUser actor, string role, string sessionId, DateTime? expiresAtUtc = null)
     {
-        return await CreateTokenAsync(actor, actor, role, impersonation: true);
+        return await CreateTokenAsync(actor, actor, role, impersonation: true, sessionId, expiresAtUtc);
     }
 
     private async Task<(string Token, DateTime ExpiresAtUtc)> CreateTokenAsync(
-        IdentityUser user, IdentityUser? actor, string? targetRole, bool impersonation)
+        IdentityUser user, IdentityUser? actor, string? targetRole, bool impersonation,
+        string? impersonationSessionId = null, DateTime? impersonationExpiresAtUtc = null)
     {
         var key = GetSetting("Auth:Jwt:Key", "AUTH_JWT_KEY");
         var issuer = GetSetting("Auth:Jwt:Issuer", "AUTH_JWT_ISSUER");
-        var expires = DateTime.UtcNow.AddMinutes(impersonation ? 7 : 15);
+        var expires = impersonation
+            ? impersonationExpiresAtUtc ?? DateTime.UtcNow.AddMinutes(7)
+            : DateTime.UtcNow.AddMinutes(15);
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id),
@@ -51,6 +54,10 @@ public sealed class AuthTokenService
             claims.Add(new Claim("act_email", actor.Email ?? ""));
             claims.Add(new Claim("impersonated_role", targetRole!));
             claims.Add(new Claim("scope", "read"));
+            // The borrow is a row the server can see: this claim is what lets a request be refused the
+            // moment the actor ends it, instead of waiting for the seven minutes to run out.
+            if (!string.IsNullOrWhiteSpace(impersonationSessionId))
+                claims.Add(new Claim("imp_sid", impersonationSessionId));
         }
         claims.AddRange((impersonation ? [targetRole!] : await _users.GetRolesAsync(user))
             .Select(role => new Claim(ClaimTypes.Role, role)));

@@ -144,7 +144,14 @@ qué debe exigir cada ruta es [SECURITY_AUTH_MATRIX.md](SECURITY_AUTH_MATRIX.md)
   el par `ImpersonateStart`/`ImpersonateEnd` queda completo. Si la llamada falla (red, token ya
   caducado, `403`) vuelve al token propio guardado y, sin él, cierra la sesión: nunca deja el aviso
   arriba sobre un token que ya no suplanta. Sin llamada no hay fila de fin, y eso es lo honesto.
-- [ ] **(g) Suplantación: dejar rastro en la fila de auditoría** — `low` · dueño: pendiente. Con la
+- [x] **(g) Suplantación: dejar rastro en la fila de auditoría** — `done` (2026-11-15).
+  `AuditLogs.ImpersonationSessionId` nombra el préstamo en `ImpersonateStart`/`ImpersonateEnd` y en
+  cualquier fila escrita mientras se suplanta; la sesión vive en `ImpersonationSessions` (quién, qué rol,
+  desde/hasta, cómo terminó), el token lleva `imp_sid` y cada petición comprueba que sigue viva. Eso
+  cierra además los tres hallazgos menores del re-audit: el préstamo se termina una sola vez, el token
+  muere al terminar (no a los 7 minutos), y se puede cerrar aunque al actor le hayan revocado la
+  familia de refresh. Sigue en pie, por diseño, que la suplantación es por rol y `ImpersonatedUserId`
+  queda nulo: no hay usuario suplantado. Con la
   suplantación por rol ya no hay usuario suplantado, así que `AuditLogs.ImpersonatedUserId` queda
   siempre nulo; las filas `ImpersonateStart`/`ImpersonateEnd` llevan el rol en `EntityId`, pero una
   escritura hecha mientras se suplanta (hoy imposible por el middleware) no podría distinguirse.

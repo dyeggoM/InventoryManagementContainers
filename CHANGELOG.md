@@ -6,29 +6,40 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `feat/spreadsheet-import` · second round
+## Pending — `fix/impersonation-escalation`
 
-**CSV, besides Excel.** Both import calls read `.csv`: the delimiter is detected between comma,
-semicolon and tab (a Spanish-locale Excel export writes `;`), fields follow RFC 4180 including quoted
-values with newlines, a BOM is stripped, and the file name becomes the root of the tree.
+**Security — a borrowed token can no longer become the actor.** `POST /api/auth/stop-impersonation`
+minted the actor's own token from the `act` claim alone, so anyone holding a borrowed token — seven
+minutes of read-only access, handed to support, a demo device or an XSS — could exchange it, with no
+cookie and no password, for a 15-minute superadmin token with write. It now also demands proof of the
+actor's session: their refresh cookie, hashed and checked against a live, unrevoked token of that
+same actor. Measured before: `200` and a superadmin token. After: `403`, and a bare holder is handed
+nothing at all.
 
-**An admin can reach the dashboard.** `/dashboard` was superadmin-only, so the import screen — an
-admin endpoint — was unreachable for an admin. The route takes `ADMIN_ROLES` and each panel hides
-itself according to the policy of the endpoint behind it: users, audit and archive stay
-superadmin-only; import and impersonation are for admins too.
+**Security — a borrow is now a row the server can see and stop.** `ImpersonationSessions` records who
+borrowed which role, from when, until when, and how it ended; the token carries its id as `imp_sid`
+and every authenticated request checks it is still live. Consequences, all measured: ending a borrow
+kills the token on the next request instead of leaving it valid for the rest of its seven minutes; a
+borrow can be ended once (a second attempt has no live token to make it with); letting it expire has
+the same effect as ending it; and an end still lands — without a token — when the actor's refresh
+family has been revoked, which used to leave the borrow with no way out.
 
-**The tree and the form each keep their own scroll.** With a long tree the page was the scrollbar, so
-the form stayed at the top of the document and picking a record at row 200 left you looking at
-nothing. Both panes now have a measured height and scroll on their own, and a new selection returns
-the form to its top.
+**Security — the audit trail names the borrow.** `AuditLogs` gains `ImpersonationSessionId`; the
+`ImpersonateStart`/`ImpersonateEnd` pair and any row written while impersonating carry it, so
+"what did this borrow touch" is a query instead of a guess. The session's own bookkeeping row stays
+out of the audit stream — it is not a business change.
 
-**A README that gets somebody from a clone to a running app**: requirements, quick start, every
-configuration key with its environment variable and default, how to run each half (and both on the
-LAN), build and test commands, database and file locations, the import format, the documentation map,
-the security properties and a troubleshooting table.
+**Security — development stops reflecting any origin with credentials.** The dev CORS policy echoed
+whatever `Origin` it was given, with `Allow-Credentials: true`, so a page on the internet could read
+this API with the tester's refresh cookie. It now reflects loopback and private addresses only
+(RFC 1918, link-local, IPv6 unique-local) plus whatever `CORS:AllowedCors` names; the LAN case — a
+phone on the workshop wifi — keeps working, verified both ways.
 
+**And the client sends the session cookie.** The transport only sent credentials on the refresh, so
+`Salir` would have answered `403` and quietly skipped `ImpersonateEnd`. Every call carries the cookie
+now; the cookie is HttpOnly and scoped to `/api/auth`, so it only ever reaches the auth routes.
 
-## #31 and #30 — Import: look at a spreadsheet, then write it · merged 2026-11-13
+## Pending — `feat/spreadsheet-import`
 
 **A spreadsheet can be read before it is imported.** `POST /api/import/preview` (admin) reads an
 `.xlsx`/`.xls` and answers the tree it describes — sheet, subcategory, record — with every row marked

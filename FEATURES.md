@@ -117,6 +117,11 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - **The borrowed session is read-only, short and visible**: a 7-minute token that names the real
   caller in `sub` plus `act`/`impersonated_role`, every write (including a restore) answers `403`, a
   permanent banner sits over the app, and the start writes `ImpersonateStart` to the audit trail.
+- **A borrow is a session the server can end**: it lives in `ImpersonationSessions`, the borrowed token
+  names it (`imp_sid`) and stops working the moment it ends or expires, `stop-impersonation` ends it
+  exactly once, and both ends are written to the audit with the same id — so "what did this borrow
+  touch" is a query. The actor's own token comes back only with their refresh cookie; a bare holder
+  gets nothing.
   It is deliberately not renewable: when it expires the session returns as the caller, with the
   banner gone. *Salir* goes through `POST /api/auth/stop-impersonation`, which writes the
   `ImpersonateEnd` row and hands back a fresh token for the caller; if that call cannot be made the

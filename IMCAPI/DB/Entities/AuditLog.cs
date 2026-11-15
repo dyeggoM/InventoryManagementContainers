@@ -7,6 +7,9 @@ public sealed class AuditLog
     public string? ActorUserId { get; set; }
     public string? ActorEmail { get; set; }
     public string? ImpersonatedUserId { get; set; }
+
+    /// <summary>The borrow a write happened under, if any: pairs the row with ImpersonateStart/End.</summary>
+    public string? ImpersonationSessionId { get; set; }
     public string Action { get; set; } = "";
     public string? Entity { get; set; }
     public string? EntityId { get; set; }

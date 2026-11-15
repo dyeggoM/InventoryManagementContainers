@@ -17,6 +17,8 @@ namespace IMCAPI.DB
         public virtual DbSet<UserProfile> UserProfiles { get; set; }
         public virtual DbSet<ItemArchive> ItemArchives { get; set; }
 
+        public virtual DbSet<ImpersonationSession> ImpersonationSessions { get; set; }
+
         public ApplicationContext(DbContextOptions<ApplicationContext> options)
             : base(options)
         {
@@ -50,6 +52,17 @@ namespace IMCAPI.DB
                 entity.Property(profile => profile.UserId).HasMaxLength(450);
                 entity.HasOne<IdentityUser>().WithOne().HasForeignKey<UserProfile>(profile => profile.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ImpersonationSession>(entity =>
+            {
+                entity.HasKey(session => session.Id);
+                entity.HasIndex(session => session.ActorUserId);
+                entity.Property(session => session.Id).HasMaxLength(64);
+                entity.Property(session => session.ActorUserId).HasMaxLength(64);
+                entity.Property(session => session.ActorEmail).HasMaxLength(320);
+                entity.Property(session => session.TargetRole).HasMaxLength(32);
+                entity.Property(session => session.EndedBy).HasMaxLength(64);
             });
 
             modelBuilder.Entity<ItemArchive>(entity =>
