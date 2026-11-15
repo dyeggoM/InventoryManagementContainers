@@ -134,6 +134,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - `imcui/src/services/constants.ts` → `imcui/src` — 6 calls
 - `IMCAPI` → `IMCAPI/DB` — 5 calls
 - `IMCAPI/Startup` → `IMCAPI/DB` — 5 calls
+- `Testing/SubcategoryPlacementTests.cs` → `IMCAPI/Services` — 5 calls
 - `imcui/src/services/audit.ts` → `imcui/src` — 5 calls
 - `imcui/src/services/items.ts` → `imcui/src` — 5 calls
 - `Testing/AttachmentTrashTests.cs` → `Testing` — 4 calls
@@ -142,9 +143,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - `Testing/StartupInvariantsTests.cs` → `Testing` — 4 calls
 - `imcui/src/components/dashboard/ImportPanel.vue` → `imcui/src` — 4 calls
 - `Testing/BaseRepositoryTests.cs` → `IMCAPI/DB` — 3 calls
-- `Testing/ItemImportPlacementTests.cs` → `Testing` — 3 calls
 - `Testing/RateLimitTests.cs` → `Testing` — 3 calls
-- `Testing/SubcategoryPlacementTests.cs` → `IMCAPI/Services` — 3 calls
 - `imcui/src/components/dashboard/AuditPanel.vue` → `imcui/src` — 3 calls
 - `imcui/src/services/api.ts` → `imcui/src` — 3 calls
 - `IMCAPI/DB` → `IMCAPI/Services` — 2 calls
