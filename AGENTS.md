@@ -19,7 +19,9 @@ role), `AI_INVENTORY.md` (generated map of the code, refreshed by the pre-commit
 ## Read the inventory before you read the code
 
 `AI_INVENTORY.md` is a **router index**: it names each module, its size and its main symbols, and
-links to one file per module under `inventory/`. It exists so a change does not start with a repo
+links to one file per module under `inventory/`. Both are committed — the index without its module
+files is a page of dead links — so a fresh clone can follow it without running the tool. It exists so
+a change does not start with a repo
 walk. This is not advice, it is the required order of work:
 
 1. **Open `AI_INVENTORY.md` first.** Find the module that owns the change, open **only** that slice.
