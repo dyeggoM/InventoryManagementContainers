@@ -157,7 +157,14 @@ public sealed class UserAdminTests
         Assert.That((await impersonated.PatchAsync("/api/item/1/activate", content: null)).StatusCode,
             Is.EqualTo(HttpStatusCode.Forbidden), "restoring is a write and stays blocked");
 
-        var stop = await impersonated.PostAsync("/api/auth/stop-impersonation", content: null);
+        // Ending the borrow is done from the actor's own session (the browser keeps its refresh
+        // cookie), never from a bare holder of the borrowed token — that holder cannot be allowed to
+        // collect the actor's token, which is what StopImpersonation_WithoutTheActorsSession pins.
+        Assert.That((await impersonated.PostAsync("/api/auth/stop-impersonation", content: null)).StatusCode,
+            Is.EqualTo(HttpStatusCode.Forbidden), "a bare bearer cannot end — or collect — the borrow");
+        using var stopRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/stop-impersonation");
+        stopRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var stop = await admin.SendAsync(stopRequest);
         Assert.That(stop.StatusCode, Is.EqualTo(HttpStatusCode.OK), await stop.Content.ReadAsStringAsync());
         var normalToken = (await stop.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
         using var restored = _factory.CreateClient();
@@ -322,6 +329,65 @@ public sealed class UserAdminTests
         Assert.That((await again.PostAsJsonAsync("/api/item",
                 new { label = "now-yours", icon = "", attributes = "{}" })).StatusCode,
             Is.EqualTo(HttpStatusCode.OK), "the new token carries the new role");
+    }
+
+    /// <summary>
+    /// The borrowed token is a bearer handed to a read-only session. If holding it were enough to
+    /// collect the actor's own token, the whole promise would be one request away: measured before
+    /// the guard, a superadmin+lector borrow was exchanged for a 15-minute superadmin token with
+    /// write, without a cookie and without a password.
+    /// </summary>
+    [Test]
+    public async Task StopImpersonation_WithoutTheActorsSession_DoesNotHandOutTheActorsToken()
+    {
+        using var root = await SuperadminClient();
+        var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
+        Assert.That(start.StatusCode, Is.EqualTo(HttpStatusCode.OK), await start.Content.ReadAsStringAsync());
+        var borrowed = (await start.Content.ReadFromJsonAsync<JsonElement>(Json))
+            .GetProperty("access_token").GetString()!;
+
+        // A holder of the borrowed token and nothing else: fresh client, so no refresh cookie.
+        using var holder = _factory.CreateClient();
+        holder.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
+        var exchange = await holder.PostAsync("/api/auth/stop-impersonation", content: null);
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(exchange.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden),
+                "the borrowed token is not proof of being the actor");
+            Assert.That(await exchange.Content.ReadAsStringAsync(), Does.Not.Contain("access_token"));
+        });
+
+        // The escalation it used to allow: the token it never got.
+        var users = await holder.GetAsync("/api/users");
+        Assert.That(users.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden),
+            "a read-only borrow stays read-only, and user management stays out of reach");
+    }
+
+    [Test]
+    public async Task StopImpersonation_WithTheActorsOwnSession_ReturnsTheirToken()
+    {
+        using var root = await SuperadminClient();
+        var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "operador" });
+        Assert.That(start.StatusCode, Is.EqualTo(HttpStatusCode.OK), await start.Content.ReadAsStringAsync());
+        var borrowed = (await start.Content.ReadFromJsonAsync<JsonElement>(Json))
+            .GetProperty("access_token").GetString()!;
+
+        // The same client that started the impersonation holds the refresh cookie: that is the proof.
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/stop-impersonation");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
+        var response = await root.SendAsync(request);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        var token = (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString()!;
+        var claims = new JwtSecurityTokenHandler().ReadJwtToken(token);
+        Assert.Multiple(() =>
+        {
+            Assert.That(claims.Claims.Where(claim => claim.Type == ClaimTypes.Role).Select(claim => claim.Value),
+                Does.Contain("superadmin"), "the actor gets their own privileges back");
+            Assert.That(claims.Claims.Any(claim => claim.Type == "act"), Is.False,
+                "and nothing of the borrow survives in it");
+        });
     }
 
     private async Task<HttpClient> CreateAndLogin(HttpClient root, string role, string password)
