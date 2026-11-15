@@ -20,7 +20,8 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   to write; admin): the file's sheets become the top of the tree, `SUB CATEGORIA` the level below and
   each row a record. The *Importar desde Excel* screen renders that tree in three colours — green
   imports, yellow imports but is worth a look, red never goes in — and lets the user untick yellow rows
-  before writing. A second run of the same file creates nothing.
+  before writing. A second run of the same file creates nothing. It reads `.xlsx`, `.xls` and `.csv`
+  (comma, semicolon or tab).
 - **A restore gives the files back.** Deleting a record moves its attachments to `media/trash`; a
   restore returns them, and only a purge that passes the retention age destroys the bytes.
 - **The archive has a retention switch** (`POST /api/item/archive/purge`, superadmin): rows older than
@@ -103,6 +104,8 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - **The interface follows the role**: the drawer, the forms and the router guard read the same list
   (`services/roles.ts`), so `lector` is not offered a write control that would bounce, and
   `admin`/`superadmin` screens are unreachable by URL for the roles below them.
+- **The dashboard is open to administrators**: *Importar desde Excel* and *Suplantación* for an
+  `admin`; users, audit and the archive stay with a `superadmin`.
 - **The dashboard works on a phone**: below the `sm` breakpoint the three panels are cards with the
   actions at thumb height and the filters stacked; from `sm` up they are the tables they always were.
 - **Superadmin dashboard** with three panels: accounts (list, create, change roles, deactivate),

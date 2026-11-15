@@ -357,10 +357,10 @@ describe('ImportPanel — reading the file', () => {
     expect(mocks.preview).not.toHaveBeenCalled();
   });
 
-  it('only offers .xlsx and .xls in the picker', async () => {
+  it('offers the formats the API reads in the picker', async () => {
     const wrapper = await mountPanel();
 
-    expect(wrapper.findComponent({ name: 'QFile' }).props('accept')).toBe('.xlsx,.xls');
+    expect(wrapper.findComponent({ name: 'QFile' }).props('accept')).toBe('.xlsx,.xls,.csv');
   });
 
   it('analyses the picked file and renders the tree the API answered with', async () => {

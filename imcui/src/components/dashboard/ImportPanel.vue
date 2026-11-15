@@ -36,8 +36,8 @@
           :model-value="file"
           dense
           outlined
-          accept=".xlsx,.xls"
-          label="Libro de inventario (.xlsx o .xls)"
+          accept=".xlsx,.xls,.csv"
+          label="Inventario (.xlsx, .xls o .csv)"
           hint="Una hoja por grupo raíz. El archivo se lee completo antes de escribir nada."
           :disable="analysing || importing"
           @update:model-value="onFile"
