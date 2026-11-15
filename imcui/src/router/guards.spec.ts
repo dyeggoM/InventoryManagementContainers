@@ -58,18 +58,20 @@ describe('router guards', () => {
       ).toBe(true);
     });
 
-    it('only lets a superadmin into the dashboard', () => {
-      for (const role of ['lector', 'operador', 'admin']) {
+    it('lets a superadmin and an admin into the dashboard, and nobody below', () => {
+      for (const role of ['superadmin', 'admin']) {
+        expect(
+          resolveNavigation({ path: '/dashboard', isAuthenticated: true, roles: [role] }).allowed,
+          role,
+        ).toBe(true);
+      }
+
+      for (const role of ['operador', 'lector']) {
         expect(
           resolveNavigation({ path: '/dashboard', isAuthenticated: true, roles: [role] }).allowed,
           role,
         ).toBe(false);
       }
-
-      expect(
-        resolveNavigation({ path: '/dashboard', isAuthenticated: true, roles: ['superadmin'] })
-          .allowed,
-      ).toBe(true);
     });
 
     it('accepts a user holding several roles when one of them is enough', () => {
@@ -96,8 +98,12 @@ describe('router guards', () => {
 
   it('matches nested paths under a restricted prefix', () => {
     expect(
-      resolveNavigation({ path: '/dashboard/users', isAuthenticated: true, roles: ['admin'] }),
+      resolveNavigation({ path: '/dashboard/users', isAuthenticated: true, roles: ['lector'] }),
     ).toEqual({ allowed: false, redirect: DEFAULT_PATH });
+    expect(
+      resolveNavigation({ path: '/dashboard/users', isAuthenticated: true, roles: ['admin'] })
+        .allowed,
+    ).toBe(true);
   });
 
   it('ignores a trailing slash', () => {
@@ -111,7 +117,7 @@ describe('router guards', () => {
     expect(isPublic('/inventory')).toBe(false);
     expect(requiredRoles('/inventory')).toBeNull();
     expect(requiredRoles('/configuration')).toEqual(['superadmin', 'admin']);
-    expect(requiredRoles('/dashboard')).toEqual(['superadmin']);
+    expect(requiredRoles('/dashboard')).toEqual(['superadmin', 'admin']);
   });
 
   it('builds a login redirect that survives the round-trip', () => {

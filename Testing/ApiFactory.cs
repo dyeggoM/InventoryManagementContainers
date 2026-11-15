@@ -30,7 +30,19 @@ public sealed class ApiFactory : WebApplicationFactory<IMCAPI.Program>
     /// unlimited, because a hundred logins must not trip a production guard; the rate-limit tests
     /// pass a small number to walk the window.
     /// </param>
-    public ApiFactory(int? authPermitLimit = null) => _authPermitLimit = authPermitLimit;
+    /// <summary>
+    /// The connection string is set here, not in <see cref="CreateClient"/>, because a test that only
+    /// reads <c>Services</c> would otherwise build the host with the default `./imc.db` — measured: a
+    /// stray database appeared next to the test binary and the second run refused to start with
+    /// "exactly one superadmin must exist; found 2".
+    /// </summary>
+    public ApiFactory(int? authPermitLimit = null)
+    {
+        _authPermitLimit = authPermitLimit;
+        Directory.CreateDirectory(MediaRoot);
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", $"Data Source={DatabasePath}");
+        Environment.SetEnvironmentVariable("Media__Root", MediaRoot);
+    }
 
     public string DatabasePath => Path.Combine(_root, "test.db");
 

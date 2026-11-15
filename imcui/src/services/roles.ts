@@ -20,7 +20,7 @@ export const READ_ROLES: readonly Role[] = ROLES;
 export const WRITE_ROLES: readonly Role[] = ['superadmin', 'admin', 'operador'];
 /** The configuration tree and the user list. */
 export const ADMIN_ROLES: readonly Role[] = ['superadmin', 'admin'];
-/** The dashboard: users, audit and impersonation. */
+/** Users, the audit trail and the archive: the panels only a superadmin may see. */
 export const SUPERADMIN_ROLES: readonly Role[] = ['superadmin'];
 
 /**

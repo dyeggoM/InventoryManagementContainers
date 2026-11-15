@@ -1,0 +1,12 @@
+﻿INVENTARIO DE PRUEBA
+CONSECUTIVO;SUB CATEGORIA;MARCA;REFERENCIA;DESCRIPCION;SERIAL;NOTAS;DIMENSIONES (X*Y*Z)
+-T0001;BASE;DW;9700;Base de brazo DW 9000;;"Nota con coma, y punto y coma; dentro de una celda";
+-T0002;BASE;ZILDJIAN;5000;Base de brazo DW 5000;;;
+;BASE;DW;;Base sin codigo;;;
+-T0003;ATRIL;;;;;;
+-T0004;ATRIL;DW;;Atril de partitura;;;
+-T0004;ATRIL;DW;;Atril repetido;;;
+-T0005;GTAR COMBO;DW;;Guitarra combo;;"linea uno
+linea dos";
+-T0006;HIHAT;DW;;"14""";;;
+HARDWARE

@@ -2,7 +2,7 @@
  * Navigation rules, kept as a pure function so they can be exercised without a router, a Pinia
  * instance or a network. `router/index.ts` is a thin adapter over `resolveNavigation`.
  */
-import { ADMIN_ROLES, SUPERADMIN_ROLES, hasAnyRole } from '../services/roles';
+import { ADMIN_ROLES, hasAnyRole } from '../services/roles';
 
 export const LOGIN_PATH = '/login';
 /** Where a signed-in visitor lands when the page asked for does not exist for them. */
@@ -25,7 +25,9 @@ export interface GuardDecision {
 
 /** The routes that demand a role beyond "signed in". Order matters only for prefixes. */
 const RESTRICTED: readonly { prefix: string; roles: readonly string[] }[] = [
-  { prefix: '/dashboard', roles: SUPERADMIN_ROLES },
+  // The dashboard holds the import and the impersonation picker, both admin screens; the panels
+  // that are superadmin-only (users, audit, archive) hide themselves inside it instead.
+  { prefix: '/dashboard', roles: ADMIN_ROLES },
   { prefix: '/configuration', roles: ADMIN_ROLES },
 ];
 
