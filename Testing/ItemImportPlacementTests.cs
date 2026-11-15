@@ -163,6 +163,11 @@ public sealed class ItemImportPlacementTests
             Assert.That(ParentOf("TORRE CONGA DOBLE"), Is.EqualTo("BASE CONGA DOBLE"));
             Assert.That(ParentOf("MICROFONO DE MANO"), Is.EqualTo("MICROFONOS"));
             Assert.That(items.Any(item => item.Label == "Cases" && item.ParentId == null), Is.True);
+            // A case's category has no subcategories of its own: the record hangs off the root, not off
+            // a group named like its parent.
+            Assert.That(ParentOf("ESTUCHE GRANDE"), Is.EqualTo("Cases"),
+                "a subcategory that is the category itself is not created twice");
+            Assert.That(items.Count(item => item.Label == "Cases"), Is.EqualTo(1));
 
             Assert.That(items.Any(item => item.Label is "BACKLINE" or "SONIDO" or "OTROS"), Is.False,
                 "the spreadsheet's sheets never become roots");

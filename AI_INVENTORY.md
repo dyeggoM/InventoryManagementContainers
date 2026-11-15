@@ -78,7 +78,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - **imcui/src/components/dashboard/ImpersonationPanel.spec.ts** — 1 file, 15 symbols, 5 KB → [`inventory/imcui-src-components-dashboard-ImpersonationPanel-spec-ts.md`](inventory/imcui-src-components-dashboard-ImpersonationPanel-spec-ts.md) · `makeToken`, `encode`, `signedInAs`, `borrowedToken`, `postedBody`
 - **imcui/src/components/dashboard/ImpersonationPanel.vue** — 1 file, 9 symbols, 3 KB → [`inventory/imcui-src-components-dashboard-ImpersonationPanel-vue.md`](inventory/imcui-src-components-dashboard-ImpersonationPanel-vue.md) · `ImpersonationPanel`, `selectedRole`, `starting`, `stopping`, `errorMessage`
 - **imcui/src/components/dashboard/ImportPanel.spec.ts** — 1 file, 17 symbols, 5 KB → [`inventory/imcui-src-components-dashboard-ImportPanel-spec-ts.md`](inventory/imcui-src-components-dashboard-ImportPanel-spec-ts.md) · `useFeedback`, `onChange`, `onClick`, `onInput`, `passthrough`
-- **imcui/src/components/dashboard/ImportPanel.vue** — 1 file, 47 symbols, 6 KB → [`inventory/imcui-src-components-dashboard-ImportPanel-vue.md`](inventory/imcui-src-components-dashboard-ImportPanel-vue.md) · `ImportPanel`, `Counts`, `FlatRow`, `VisibleGroup`, `VisibleSheet`
+- **imcui/src/components/dashboard/ImportPanel.vue** — 1 file, 47 symbols, 6 KB → [`inventory/imcui-src-components-dashboard-ImportPanel-vue.md`](inventory/imcui-src-components-dashboard-ImportPanel-vue.md) · `ImportPanel`, `Counts`, `FlatRow`, `VisibleGroup`, `file`
 - **imcui/src/components/dashboard/UsersPanel.spec.ts** — 1 file, 13 symbols, 5 KB → [`inventory/imcui-src-components-dashboard-UsersPanel-spec-ts.md`](inventory/imcui-src-components-dashboard-UsersPanel-spec-ts.md) · `makeToken`, `encode`, `onInput`, `onClick`, `onSubmit`
 - **imcui/src/components/dashboard/UsersPanel.vue** — 1 file, 29 symbols, 4 KB → [`inventory/imcui-src-components-dashboard-UsersPanel-vue.md`](inventory/imcui-src-components-dashboard-UsersPanel-vue.md) · `UsersPanel`, `users`, `loading`, `pending`, `errorMessage`
 - **imcui/src/composables** — 3 files, 46 symbols, 13 KB → [`inventory/imcui-src-composables.md`](inventory/imcui-src-composables.md) · `useFeedback`, `success`, `error`, `info`, `confirmDelete`
@@ -93,7 +93,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 - **imcui/src/services/audit.ts** — 1 file, 11 symbols, 6 KB → [`inventory/imcui-src-services-audit-ts.md`](inventory/imcui-src-services-audit-ts.md) · `AuditEntry`, `AuditQuery`, `AuditPage`, `buildAuditQuery`, `assign`
 - **imcui/src/services/constants.ts** — 1 file, 10 symbols, 5 KB → [`inventory/imcui-src-services-constants-ts.md`](inventory/imcui-src-services-constants-ts.md) · `Constants`, `ConstantsReponse`, `FlattenedConstant`, `getAll`, `getById`
 - **imcui/src/services/import.spec.ts** — 1 file, 6 symbols, 4 KB → [`inventory/imcui-src-services-import-spec-ts.md`](inventory/imcui-src-services-import-spec-ts.md) · `jsonResponse`, `json`, `captureFetch`, `form`, `workbook`
-- **imcui/src/services/import.ts** — 1 file, 25 symbols, 10 KB → [`inventory/imcui-src-services-import-ts.md`](inventory/imcui-src-services-import-ts.md) · `ImportItem`, `ImportGroup`, `ImportSheet`, `ImportSummary`, `ImportIssue`
+- **imcui/src/services/import.ts** — 1 file, 25 symbols, 9 KB → [`inventory/imcui-src-services-import-ts.md`](inventory/imcui-src-services-import-ts.md) · `ImportItem`, `ImportGroup`, `ImportSheet`, `ImportSummary`, `ImportIssue`
 - **imcui/src/services/items.ts** — 1 file, 10 symbols, 4 KB → [`inventory/imcui-src-services-items-ts.md`](inventory/imcui-src-services-items-ts.md) · `Item`, `ItemReponse`, `Attributes`, `FlattenedItem`, `getAll`
 - **imcui/src/services/roles.ts** — 1 file, 5 symbols, 5 KB → [`inventory/imcui-src-services-roles-ts.md`](inventory/imcui-src-services-roles-ts.md) · `impersonatableRoles`, `isRole`, `normalizeRoles`, `roleLabel`, `hasAnyRole`
 - **imcui/src/services/search.spec.ts** — 1 file, 1 symbols, 3 KB → [`inventory/imcui-src-services-search-spec-ts.md`](inventory/imcui-src-services-search-spec-ts.md) · `node`
@@ -149,7 +149,7 @@ python3 <skill>/scripts/inventory.py check  --root .                            
 
 ## Coverage & caveats
 
-- 1942 in-project call edges of 15859 call sites; the rest are framework/dynamic.
+- 1944 in-project call edges of 15866 call sites; the rest are framework/dynamic.
 - Purposes come from doc comments only; blank means none. Absence of a symbol is not proof it does not exist (dynamic dispatch, generated code and unsupported languages are not indexed).
 
 ## Regenerate

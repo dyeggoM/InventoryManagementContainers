@@ -17,17 +17,17 @@ Indexed: **25 symbols** across **1 file** (0 C#, 0 Python, 25 JS/TS/Vue) · **66
 
 ## Symbols by file
 
-### `imcui/src/services/import.ts` — 269 lines, 25 symbols
+### `imcui/src/services/import.ts` — 285 lines, 25 symbols
 
-- `L21` **interface** `ImportItem` — fields: `key:string, label:string, code:string|null, brand:string|null, reference:string|null, serial:string|null, notes:string|null, dimensions:string|null, status:ImportStatus, reasons:string[], row:number`
-- `L41` **interface** `ImportGroup` — fields: `name:string, status:ImportStatus, green:number, yellow:number, red:number, items:ImportItem[]`
-- `L50` **interface** `ImportSheet` — fields: `name:string, status:ImportStatus, green:number, yellow:number, red:number, skippedSections:number, groups:ImportGroup[]`
-- `L61` **interface** `ImportSummary` — fields: `rows:number, sections:number, green:number, yellow:number, red:number, importable:number, skipped:number`
-- `L71` **interface** `ImportIssue` — fields: `sheet:string, row:number, level:string, message:string`
-- `L79` **interface** `ImportPreview` — fields: `sheets:ImportSheet[], summary:ImportSummary, issues:ImportIssue[], normalizations:string[]`
-- `L87` **interface** `ImportRequest` — fields: `includeYellow:boolean, skipCodes:string[]`
-- `L95` **interface** `ImportOutcome` — fields: `createdSheets:number, createdGroups:number, createdItems:number, skippedRed:number, skippedYellow:number, skippedExisting:number, includeYellow:boolean` — What `POST /api/import` answers: what it wrote, and what it left out.
-- `L106` **function** `toStatus`(value) — A colour the UI does not know is read as red: red is the one that never gets imported. · ← 3
+- `L21` **interface** `ImportItem` — fields: `key:string, label:string, code:string|null, brand:string|null, reference:string|null, serial:string|null, notes:string|null, dimensions:string|null, status:ImportStatus, reasons:string[], row:number, source:string|null`
+- `L47` **interface** `ImportGroup` — fields: `name:string, status:ImportStatus, note:string|null, green:number, yellow:number, red:number, items:ImportItem[]`
+- `L62` **interface** `ImportSheet` — fields: `name:string, status:ImportStatus, green:number, yellow:number, red:number, skippedSections:number, groups:ImportGroup[]`
+- `L73` **interface** `ImportSummary` — fields: `rows:number, sections:number, green:number, yellow:number, red:number, importable:number, skipped:number`
+- `L83` **interface** `ImportIssue` — fields: `sheet:string, row:number, level:string, message:string`
+- `L91` **interface** `ImportPreview` — fields: `sheets:ImportSheet[], summary:ImportSummary, issues:ImportIssue[], normalizations:string[]`
+- `L99` **interface** `ImportRequest` — fields: `includeYellow:boolean, skipCodes:string[]`
+- `L106` **function** `toStatus`(value) · ← 3
+- `L107` **interface** `ImportOutcome` — fields: `createdSheets:number, createdGroups:number, createdItems:number, skippedRed:number, skippedYellow:number, skippedExisting:number, includeYellow:boolean` — What `POST /api/import` answers: what it wrote, and what it left out.
 - `L111` **function** `toNumber`(value) · ← 22
 - `L117` **function** `toNullableText`(value) · ← 6
 - `L122` **function** `toReasons`(value) · ← 1
@@ -40,10 +40,10 @@ Indexed: **25 symbols** across **1 file** (0 C#, 0 Python, 25 JS/TS/Vue) · **66
 - `L200` **function** `toIssue`(raw) · → 2 (record, toNumber)
 - `L210` **function** `toPreview`(raw) · → 5 (array, record, toSummary) · ← 4
 - `L222` **function** `toOutcome`(raw) · → 7 (record, toNumber) · ← 2
-- `L236` **function** `fileForm`(file) — One `file` part, which is all the preview wants. · ← 2
-- `L243` **function** `buildImportForm`(file, request = ...) — The body `POST /api/import` takes: the file, a boolean as text, and one part per skipped code. · → 1 (fileForm) · ← 4
-- `L261` **method** `importService.preview`(file) — Reads the workbook and returns the tree it describes. Writes nothing. · → 2 (fileForm, toPreview) · ← 4
-- `L266` **method** `importService.run`(file, request = ...) — Writes green rows and the yellow ones the caller kept; red rows never go in. · → 2 (buildImportForm, toOutcome) · ← 3
+- `L236` **function** `fileForm`(file) · ← 2
+- `L243` **function** `buildImportForm`(file, request = ...) · → 1 (fileForm) · ← 4
+- `L261` **method** `importService.preview`(file) · → 2 (fileForm, toPreview) · ← 4
+- `L266` **method** `importService.run`(file, request = ...) · → 2 (buildImportForm, toOutcome) · ← 3
 
 ## Call graph (resolved, in-project)
 

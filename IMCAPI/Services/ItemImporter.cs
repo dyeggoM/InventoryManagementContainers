@@ -280,14 +280,21 @@ public sealed class ItemImporter
 
             foreach (var group in category.GroupBy(row => row.Group, StringComparer.Ordinal))
             {
-                var parent = children.FirstOrDefault(item => item.ParentId == root.Id && Same(item.Label, group.Key));
-                if (parent is null)
+                // A subcategory that is the category itself (a case, whose category has no children of
+                // its own) hangs the record directly off the root: a group named like its parent would
+                // be the same level twice.
+                var parent = root;
+                if (!Same(group.Key, category.Key))
                 {
-                    parent = NewItem(group.Key, root.Id);
-                    _context.Items.Add(parent);
-                    await _context.SaveChangesAsync(cancellationToken);
-                    children.Add(parent);
-                    createdGroups++;
+                    parent = children.FirstOrDefault(item => item.ParentId == root.Id && Same(item.Label, group.Key));
+                    if (parent is null)
+                    {
+                        parent = NewItem(group.Key, root.Id);
+                        _context.Items.Add(parent);
+                        await _context.SaveChangesAsync(cancellationToken);
+                        children.Add(parent);
+                        createdGroups++;
+                    }
                 }
 
                 foreach (var (_, _, item) in group)

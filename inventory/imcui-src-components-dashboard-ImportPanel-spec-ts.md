@@ -17,7 +17,7 @@ Indexed: **17 symbols** across **1 file** (0 C#, 0 Python, 17 JS/TS/Vue) · **82
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/ImportPanel.spec.ts` — 773 lines, 17 symbols
+### `imcui/src/components/dashboard/ImportPanel.spec.ts` — 852 lines, 17 symbols
 
 - `L23` **method** `useFeedback`()
 - `L92` **method** `setup.onChange`()
@@ -28,14 +28,14 @@ Indexed: **17 symbols** across **1 file** (0 C#, 0 Python, 17 JS/TS/Vue) · **82
 - `L160` **method** `setup`(props)
 - `L176` **method** `stubs.render`()
 - `L179` **method** `stubs.setup`(_props, param)
-- `L189` **function** `previewFixture`() — one. Every nullable field is null where the API would have omitted it. One sheet, one group, four rows: a green one, two yellows (one of them without a code) and a red · ← 1
+- `L189` **function** `previewFixture`() · ← 1
 - `L270` **function** `outcomeFixture`(overrides = ...) · ← 2
 - `L283` **function** `mountPanel`(mobile = ...) · ← 22
 - `L295` **function** `button`(wrapper, startsWith) · ← 16
 - `L303` **function** `checkbox`(wrapper, label) · ← 4
 - `L311` **function** `chip`(wrapper, label) · ← 4
 - `L319` **function** `itemRows`(wrapper) · ← 12
-- `L324` **function** `analyse`(wrapper, file = ...) — Picks the file the way the QFile stub would, then presses Analizar and waits for the tree. · → 1 (button) · ← 19
+- `L324` **function** `analyse`(wrapper, file = ...) · → 1 (button) · ← 19
 
 ## Call graph (resolved, in-project)
 

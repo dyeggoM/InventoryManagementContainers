@@ -17,19 +17,19 @@ Indexed: **47 symbols** across **1 file** (0 C#, 0 Python, 47 JS/TS/Vue) · **12
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/ImportPanel.vue` — 732 lines, 47 symbols
+### `imcui/src/components/dashboard/ImportPanel.vue` — 761 lines, 47 symbols
 
 - `L1` **component** `ImportPanel` (SFC) · → 3 (ImportPanel.emptyCounts, ImportPanel.skippedSectionsOf)
-- `L328` **interface** `ImportPanel.Counts` — fields: `green:number, yellow:number, red:number`
-- `L335` **interface** `ImportPanel.FlatRow` — fields: `sheet:string, groupIndex:number, group:string, item:ImportItem` — One preview row with the names it hangs from, so filtering and counting are a flat pass.
-- `L342` **interface** `ImportPanel.VisibleGroup` — fields: `key:string, name:string, counts:Counts, rows:FlatRow[]`
-- `L349` **interface** `ImportPanel.VisibleSheet` — fields: `file, preview, result, lastSkipped, analysing, importing, errorMessage, notice, skippedKeys, onlyRed, onlyYellow, onlyWithCode, onlyWithoutCode, search, rows, summary, totals, codeTotals, visibleRows, visibleSheets, yellowSelected, importCount, importLabel, skipCodes, resultFacts`
+- `L334` **interface** `ImportPanel.Counts` — fields: `green:number, yellow:number, red:number`
+- `L341` **interface** `ImportPanel.FlatRow` — fields: `sheet:string, groupIndex:number, group:string, groupNote:string|null, item:ImportItem` — One preview row with the names it hangs from, so filtering and counting are a flat pass.
+- `L350` **interface** `ImportPanel.VisibleGroup` — fields: `file`
+- `L358` **interface** `ImportPanel.VisibleSheet` — fields: `preview, result, lastSkipped, analysing, importing, errorMessage, notice, skippedKeys, onlyRed, onlyYellow, onlyWithCode, onlyWithoutCode, search, rows, summary, totals, codeTotals, visibleRows, visibleSheets, yellowSelected, importCount, importLabel, skipCodes, resultFacts`
 - `L390` **function** `ImportPanel.emptyCounts`() · ← 3
 - `L406` **function** `ImportPanel.matchesStatus`(status) · ← 1
 - `L412` **function** `ImportPanel.matchesCode`(item) · ← 1
 - `L417` **function** `ImportPanel.matchesText`(row) · ← 1
 - `L431` **function** `ImportPanel.skippedSectionsOf`(sheetName) · ← 1
-- `L471` **function** `ImportPanel.statusOf`(counts) — The marker repeats the API's own rule: any red makes the level red, else any yellow, else green. · ← 2
+- `L471` **function** `ImportPanel.statusOf`(counts) · ← 2
 - `L477` **function** `ImportPanel.statusColour`(counts) · → 2 (ImportPanel.statusColourOf, ImportPanel.statusOf)
 - `L481` **function** `ImportPanel.statusColourOf`(status) · ← 1
 - `L485` **function** `ImportPanel.statusLabel`(counts) · → 1 (ImportPanel.statusOf)
@@ -40,7 +40,7 @@ Indexed: **47 symbols** across **1 file** (0 C#, 0 Python, 47 JS/TS/Vue) · **12
 - `L547` **function** `ImportPanel.onFile`(value)
 - `L558` **function** `ImportPanel.analyse`()
 - `L582` **function** `ImportPanel.runImport`()
-- `L615` **function** `ImportPanel.reset`()
+- `L615` **function** `ImportPanel.reset`() — No yellow row still ticked means the whole class is left out, which is what the API's own `skippedYellow` was built to report.
 
 ## Call graph (resolved, in-project)
 
