@@ -146,6 +146,10 @@ async function send(endpoint: string, options: RequestInit, isFormData: boolean)
   try {
     return await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
+      // Same-site cookies travel with every call. The refresh cookie is HttpOnly and scoped to
+      // /api/auth, so only those routes ever see it — and one of them, stop-impersonation, needs it
+      // as proof of the actor's session before it hands the actor's own token back.
+      credentials: 'include',
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
