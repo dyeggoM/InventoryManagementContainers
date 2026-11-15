@@ -1,6 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using IMCAPI.DB;
 using Microsoft.EntityFrameworkCore;
@@ -17,47 +15,8 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class ItemImportPlacementTests
+public sealed class ItemImportPlacementTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    private static string FixturePath =>
-        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "import-placement.csv");
-
-    [OneTimeSetUp]
-    public async Task Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-        var login = await _client.PostAsJsonAsync("/api/auth/login",
-            new { email = "bootstrap@example.test", password = Password });
-        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
-
-    private async Task<JsonElement> Preview()
-    {
-        using var form = new MultipartFormDataContent();
-        var file = new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath));
-        file.Headers.ContentType = new MediaTypeHeaderValue("text/csv");
-        form.Add(file, "file", "import-placement.csv");
-        var response = await _client.PostAsync("/api/import/preview", form);
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        return body.TryGetProperty("preview", out var preview) ? preview : body;
-    }
-
     /// <summary>The category, then the group, then the label — the shape of the tree.</summary>
     private static Dictionary<string, Dictionary<string, string[]>> Tree(JsonElement preview) =>
         preview.GetProperty("sheets").EnumerateArray().ToDictionary(
@@ -71,7 +30,7 @@ public sealed class ItemImportPlacementTests
     [Order(1)]
     public async Task Preview_PlacesEveryRowUnderTheCategoryThatOwnsItsSubcategory()
     {
-        var tree = Tree(await Preview());
+        var tree = Tree(await Preview("import-placement.csv", Csv));
 
         Assert.Multiple(() =>
         {
@@ -97,7 +56,7 @@ public sealed class ItemImportPlacementTests
     [Order(1)]
     public async Task Preview_OnlyCallsAPlacementGreenWhenTheConfigurationNamedIt()
     {
-        var preview = await Preview();
+        var preview = await Preview("import-placement.csv", Csv);
 
         var statuses = preview.GetProperty("sheets").EnumerateArray()
             .SelectMany(sheet => sheet.GetProperty("groups").EnumerateArray())
@@ -134,14 +93,12 @@ public sealed class ItemImportPlacementTests
     [Order(2)]
     public async Task Import_WritesTheConfigurationTree_NotTheSheetNames()
     {
-        using var form = new MultipartFormDataContent();
-        var file = new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath));
-        file.Headers.ContentType = new MediaTypeHeaderValue("text/csv");
-        form.Add(file, "file", "import-placement.csv");
-        var response = await _client.PostAsync("/api/import", form);
+        // includeYellow is left out of the body on purpose: what the route does with nothing said
+        // about the yellow rows is part of what this test pins.
+        var response = await PostImport("import-placement.csv", Csv, includeYellow: null);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var items = await context.Items.IgnoreQueryFilters().ToListAsync();
 

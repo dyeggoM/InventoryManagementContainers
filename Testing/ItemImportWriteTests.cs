@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using IMCAPI.DB;
@@ -14,38 +13,18 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class ItemImportWriteTests
+public sealed class ItemImportWriteTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    private static string FixturePath => Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "import-sample.xlsx");
-
-    [SetUp]
-    public async Task Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-        var login = await _client.PostAsJsonAsync("/api/auth/login",
-            new { email = "bootstrap@example.test", password = Password });
-        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    [TearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
+    /// <summary>
+    /// Each test writes to the tree and one of them imports the same file twice, so each test needs a
+    /// database nothing else has touched.
+    /// </summary>
+    protected override bool FreshApiPerTest => true;
 
     [Test]
     public async Task Import_BuildsTheTreeTheFileDescribes()
     {
-        var result = await Import();
+        var result = await Import("import-sample.xlsx");
 
         Assert.Multiple(() =>
         {
@@ -59,7 +38,7 @@ public sealed class ItemImportWriteTests
             Assert.That(result.GetProperty("skippedRed").GetInt32(), Is.EqualTo(3));
         });
 
-        var tree = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var tree = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
         var hardware = tree.GetProperty("tree").EnumerateArray()
             .Single(node => node.GetProperty("label").GetString() == "Hardware");
         var amplifiers = tree.GetProperty("tree").EnumerateArray()
@@ -78,9 +57,9 @@ public sealed class ItemImportWriteTests
     [Test]
     public async Task Import_KeepsTheCodeAndTheBrandInTheAttributes()
     {
-        await Import();
+        await Import("import-sample.xlsx");
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var record = await context.Items.SingleAsync(item => item.Label == "BASE DE BRAZO DW 9000");
 
@@ -96,9 +75,9 @@ public sealed class ItemImportWriteTests
     [Test]
     public async Task Import_NeverWritesARedRow()
     {
-        await Import();
+        await Import("import-sample.xlsx");
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var labels = await context.Items.Select(item => item.Label).ToListAsync();
 
@@ -114,7 +93,7 @@ public sealed class ItemImportWriteTests
     [Test]
     public async Task Import_CanLeaveTheYellowRowsOut()
     {
-        var result = await Import(includeYellow: false);
+        var result = await Import("import-sample.xlsx", includeYellow: false);
 
         Assert.Multiple(() =>
         {
@@ -126,7 +105,7 @@ public sealed class ItemImportWriteTests
     [Test]
     public async Task Import_HonoursTheCodesTheUserDeselected()
     {
-        var result = await Import(skipCodes: new[] { "-T0002", "-T0006" });
+        var result = await Import("import-sample.xlsx", skipCodes: new[] { "-T0002", "-T0006" });
 
         Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(4),
             "six importable rows minus the two the user unticked");
@@ -135,9 +114,9 @@ public sealed class ItemImportWriteTests
     [Test]
     public async Task Import_Twice_CreatesNothingTheSecondTime()
     {
-        var first = await Import();
+        var first = await Import("import-sample.xlsx");
         var afterFirst = await CountItems();
-        var second = await Import();
+        var second = await Import("import-sample.xlsx");
         var afterSecond = await CountItems();
 
         Assert.Multiple(() =>
@@ -153,9 +132,9 @@ public sealed class ItemImportWriteTests
     [Test]
     public async Task Import_LeavesOneAuditRowWithTheCounts()
     {
-        await Import();
+        await Import("import-sample.xlsx");
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var rows = await context.AuditLogs.Where(row => row.Action == "ItemImport").ToListAsync();
 
@@ -171,32 +150,12 @@ public sealed class ItemImportWriteTests
     [Test]
     public async Task Import_RequiresAnAdmin()
     {
-        using var anonymous = _factory.CreateClient();
+        using var anonymous = Factory.CreateClient();
         using var payload = new MultipartFormDataContent();
-        payload.Add(new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath)), "file", "sample.xlsx");
+        payload.Add(new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath("import-sample.xlsx"))), "file", "sample.xlsx");
 
         var response = await anonymous.PostAsync("/api/import", payload);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
     }
 
-    private async Task<int> CountItems()
-    {
-        using var scope = _factory.Services.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        return await context.Items.IgnoreQueryFilters().CountAsync();
-    }
-
-    private async Task<JsonElement> Import(bool includeYellow = true, string[]? skipCodes = null)
-    {
-        using var payload = new MultipartFormDataContent();
-        var file = new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath));
-        file.Headers.ContentType = new MediaTypeHeaderValue("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        payload.Add(file, "file", Path.GetFileName(FixturePath));
-        payload.Add(new StringContent(includeYellow ? "true" : "false"), "includeYellow");
-        foreach (var code in skipCodes ?? Array.Empty<string>()) payload.Add(new StringContent(code), "skipCodes");
-
-        var response = await _client.PostAsync("/api/import", payload);
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        return await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-    }
 }

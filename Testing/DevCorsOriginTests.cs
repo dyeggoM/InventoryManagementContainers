@@ -14,24 +14,9 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class DevCorsOriginTests
+public sealed class DevCorsOriginTests : ApiTestBase
 {
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    [OneTimeSetUp]
-    public void Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
+    protected override bool SignsInAtStartup => false;
 
     [TestCase("http://localhost:9000", true)]
     [TestCase("http://127.0.0.1:9000", true)]
@@ -49,7 +34,7 @@ public sealed class DevCorsOriginTests
         request.Headers.Add("Access-Control-Request-Method", "GET");
         request.Headers.Add("Access-Control-Request-Headers", "authorization");
 
-        var response = await _client.SendAsync(request);
+        var response = await Client.SendAsync(request);
         var reflected = response.Headers.TryGetValues("Access-Control-Allow-Origin", out var values)
             ? values.SingleOrDefault()
             : null;

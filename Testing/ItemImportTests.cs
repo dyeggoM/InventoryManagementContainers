@@ -1,7 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Text.Json;
 
 namespace Testing;
 
@@ -12,38 +9,13 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class ItemImportTests
+public sealed class ItemImportTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    private static string FixturePath => Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "import-sample.xlsx");
-
-    [OneTimeSetUp]
-    public async Task Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-        var login = await _client.PostAsJsonAsync("/api/auth/login",
-            new { email = "bootstrap@example.test", password = Password });
-        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
 
     [Test]
     public async Task Preview_SortsEveryRowIntoGreenYellowOrRed()
     {
-        var preview = await Preview();
+        var preview = await Preview("import-sample.xlsx");
 
         var summary = preview.GetProperty("summary");
         Assert.Multiple(() =>
@@ -62,7 +34,7 @@ public sealed class ItemImportTests
     [Test]
     public async Task Preview_ExplainsEveryYellowRow()
     {
-        var preview = await Preview();
+        var preview = await Preview("import-sample.xlsx");
         var items = Items(preview);
 
         Assert.That(items.Single(item => Label(item) == "BASE DE BRAZO DW 5000").GetProperty("reasons")
@@ -91,7 +63,7 @@ public sealed class ItemImportTests
     [Test]
     public async Task Preview_MarksBothRowsOfARepeatedCode_Red()
     {
-        var preview = await Preview();
+        var preview = await Preview("import-sample.xlsx");
         var twins = Items(preview)
             .Where(item => item.TryGetProperty("code", out var code) && code.GetString() == "-T0004")
             .ToList();
@@ -104,7 +76,7 @@ public sealed class ItemImportTests
     [Test]
     public async Task Preview_ReportsTheSubcategoryCorrections()
     {
-        var preview = await Preview();
+        var preview = await Preview("import-sample.xlsx");
         var corrections = preview.GetProperty("normalizations").EnumerateArray()
             .Select(value => value.GetString()).ToList();
 
@@ -115,7 +87,7 @@ public sealed class ItemImportTests
     [Test]
     public async Task Preview_SkipsSectionTitlesInsteadOfCallingThemRecords()
     {
-        var preview = await Preview();
+        var preview = await Preview("import-sample.xlsx");
 
         Assert.That(preview.GetProperty("summary").GetProperty("sections").GetInt32(), Is.EqualTo(1),
             "HARDWARE is a section title, not a record without a name");
@@ -128,7 +100,7 @@ public sealed class ItemImportTests
     [Test]
     public async Task Preview_ReadsASheetWhoseHeaderIsTheFirstRow_AndRefusesOneWithoutHeader()
     {
-        var preview = await Preview();
+        var preview = await Preview("import-sample.xlsx");
         var labels = Items(preview).Select(item => Label(item)).ToList();
 
         Assert.That(labels, Does.Contain("CASE 1M X 1M X 50CM"),
@@ -143,14 +115,14 @@ public sealed class ItemImportTests
     public async Task Preview_WritesNothing()
     {
         var before = await Inventory();
-        await Preview();
+        await Preview("import-sample.xlsx");
         Assert.That(await Inventory(), Is.EqualTo(before), "a preview is a question, not an import");
     }
 
     [Test]
     public async Task Preview_RequiresAnAdminAndASpreadsheet()
     {
-        using var anonymous = _factory.CreateClient();
+        using var anonymous = Factory.CreateClient();
         using var payload = new MultipartFormDataContent();
         payload.Add(new ByteArrayContent(new byte[] { 1, 2, 3 }), "file", "sample.xlsx");
         var unauthenticated = await anonymous.PostAsync("/api/import/preview", payload);
@@ -162,7 +134,7 @@ public sealed class ItemImportTests
     {
         using var payload = new MultipartFormDataContent();
         payload.Add(new ByteArrayContent("hola"u8.ToArray()), "file", "notas.txt");
-        var response = await _client.PostAsync("/api/import/preview", payload);
+        var response = await Client.PostAsync("/api/import/preview", payload);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain(".xlsx"));
@@ -173,34 +145,15 @@ public sealed class ItemImportTests
     {
         using var payload = new MultipartFormDataContent();
         payload.Add(new ByteArrayContent("this is not a zip"u8.ToArray()), "file", "roto.xlsx");
-        var response = await _client.PostAsync("/api/import/preview", payload);
+        var response = await Client.PostAsync("/api/import/preview", payload);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    private async Task<JsonElement> Preview()
-    {
-        using var payload = new MultipartFormDataContent();
-        var file = new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath));
-        file.Headers.ContentType = new MediaTypeHeaderValue("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        payload.Add(file, "file", Path.GetFileName(FixturePath));
-
-        var response = await _client.PostAsync("/api/import/preview", payload);
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        return await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-    }
-
-    private static IEnumerable<JsonElement> Items(JsonElement preview) =>
-        preview.GetProperty("sheets").EnumerateArray()
-            .SelectMany(sheet => sheet.GetProperty("groups").EnumerateArray())
-            .SelectMany(group => group.GetProperty("items").EnumerateArray());
-
-    private static string? Label(JsonElement item) => item.GetProperty("label").GetString();
-
     /// <summary>The tree as the API sends it: the preview must leave this string untouched.</summary>
     private async Task<string> Inventory()
     {
-        var response = await _client.GetAsync("/api/item");
+        var response = await Client.GetAsync("/api/item");
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         return await response.Content.ReadAsStringAsync();
     }

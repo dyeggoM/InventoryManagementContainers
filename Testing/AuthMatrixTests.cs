@@ -23,15 +23,37 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class AuthMatrixTests
+public sealed class AuthMatrixTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
+    /// <summary>
+    /// The matrix is about what a caller without a token gets, so the fixture's shared client is left
+    /// anonymous and every role gets a client of its own.
+    /// </summary>
+    protected override bool SignsInAtStartup => false;
+
+    protected override async Task StartApi()
+    {
+        await base.StartApi();
+        _lector = await CreateAccountAndLogin("lector@example.test", "lector");
+        _operador = await CreateAccountAndLogin("operador@example.test", "operador");
+        _admin = await CreateAccountAndLogin("admin@example.test", "admin");
+        _superadmin = await LoginAsSuperadmin();
+    }
+
+    protected override void StopApi()
+    {
+        // Listed one by one: the NUnit analyzer only credits a direct Dispose call here.
+        _lector.Dispose();
+        _operador.Dispose();
+        _admin.Dispose();
+        _superadmin.Dispose();
+        base.StopApi();
+    }
+
     // Same values ApiFactory injects, so tokens minted here validate against the running app.
     private const string SigningKey = "test-signing-key-with-at-least-32-bytes-123456";
     private const string Issuer = "InventoryManagementContainers.Tests";
 
-    private ApiFactory _factory = null!;
-    private HttpClient _anonymous = null!;
     private HttpClient _lector = null!;
     private HttpClient _operador = null!;
     private HttpClient _admin = null!;
@@ -60,55 +82,6 @@ public sealed class AuthMatrixTests
         ("PUT", "/api/constants/1", "admin"),
         ("DELETE", "/api/constants/1", "admin"),
     ];
-
-    [OneTimeSetUp]
-    public async Task Start()
-    {
-        _factory = new ApiFactory();
-        _anonymous = _factory.CreateClient();
-        _lector = await LoginAs("lector@example.test", "lector");
-        _operador = await LoginAs("operador@example.test", "operador");
-        _admin = await LoginAs("admin@example.test", "admin");
-        _superadmin = _factory.CreateClient();
-        var rootLogin = await _superadmin.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = Password });
-        Assert.That(rootLogin.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var rootPayload = await rootLogin.Content.ReadFromJsonAsync<JsonElement>();
-        _superadmin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer", rootPayload.GetProperty("access_token").GetString());
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        // Listed one by one: the NUnit analyzer only credits a direct Dispose call here.
-        _anonymous.Dispose();
-        _lector.Dispose();
-        _operador.Dispose();
-        _admin.Dispose();
-        _superadmin.Dispose();
-        _factory.Dispose();
-    }
-
-    /// <summary>Creates the account with that role and returns a client already carrying its token.</summary>
-    private async Task<HttpClient> LoginAs(string email, string role)
-    {
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
-            var user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
-            var created = await users.CreateAsync(user, Password);
-            Assert.That(created.Succeeded, Is.True, string.Join("; ", created.Errors.Select(error => error.Description)));
-            Assert.That((await users.AddToRoleAsync(user, role)).Succeeded, Is.True);
-        }
-
-        var client = _factory.CreateClient();
-        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = Password });
-        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK), $"login as {role}");
-        var payload = await login.Content.ReadFromJsonAsync<JsonElement>();
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", payload.GetProperty("access_token").GetString());
-        return client;
-    }
 
     private static HttpRequestMessage Request(string method, string path) => method switch
     {
@@ -146,7 +119,7 @@ public sealed class AuthMatrixTests
         foreach (var (method, path, _) in Matrix)
         {
             using var request = Request(method, path);
-            var response = await _anonymous.SendAsync(request);
+            var response = await Client.SendAsync(request);
             if (response.StatusCode != HttpStatusCode.Unauthorized)
                 failures.Add($"{method} {path} -> {(int)response.StatusCode}");
         }
@@ -212,7 +185,7 @@ public sealed class AuthMatrixTests
     public async Task TokenSignedWithAnotherKey_IsRejected()
     {
         var forged = MintToken(SigningKey: new string('k', 64), expires: DateTime.UtcNow.AddMinutes(10), role: "superadmin");
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", forged);
 
         Assert.That((await client.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
@@ -222,7 +195,7 @@ public sealed class AuthMatrixTests
     public async Task ExpiredToken_IsRejected()
     {
         var expired = MintToken(SigningKey, DateTime.UtcNow.AddMinutes(-10), "superadmin");
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", expired);
 
         Assert.That((await client.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
@@ -237,7 +210,7 @@ public sealed class AuthMatrixTests
         var lastChar = parts[2][^1];
         parts[2] = parts[2][..^1] + (lastChar == 'A' ? 'B' : 'A');
 
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", string.Join('.', parts));
 
         Assert.That((await client.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
@@ -246,7 +219,7 @@ public sealed class AuthMatrixTests
     [Test]
     public async Task RotatedRefreshToken_CannotBeReplayed()
     {
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/auth/login", new { email = "admin@example.test", password = Password });
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var firstCookie = login.Headers.GetValues("Set-Cookie").Single().Split(';', 2)[0];
@@ -255,7 +228,7 @@ public sealed class AuthMatrixTests
         Assert.That(refresh.StatusCode, Is.EqualTo(HttpStatusCode.OK));
 
         // Replay the token that the rotation just retired, on a client that carries nothing else.
-        using var replayer = _factory.CreateClient();
+        using var replayer = Factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         request.Headers.Add("Cookie", firstCookie);
         Assert.That((await replayer.SendAsync(request)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
@@ -267,7 +240,7 @@ public sealed class AuthMatrixTests
     {
         // The route has no body parameter at all: this pins that, so a later refactor cannot start
         // reading a lifetime out of the request and let a client extend its own session.
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/auth/login", new { email = "admin@example.test", password = Password });
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var before = DateTime.UtcNow;
@@ -284,7 +257,7 @@ public sealed class AuthMatrixTests
         Assert.That(accessExpiry, Is.InRange(before.AddMinutes(14), before.AddMinutes(16)),
             "the access token lifetime is the server's 15 minutes, not the client's 10 years");
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var user = await users.FindByEmailAsync("admin@example.test");
@@ -302,7 +275,7 @@ public sealed class AuthMatrixTests
     [Test]
     public async Task Refresh_WithoutACookie_IsUnauthorized()
     {
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         Assert.That((await client.PostAsync("/api/auth/refresh", content: null)).StatusCode,
             Is.EqualTo(HttpStatusCode.Unauthorized));
     }
@@ -310,14 +283,14 @@ public sealed class AuthMatrixTests
     [Test]
     public async Task Login_ForAnAccountWithNoRole_CanStillNotReadBusinessData()
     {
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = Factory.Services.CreateScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
             var user = new IdentityUser { UserName = "norole@example.test", Email = "norole@example.test", EmailConfirmed = true };
             Assert.That((await users.CreateAsync(user, Password)).Succeeded, Is.True);
         }
 
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/auth/login", new { email = "norole@example.test", password = Password });
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK), "credentials are valid, the account simply has no role");
         var payload = await login.Content.ReadFromJsonAsync<JsonElement>();

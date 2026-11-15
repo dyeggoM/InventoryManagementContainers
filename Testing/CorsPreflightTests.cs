@@ -15,25 +15,14 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class CorsPreflightTests
+public sealed class CorsPreflightTests : ApiTestBase
 {
-    private ApiFactory _factory = null!;
-
-    [OneTimeSetUp]
-    public void Start()
-    {
-        _factory = new ApiFactory();
-        // Build the host before touching Services, so it opens this run's throwaway database.
-        using var warmup = _factory.CreateClient();
-    }
-
-    [OneTimeTearDown]
-    public void Stop() => _factory.Dispose();
+    protected override bool SignsInAtStartup => false;
 
     [Test]
     public async Task EveryVerbTheApiRoutesUses_SurvivesThePreflight()
     {
-        var provider = _factory.Services.GetRequiredService<IActionDescriptorCollectionProvider>();
+        var provider = Factory.Services.GetRequiredService<IActionDescriptorCollectionProvider>();
         var verbs = provider.ActionDescriptors.Items
             .OfType<ControllerActionDescriptor>()
             .SelectMany(action => action.ActionConstraints?.OfType<HttpMethodActionConstraint>()
@@ -46,7 +35,7 @@ public sealed class CorsPreflightTests
 
         Assert.That(verbs, Is.Not.Empty, "the app exposes no routed verbs at all?");
 
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         var refused = new List<string>();
 
         foreach (var verb in verbs)
@@ -71,7 +60,7 @@ public sealed class CorsPreflightTests
     [Test]
     public async Task ThePreflightAnswersTheOriginAndTheHeadersTheAppSends()
     {
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Options, "/api/item/1/activate");
         request.Headers.Add("Origin", "http://localhost:9000");
         request.Headers.Add("Access-Control-Request-Method", "PATCH");

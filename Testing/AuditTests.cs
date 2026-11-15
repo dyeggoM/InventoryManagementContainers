@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using IMCAPI.DB;
@@ -14,31 +13,20 @@ namespace Testing;
 
 [NonParallelizable]
 [TestFixture]
-public sealed class AuditTests
+public sealed class AuditTests : ApiTestBase
 {
-    private ApiFactory _factory = null!;
-    private HttpClient _hostClient = null!;
-    private const string Password = "AuditTest!Secure123";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    /// <summary>
+    /// Every test here signs in on its own client: what is under test is what the audit trail records
+    /// of that caller, so a shared signed-in client would blur the actor.
+    /// </summary>
+    protected override bool SignsInAtStartup => false;
 
-    [OneTimeSetUp]
-    public void Start()
-    {
-        _factory = new ApiFactory();
-        _hostClient = _factory.CreateClient();
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        _hostClient.Dispose();
-        _factory.Dispose();
-    }
+    private const string AuditPassword = "AuditTest!Secure123";
 
     [Test]
     public async Task Interceptor_RecordsBeforeAndAfterOnUpdate()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var item = new Item { Label = "Audit before " + Guid.NewGuid(), Icon = "", UpdatedBy = "forged-on-create" };
         context.Items.Add(item);
@@ -64,7 +52,7 @@ public sealed class AuditTests
     [Test]
     public async Task Interceptor_RecordsDeletedEntityBeforeValues()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var item = new Item { Label = "Delete audit " + Guid.NewGuid(), Icon = "" };
         context.Items.Add(item);
@@ -83,7 +71,7 @@ public sealed class AuditTests
     [Test]
     public async Task Interceptor_RedactsPasswordSecurityStampAndRefreshTokenHash()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var user = new IdentityUser
         {
@@ -119,9 +107,9 @@ public sealed class AuditTests
     [Test]
     public async Task HttpActorAndRequestMetadataPopulateAuditAndCreatedFields()
     {
-        using var client = _factory.CreateClient();
-        await Authenticate(client, "bootstrap@example.test", "AuthTest!Secure123");
-        using var scope = _factory.Services.CreateScope();
+        using var client = Factory.CreateClient();
+        await Authenticate(client, SuperadminEmail);
+        using var scope = Factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var actor = await users.FindByEmailAsync("bootstrap@example.test");
         var label = "HTTP audit " + Guid.NewGuid().ToString("N");
@@ -153,30 +141,30 @@ public sealed class AuditTests
     [Test]
     public async Task AuditEndpoint_AdminIsForbiddenAndSuperadminCanRead()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var email = "audit-admin-" + Guid.NewGuid().ToString("N") + "@example.test";
         var user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
-        Assert.That((await users.CreateAsync(user, Password)).Succeeded, Is.True);
+        Assert.That((await users.CreateAsync(user, AuditPassword)).Succeeded, Is.True);
         Assert.That((await users.AddToRoleAsync(user, "admin")).Succeeded, Is.True);
         var roleChange = await scope.ServiceProvider.GetRequiredService<ApplicationContext>().AuditLogs
             .SingleAsync(row => row.Action == "RoleChange" && row.Entity == "IdentityUserRole" && row.EntityId == user.Id);
         Assert.That(roleChange.AfterJson, Does.Contain("UserId"));
 
-        using var admin = _factory.CreateClient();
-        await Authenticate(admin, email, Password);
+        using var admin = Factory.CreateClient();
+        await Authenticate(admin, email, AuditPassword);
         Assert.That((await admin.GetAsync("/api/audit")).StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
 
-        using var root = _factory.CreateClient();
-        await Authenticate(root, "bootstrap@example.test", "AuthTest!Secure123");
+        using var root = Factory.CreateClient();
+        await Authenticate(root, SuperadminEmail);
         Assert.That((await root.GetAsync("/api/audit")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
     [Test]
     public async Task HttpUpdateAuditShowsDifferentPreviousAndCurrentFieldValues()
     {
-        using var client = _factory.CreateClient();
-        await Authenticate(client, "bootstrap@example.test", "AuthTest!Secure123");
+        using var client = Factory.CreateClient();
+        await Authenticate(client, SuperadminEmail);
         var originalLabel = "Audit update old " + Guid.NewGuid().ToString("N");
         var create = await client.PostAsJsonAsync("/api/item", new
         {
@@ -210,8 +198,8 @@ public sealed class AuditTests
     [Test]
     public async Task ArchivedItemDeletionCanBeFoundByDeleteAction()
     {
-        using var client = _factory.CreateClient();
-        await Authenticate(client, "bootstrap@example.test", "AuthTest!Secure123");
+        using var client = Factory.CreateClient();
+        await Authenticate(client, SuperadminEmail);
         var create = await client.PostAsJsonAsync("/api/item", new
         {
             label = "Soft-delete audit " + Guid.NewGuid().ToString("N"), icon = "", parentId = (int?)null,
@@ -229,8 +217,8 @@ public sealed class AuditTests
     [Test]
     public async Task ClientCannotWriteIdOrAuditMetadataOnCreateOrUpdate()
     {
-        using var client = _factory.CreateClient();
-        await Authenticate(client, "bootstrap@example.test", "AuthTest!Secure123");
+        using var client = Factory.CreateClient();
+        await Authenticate(client, SuperadminEmail);
         var forgedDate = new DateTime(2000, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         const int forgedId = 987654321;
         var create = await client.PostAsJsonAsync("/api/item", new
@@ -242,7 +230,7 @@ public sealed class AuditTests
         });
         Assert.That(create.StatusCode, Is.EqualTo(HttpStatusCode.OK), await create.Content.ReadAsStringAsync());
         var id = (await create.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetInt32();
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var persisted = await context.Items.SingleAsync(item => item.Id == id);
         var originalCreatedAt = persisted.CreatedAt;
@@ -277,7 +265,7 @@ public sealed class AuditTests
     public async Task AuditEndpoint_FiltersAndPaginates()
     {
         const string actorId = "audit-filter-actor";
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = Factory.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             context.AuditLogs.Add(new AuditLog
@@ -293,8 +281,8 @@ public sealed class AuditTests
             await context.SaveChangesAsync();
         }
 
-        using var root = _factory.CreateClient();
-        await Authenticate(root, "bootstrap@example.test", "AuthTest!Secure123");
+        using var root = Factory.CreateClient();
+        await Authenticate(root, SuperadminEmail);
         var response = await root.GetAsync("/api/audit?actor=audit-filter-actor&entity=FilterProbe&entityId=probe-17&action=Update&page=1&pageSize=5");
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
@@ -309,8 +297,8 @@ public sealed class AuditTests
     [Test]
     public async Task AuditEndpoint_InvalidDateRangeReturnsProblemDetails()
     {
-        using var root = _factory.CreateClient();
-        await Authenticate(root, "bootstrap@example.test", "AuthTest!Secure123");
+        using var root = Factory.CreateClient();
+        await Authenticate(root, SuperadminEmail);
         var response = await root.GetAsync("/api/audit?from=2026-05-02T00:00:00Z&to=2026-05-01T00:00:00Z");
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("application/problem+json"));
@@ -319,7 +307,7 @@ public sealed class AuditTests
     [Test]
     public void AuditEndpoint_HasNoWriteOrDeleteRoute()
     {
-        var source = _factory.Services.GetRequiredService<EndpointDataSource>();
+        var source = Factory.Services.GetRequiredService<EndpointDataSource>();
         var auditEndpoints = source.Endpoints.OfType<RouteEndpoint>()
             .Where(endpoint => string.Equals(endpoint.RoutePattern.RawText, "api/audit", StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -331,14 +319,14 @@ public sealed class AuditTests
     [Test]
     public async Task LoginFailureAndLogoutWriteExplicitAuditRows()
     {
-        using var client = _factory.CreateClient();
+        using var client = Factory.CreateClient();
         var failed = await client.PostAsJsonAsync("/api/auth/login", new { email = "nobody@example.test", password = "wrong" });
         Assert.That(failed.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         var login = await client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = "AuthTest!Secure123" });
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That((await client.PostAsync("/api/auth/logout", content: null)).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var actions = await context.AuditLogs.Where(row => row.Action == "LoginFailed" || row.Action == "Login" || row.Action == "Logout")
             .Select(row => row.Action).ToListAsync();
@@ -348,7 +336,7 @@ public sealed class AuditTests
     [Test]
     public async Task RefreshingAnAlreadyRotatedTokenWritesRefreshReuseAudit()
     {
-        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        using var client = Factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
         var login = await client.PostAsJsonAsync("/api/auth/login", new { email = "bootstrap@example.test", password = "AuthTest!Secure123" });
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var oldCookie = login.Headers.GetValues("Set-Cookie").Single().Split(';', 2)[0];
@@ -360,16 +348,9 @@ public sealed class AuditTests
         replay.Headers.TryAddWithoutValidation("Cookie", oldCookie);
         Assert.That((await client.SendAsync(replay)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await context.AuditLogs.CountAsync(row => row.Action == "RefreshReuse"), Is.EqualTo(1));
     }
 
-    private static async Task Authenticate(HttpClient client, string email, string password)
-    {
-        var response = await client.PostAsJsonAsync("/api/auth/login", new { email, password });
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        var payload = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", payload.GetProperty("access_token").GetString());
-    }
 }

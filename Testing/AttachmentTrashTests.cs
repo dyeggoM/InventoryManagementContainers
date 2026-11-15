@@ -18,31 +18,8 @@ namespace Testing;
 /// </summary>
 [NonParallelizable]
 [TestFixture]
-public sealed class AttachmentTrashTests
+public sealed class AttachmentTrashTests : ApiTestBase
 {
-    private const string Password = "AuthTest!Secure123";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private ApiFactory _factory = null!;
-    private HttpClient _client = null!;
-
-    [OneTimeSetUp]
-    public async Task Start()
-    {
-        _factory = new ApiFactory();
-        _client = _factory.CreateClient();
-        var login = await _client.PostAsJsonAsync("/api/auth/login",
-            new { email = "bootstrap@example.test", password = Password });
-        Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    [OneTimeTearDown]
-    public void Stop()
-    {
-        _client.Dispose();
-        _factory.Dispose();
-    }
 
     [Test]
     public async Task Delete_MovesTheFileToTheTrashAndKeepsItInTheLedger()
@@ -55,10 +32,10 @@ public sealed class AttachmentTrashTests
         var trashed = Trashed(filePath);
         Assert.That(File.Exists(live), Is.True, "the upload is on disk before the delete");
 
-        var deleted = await _client.DeleteAsync($"/api/item/{itemId}");
+        var deleted = await Client.DeleteAsync($"/api/item/{itemId}");
         Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), await deleted.Content.ReadAsStringAsync());
 
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var archive = await context.ItemArchives.SingleAsync(row => row.ItemId == itemId);
         Assert.Multiple(() =>
@@ -81,9 +58,9 @@ public sealed class AttachmentTrashTests
         var bytes = PhotoBytes();
         var uploaded = await UploadAsync(itemId, "restore-photo.png", bytes);
         var archivedPath = uploaded.GetProperty("filePath").GetString()!;
-        Assert.That((await _client.DeleteAsync($"/api/item/{itemId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.That((await Client.DeleteAsync($"/api/item/{itemId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
-        var response = await _client.PatchAsync($"/api/item/{itemId}/activate", content: null);
+        var response = await Client.PatchAsync($"/api/item/{itemId}/activate", content: null);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         Assert.Multiple(() =>
         {
@@ -96,11 +73,11 @@ public sealed class AttachmentTrashTests
         Assert.That(File.Exists(Trashed(archivedPath)), Is.False, "and no longer sits in the trash");
 
         // The tree is what the UI draws the count from.
-        var list = await _client.GetFromJsonAsync<JsonElement>("/api/item", Json);
+        var list = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
         var node = list.GetProperty("tree").EnumerateArray().Single(item => item.GetProperty("id").GetInt32() == itemId);
         Assert.That(node.GetProperty("attachmentCount").GetInt32(), Is.EqualTo(1));
 
-        var attachments = await _client.GetFromJsonAsync<JsonElement>($"/api/attachment/item/{itemId}", Json);
+        var attachments = await Client.GetFromJsonAsync<JsonElement>($"/api/attachment/item/{itemId}", Json);
         var attachment = attachments.EnumerateArray().Single();
         Assert.Multiple(() =>
         {
@@ -110,7 +87,7 @@ public sealed class AttachmentTrashTests
                 "the archived path is used as it is");
         });
 
-        var file = await _client.GetAsync($"/api/attachment/{attachment.GetProperty("id").GetInt32()}/file");
+        var file = await Client.GetAsync($"/api/attachment/{attachment.GetProperty("id").GetInt32()}/file");
         Assert.That(file.StatusCode, Is.EqualTo(HttpStatusCode.OK), await file.Content.ReadAsStringAsync());
         Assert.That(await file.Content.ReadAsByteArrayAsync(), Is.EqualTo(bytes), "byte-identical to the upload");
     }
@@ -121,11 +98,11 @@ public sealed class AttachmentTrashTests
         var itemId = await CreateItem("purge-trash-" + Guid.NewGuid().ToString("N"));
         var uploaded = await UploadAsync(itemId, "purge-photo.png", PhotoBytes());
         var filePath = uploaded.GetProperty("filePath").GetString()!;
-        Assert.That((await _client.DeleteAsync($"/api/item/{itemId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.That((await Client.DeleteAsync($"/api/item/{itemId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
         Assert.That(File.Exists(Trashed(filePath)), Is.True);
 
         // Age the row past the retention window: the API only archives by deleting a live record.
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = Factory.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             var archive = await context.ItemArchives.SingleAsync(row => row.ItemId == itemId && row.RestoredAtUtc == null);
@@ -133,13 +110,13 @@ public sealed class AttachmentTrashTests
             await context.SaveChangesAsync();
         }
 
-        var response = await _client.PostAsync("/api/item/archive/purge?olderThanDays=30", content: null);
+        var response = await Client.PostAsync("/api/item/archive/purge?olderThanDays=30", content: null);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
         Assert.That(payload.GetProperty("deleted").GetInt32(), Is.GreaterThanOrEqualTo(1));
 
         Assert.That(File.Exists(Trashed(filePath)), Is.False, "a purge is where a file is finally destroyed");
-        using var check = _factory.Services.CreateScope();
+        using var check = Factory.Services.CreateScope();
         var db = check.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await db.ItemArchives.AnyAsync(row => row.ItemId == itemId), Is.False);
     }
@@ -150,12 +127,12 @@ public sealed class AttachmentTrashTests
         var itemId = await CreateItem("lost-" + Guid.NewGuid().ToString("N"));
         var uploaded = await UploadAsync(itemId, "lost-photo.png", PhotoBytes());
         var filePath = uploaded.GetProperty("filePath").GetString()!;
-        Assert.That((await _client.DeleteAsync($"/api/item/{itemId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.That((await Client.DeleteAsync($"/api/item/{itemId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
         var trashed = Trashed(filePath);
         Assert.That(File.Exists(trashed), Is.True);
         File.Delete(trashed);
 
-        var response = await _client.PatchAsync($"/api/item/{itemId}/activate", content: null);
+        var response = await Client.PatchAsync($"/api/item/{itemId}/activate", content: null);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK),
             "a missing file is reported, not turned into a failed restore: " + await response.Content.ReadAsStringAsync());
         var restored = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
@@ -167,9 +144,9 @@ public sealed class AttachmentTrashTests
             Assert.That(response.Headers.GetValues("X-Restored-Attachments").Single(), Is.EqualTo("0"));
         });
 
-        Assert.That((await _client.GetAsync($"/api/item/{itemId}")).StatusCode, Is.EqualTo(HttpStatusCode.OK),
+        Assert.That((await Client.GetAsync($"/api/item/{itemId}")).StatusCode, Is.EqualTo(HttpStatusCode.OK),
             "the record itself comes back");
-        Assert.That((await _client.GetAsync($"/api/attachment/item/{itemId}")).StatusCode,
+        Assert.That((await Client.GetAsync($"/api/attachment/item/{itemId}")).StatusCode,
             Is.EqualTo(HttpStatusCode.NoContent),
             "a row naming a file nobody could bring back is not restored");
     }
@@ -182,8 +159,8 @@ public sealed class AttachmentTrashTests
     [Test]
     public void TrashOperations_RefuseAPathThatEscapesTheMediaRoot()
     {
-        var storage = _factory.Services.GetRequiredService<IMCAPI.Services.AttachmentStorage>();
-        var mediaRoot = _factory.MediaRoot;
+        var storage = Factory.Services.GetRequiredService<IMCAPI.Services.AttachmentStorage>();
+        var mediaRoot = Factory.MediaRoot;
         var media = Path.Combine(mediaRoot, "media");
         // The victim sits exactly where `../loot` from the media root points, so this test fails if
         // the guard lets the move through — not merely because the path looked odd.
@@ -221,17 +198,6 @@ public sealed class AttachmentTrashTests
         });
     }
 
-    private async Task<int> CreateItem(string label)
-    {
-        var response = await _client.PostAsJsonAsync("/api/item", new
-        {
-            label, icon = "", parentId = (int?)null, attributes = "{}",
-            children = Array.Empty<object>(), attachments = Array.Empty<object>()
-        });
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
-        return (await response.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetInt32();
-    }
-
     private async Task<JsonElement> UploadAsync(int itemId, string fileName, byte[] bytes)
     {
         using var form = new MultipartFormDataContent
@@ -243,14 +209,14 @@ public sealed class AttachmentTrashTests
         content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         form.Add(content, "file", fileName);
 
-        var response = await _client.PostAsync("/api/attachment/upload", form);
+        var response = await Client.PostAsync("/api/attachment/upload", form);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>(Json);
     }
 
     /// <summary>Where a stored relative path lives: <c>media/items/7/a.png</c> under the media root.</summary>
     private string Live(string relativePath) =>
-        Path.Combine(_factory.MediaRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Path.Combine(Factory.MediaRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
     /// <summary>The mirrored trash location: <c>media/items/7/a.png</c> is <c>media/trash/items/7/a.png</c>.</summary>
     private string Trashed(string relativePath)
@@ -260,7 +226,7 @@ public sealed class AttachmentTrashTests
         var tail = normalized.StartsWith(media, StringComparison.OrdinalIgnoreCase)
             ? normalized[media.Length..]
             : normalized;
-        return Path.Combine(_factory.MediaRoot, "media", "trash", tail.Replace('/', Path.DirectorySeparatorChar));
+        return Path.Combine(Factory.MediaRoot, "media", "trash", tail.Replace('/', Path.DirectorySeparatorChar));
     }
 
     private static byte[] PhotoBytes()
