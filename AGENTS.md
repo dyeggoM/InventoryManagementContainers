@@ -76,14 +76,14 @@ open, and the whole point is lost.
 ```bash
 # API
 dotnet build IMCAPI/IMCAPI.csproj
-dotnet test Testing/Testing.csproj          # 101 tests: matrix, auth abuse, cycles, attachments,
+dotnet test Testing/Testing.csproj          # 134 tests: matrix, auth abuse, cycles, attachments,
                                             # impersonation, rate limiting, the security regressions
 dotnet run --project IMCAPI                 # needs AUTH_JWT_KEY/AUTH_JWT_ISSUER
                                             # and AUTH_BOOTSTRAP_EMAIL/AUTH_BOOTSTRAP_PASSWORD
 
 # Frontend
 cd imcui && npm ci
-npm run test        # vitest
+npm run test        # vitest, 207 tests
 npm run typecheck   # vue-tsc
 npm run lint:check
 npm run build
@@ -132,6 +132,37 @@ python3 $SM --repo . review --status passed --reviewer <you> --note '<evidence>'
   which is why cycle guards and the delete path use `IgnoreQueryFilters()` when they must see them.
 - **Never trust a path from the client**: validate the shape (`TryParseExact`, regex) and confine the
   result to its directory, whatever the proxy in front does.
+
+## The work ledger (required, not optional)
+
+Every agent here keeps a record of what it was asked and what it did, in
+`~/.hermes/ledgers/InventoryManagementContainers.<agent>.db` (one file per bot, driven by
+`~/.hermes/scripts/ledger` from the `work-ledger` skill). The context window is disposable; this is
+not.
+
+- **First action of a session:** `~/.hermes/scripts/ledger resume` — open work, the decisions that
+  constrain it, what was already tried and failed, recent results with their evidence.
+- **When you are assigned something**, before you touch a file: `ledger request "<the assignment,
+  verbatim>"`. A `pre_tool_call` hook blocks `write_file`, `patch` and `git commit` when you have no
+  open task, and the block message tells you the command.
+- **When you deliver**, `ledger result "<what landed>" --task T#### --evidence "<commit, command,
+  path:line>"`. A `result` without evidence is not a result, and it is what closes the task: state is
+  derived from the events, never typed in by hand.
+- **A dead end gets its own event**: `ledger failure "<what did not work and why it will not be tried
+  again>"`. That line is the most valuable one next session.
+- **A choice that constrains the next step**: `ledger decision "<what>" --why "<why>"`.
+- `ledger status`, `ledger search "<term>"` and `ledger team` (every agent's open work for this
+  scope) answer the rest without reading the log.
+- **When you deliver:** `ledger result --task T0001 "<what you delivered>" --evidence "<command,
+  test, commit or path>"`. A result with no evidence is a claim, not a record.
+- **When you hit a dead end:** `ledger failure "<what did not work>" --evidence "<the error>"` — the
+  next session must not pay for the same discovery.
+- **When you decide something binding:** `ledger decision "<the rule>" --why "<why>"`.
+- **Before a purge or a handoff:** `ledger close --task T0001 "<state>"`, then `ledger resume` is
+  what the next session reads instead of the transcript.
+
+`ledger check` is the integrity pass: a task marked done without a result carrying evidence, a
+credential written into the record, or work left `open` for too long all come back as problems.
 
 ## How work is routed here
 

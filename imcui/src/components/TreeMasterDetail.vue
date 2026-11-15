@@ -11,7 +11,7 @@
     <!-- Desktop: tree on the left, form on the right. -->
     <q-splitter v-if="$q.screen.gt.sm" v-model="splitter">
       <template v-slot:before>
-        <div class="q-pa-md tree-pane">
+        <div ref="treePane" class="q-pa-md tree-pane imc-pane" :style="paneStyle">
           <div class="row items-center no-wrap q-gutter-sm q-mb-md">
             <q-input
               v-if="tree.length > 0"
@@ -99,6 +99,7 @@
       </template>
 
       <template v-slot:after>
+        <div ref="detailPane" class="imc-pane imc-pane--detail" :style="paneStyle">
         <div v-if="selected < 0" class="imc-empty">
           <q-icon name="touch_app" />
           <div class="text-subtitle1 q-mt-sm">Select an item to edit it</div>
@@ -150,6 +151,7 @@
             </q-form>
           </q-tab-panel>
         </q-tab-panels>
+        </div>
       </template>
     </q-splitter>
 
@@ -307,7 +309,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 import type { TreeEntry } from '../composables/useTreeEditor';
 import { useFeedback } from '../composables/useFeedback';
 import { prettyLabel } from '../services/utilities';
@@ -355,6 +358,47 @@ const emit = defineEmits<{
 }>();
 
 const selected = defineModel<number>('selected', { required: true });
+
+/**
+ * Each pane keeps its own scrollbar. Without this the page is the scrollbar, the tree grows past the
+ * fold and the form stays at the top of the document: picking a record at row 200 leaves you looking
+ * at nothing. The height is measured because the header (and the impersonation banner) move the top
+ * of the pane, and a hardcoded one would be wrong on one of the two.
+ */
+const q = useQuasar();
+const treePane = ref<HTMLElement | null>(null);
+const detailPane = ref<HTMLElement | null>(null);
+const paneStyle = ref<Record<string, string>>({});
+
+function measurePanes(): void {
+  const top = detailPane.value?.getBoundingClientRect().top ?? treePane.value?.getBoundingClientRect().top;
+  if (top === undefined) return;
+  const available = Math.max(240, window.innerHeight - top - 8);
+  paneStyle.value = { height: `${available}px` };
+}
+
+onMounted(async () => {
+  await nextTick();
+  measurePanes();
+  window.addEventListener('resize', measurePanes);
+});
+
+onBeforeUnmount(() => window.removeEventListener('resize', measurePanes));
+
+// The panes only exist above the desktop breakpoint: measure when they appear, not before.
+watch(
+  () => q.screen.gt.sm,
+  (desktop) => {
+    if (desktop) void nextTick(measurePanes);
+  },
+);
+
+/** A new record in the form starts at the top of it, wherever the tree was scrolled to. */
+watch(
+  () => props.entryId,
+  () => nextTick(() => detailPane.value?.scrollTo({ top: 0 })),
+);
+
 const expanded = defineModel<number[]>('expanded', { required: true });
 const splitter = defineModel<number>('splitter', { default: 40 });
 const dialog = defineModel<boolean>('dialog', { default: false });
@@ -412,6 +456,13 @@ async function requestClose() {
 </script>
 
 <style scoped>
+/* The desktop panes scroll independently: the tree can be two hundred rows long and the form still
+   opens at its own top, in view. `overscroll-behavior` stops the page from taking over at the edge. */
+.imc-pane {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .tree-pane :deep(.q-tree__node-header) {
   min-height: 44px; /* comfortable tap target */
   align-items: center;

@@ -63,7 +63,20 @@ its three colours, lets you filter to the doubtful rows and untick the yellow on
 Measured on the owner's file (560 records + 18 section titles across five sheets): 350 green, 105 yellow,
 105 red — the reds being rows that carry a code but no name.
 
-## Pending — `chore/mit-license`
+## #29 — Restoring a record gives its files back · merged 2026-11-12
+
+**Restoring a record brings its files back.** Deleting used to unlink the attachments, so an archived
+record kept the *names* of files nobody could return. Deletion now moves them to `media/trash`, mirroring
+the live tree, and `PATCH /api/item/{id}/activate` moves them back and re-creates the attachment rows
+from the ledger snapshot — so a restored record has its photos again, byte for byte. The purge is the
+only place that now destroys bytes. Headers `X-Restored-Attachments` / `X-Missing-Attachments` say how
+many came back; an archive written before this change restores with none, which is the honest answer
+rather than a 404 nobody explains.
+
+**The file route no longer trusts the path it reads.** `GET /api/attachment/{id}/file` resolved
+`FilePath` straight onto the disk; it now goes through the same confined resolver the trash uses, so a
+
+## #28 — The project is MIT licensed · merged 2026-11-12
 
 **The project is MIT licensed.** `LICENSE` carries the canonical text and AGENTS.md says so, so
 "can I use this?" now has a written answer instead of a guess.
@@ -143,6 +156,12 @@ created with the payload the page sends appears in `GET /api/constants/group/Bra
 Configuration tree under the right parent. Dark mode was checked in a real browser at 780×437: the
 inventory tree, the dashboard tables (no white panel left), the file preview modal and the login card
 all render dark with readable text, and switching back to *Sistema* returns the body to the OS mode.
+
+## #24 — The LAN script stops handing out a password that does not work
+
+`scripts/dev-lan.sh` printed the bootstrap password as if it were the account's login. On any database
+that already has a superadmin the seeder ignores that value, so the printed password answered `401`.
+It now names the account and says the value only applies to an empty database.
 
 ## #23 — Impersonation by role, the security round and the archive screen · merged 2026-11-11
 

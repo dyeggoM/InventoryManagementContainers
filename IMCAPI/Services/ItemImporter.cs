@@ -70,12 +70,20 @@ public sealed class ItemImporter
 
     private sealed record RawRow(int Row, string Sheet, Dictionary<string, string> Cells);
 
-    public async Task<ImportPreview> PreviewAsync(Stream stream, CancellationToken cancellationToken = default) =>
-        (await BuildAsync(stream, cancellationToken)).Preview;
+    /// <param name="format">
+    /// Which reader to use. The caller knows the extension, so this is told, never guessed.
+    /// </param>
+    /// <param name="sourceName">
+    /// The file name for a CSV, which has no sheet names of its own; the tree's root takes it. Ignored
+    /// for a workbook, whose sheets name themselves.
+    /// </param>
+    public async Task<ImportPreview> PreviewAsync(Stream stream, ImportFormat format = ImportFormat.Workbook,
+        string? sourceName = null, CancellationToken cancellationToken = default) =>
+        (await BuildAsync(stream, format, sourceName, cancellationToken)).Preview;
 
     /// <summary>The preview and the rows it is made of: one parse serves both calls.</summary>
     private async Task<(ImportPreview Preview, List<(string Sheet, string Group, ImportItem Item)> Rows)> BuildAsync(
-        Stream stream, CancellationToken cancellationToken)
+        Stream stream, ImportFormat format, string? sourceName, CancellationToken cancellationToken)
     {
         // .xls needs the code pages; .xlsx does not, but registering once is harmless and the
         // registration is idempotent.
@@ -88,11 +96,10 @@ public sealed class ItemImporter
         var issues = new List<ImportIssue>();
         var normalizations = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        using var reader = ExcelReaderFactory.CreateReader(stream);
         var seenCodes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var duplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (sheetName, rows) in ReadSheets(reader))
+        foreach (var (sheetName, rows) in ReadSource(stream, format, sourceName))
         {
             if (rows.Count == 0) continue;
 
@@ -162,6 +169,14 @@ public sealed class ItemImporter
             Importable: all.Count(item => item.Status != Red),
             Skipped: all.Count(item => item.Status == Red));
 
+        // A CSV is one sheet, so "no records" means the file holds nothing: answering with an empty
+        // tree would look like a successful import of zero rows.
+        if (format == ImportFormat.Csv && summary.Rows == 0)
+        {
+            throw new ImportFileException(
+                "El CSV no tiene filas de datos: hace falta una cabecera con DESCRIPCION y al menos un elemento.");
+        }
+
         var preview = new ImportPreview(sheets, summary, issues, normalizations.ToList());
         var planned = sheets
             .SelectMany(sheet => sheet.Groups.SelectMany(group => group.Items.Select(item => (Sheet: sheet.Name, Group: group.Name, Item: item))))
@@ -176,10 +191,11 @@ public sealed class ItemImporter
     /// second time — a code that already exists, or a nameless record that is already there, is
     /// skipped instead of duplicated.
     /// </summary>
-    public async Task<ImportResult> ImportAsync(Stream stream, bool includeYellow = true,
+    public async Task<ImportResult> ImportAsync(Stream stream, ImportFormat format = ImportFormat.Workbook,
+        string? sourceName = null, bool includeYellow = true,
         IReadOnlyCollection<string>? skipCodes = null, CancellationToken cancellationToken = default)
     {
-        var (preview, rows) = await BuildAsync(stream, cancellationToken);
+        var (preview, rows) = await BuildAsync(stream, format, sourceName, cancellationToken);
 
         var skip = new HashSet<string>(skipCodes ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var skippedRed = rows.Count(row => row.Item.Status == Red);
@@ -488,6 +504,60 @@ public sealed class ItemImporter
     }
 
     /// <summary>
+    /// Opens the file with the reader its format asks for. Both readers answer the same shape — a name
+    /// and its rows of text cells — so everything downstream is shared.
+    /// </summary>
+    private static List<(string Name, List<RawRow> Rows)> ReadSource(Stream stream, ImportFormat format,
+        string? sourceName) => format == ImportFormat.Csv ? ReadCsv(stream, sourceName) : ReadWorkbook(stream);
+
+    private static List<(string Name, List<RawRow> Rows)> ReadWorkbook(Stream stream)
+    {
+        using var reader = ExcelReaderFactory.CreateReader(stream);
+        return ReadSheets(reader);
+    }
+
+    /// <summary>
+    /// A CSV has no sheets, so the file is the sheet: its name — the controller passes the file name
+    /// without extension — becomes the root of the tree, and every row is read as text and mapped
+    /// through the same header aliases the workbook path uses.
+    /// </summary>
+    private static List<(string Name, List<RawRow> Rows)> ReadCsv(Stream stream, string? sourceName)
+    {
+        var name = Normalize(sourceName);
+        if (name.Length == 0) name = "HOJA 1";
+
+        var rows = new List<RawRow>();
+        var rowNumber = 0;
+        foreach (var record in CsvSheetReader.Read(stream))
+        {
+            rowNumber++;
+            // The number is the record's, not the line's: a quoted field may run over several lines,
+            // and an issue should point at the row the user counts in the spreadsheet.
+            if (RawRowAt(rowNumber, name, record) is { } row) rows.Add(row);
+        }
+
+        return rows.Count == 0 ? new() : new() { (name, rows) };
+    }
+
+    /// <summary>
+    /// One row of text cells, keyed the way the header map reads them and numbered as the user sees it.
+    /// Empty cells are absent: a row of nothing is not a record.
+    /// </summary>
+    private static RawRow? RawRowAt(int rowNumber, string sheet, IEnumerable<string?> values)
+    {
+        var cells = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var column = 0;
+        foreach (var value in values)
+        {
+            var text = value?.Trim() ?? string.Empty;
+            if (text.Length > 0) cells[$"col{column}"] = text;
+            column++;
+        }
+
+        return cells.Count == 0 ? null : new RawRow(rowNumber, sheet, cells);
+    }
+
+    /// <summary>
     /// Streams every sheet once, keeping the spreadsheet row number so an issue points at the row
     /// the user sees in Excel. No typed data set: the file is read as strings and nothing is guessed.
     /// </summary>
@@ -502,15 +572,10 @@ public sealed class ItemImporter
             while (reader.Read())
             {
                 rowNumber++;
-                var cells = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var values = new string?[reader.FieldCount];
                 for (var column = 0; column < reader.FieldCount; column++)
-                {
-                    var text = Convert.ToString(reader.GetValue(column))?.Trim() ?? string.Empty;
-                    if (text.Length == 0) continue;
-                    cells[$"col{column}"] = text;
-                }
-
-                if (cells.Count > 0) rows.Add(new RawRow(rowNumber, name, cells));
+                    values[column] = Convert.ToString(reader.GetValue(column));
+                if (RawRowAt(rowNumber, name, values) is { } row) rows.Add(row);
             }
 
             if (rows.Count > 0) sheets.Add((name, rows));
