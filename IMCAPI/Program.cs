@@ -49,8 +49,12 @@ namespace IMCAPI
                             // A dev box is reached from other machines (LAN IP, dev-server port), and a
                             // pinned list turns that into an opaque browser failure — measured: the
                             // phone on the workshop network stopped seeing CORS headers the moment the
-                            // list won. Development reflects; a deployment pins the list or says `*`.
-                            p.SetIsOriginAllowed(_ => true);
+                            // list won. So Development reflects — but only origins that are this
+                            // machine or its private network: reflecting any origin *with credentials*
+                            // lets a page on the internet read the API with the tester's cookie.
+                            p.SetIsOriginAllowed(origin =>
+                                IsLocalDevelopmentOrigin(origin)
+                                || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase));
                         }
                         else if (allowAnyOrigin)
                         {
@@ -308,6 +312,31 @@ namespace IMCAPI
 
             app.Run();
         }
+        /// <summary>
+        /// True for the origins a development box is actually reached from: loopback, a private
+        /// network address (RFC 1918, link-local, IPv6 unique-local) — the phone on the workshop wifi
+        /// or the laptop next to it. `<origin>` is what the browser sent, so an unparseable one is not
+        /// trusted.
+        /// </summary>
+        private static bool IsLocalDevelopmentOrigin(string origin)
+        {
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+            if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)) return true;
+            if (!System.Net.IPAddress.TryParse(uri.Host, out var address)) return false;
+            if (System.Net.IPAddress.IsLoopback(address)) return true;
+
+            var bytes = address.GetAddressBytes();
+            if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                return bytes[0] == 10
+                    || (bytes[0] == 192 && bytes[1] == 168)
+                    || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+                    || (bytes[0] == 169 && bytes[1] == 254);
+            }
+
+            return address.IsIPv6LinkLocal || (bytes[0] & 0xFE) == 0xFC;
+        }
+
         private static void AddRolePolicy(Microsoft.AspNetCore.Authorization.AuthorizationOptions options,
             string name, string[] roles, bool enforce, bool allowImpersonationRead = false)
         {
