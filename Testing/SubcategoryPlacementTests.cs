@@ -92,6 +92,50 @@ public sealed class SubcategoryPlacementTests
     }
 
     [Test]
+    public void AccentsDoNotDistinguishTwoNames()
+    {
+        // The workshop writes what it hears; the configuration writes what it decided. The same shelf
+        // answers to both.
+        var subs = new Dictionary<string, SubcategoryPlacement.CategoryValue>(StringComparer.Ordinal)
+        {
+            ["SILLA BATERIA"] = new("Hardware", "SILLA BATERIA", "SILLA BATERIA"),
+        };
+        var byLabel = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["HARDWARE"] = "Hardware", ["OTHER"] = "Other",
+        };
+        var map = new SubcategoryPlacement.CategoryMap(subs, byLabel, "Other");
+
+        var notes = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var placement = SubcategoryPlacement.Resolve("SILLA BATERÍA", "BACKLINE", map, notes);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(placement.Category, Is.EqualTo("Hardware"));
+            Assert.That(placement.Group, Is.EqualTo("SILLA BATERIA"),
+                "the label written is the configuration's, without the accent");
+            Assert.That(placement.Certain, Is.True);
+        });
+    }
+
+    [Test]
+    public void AnAliasPointsAtALabelTheConfigurationHas()
+    {
+        // TECALDO is the file's typo for TECLADO; the alias has to name the configured label, not an
+        // intermediate spelling that Constants does not contain.
+        var notes = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var placement = SubcategoryPlacement.Resolve("TECALDO SENCILLA", "OTROS", Map(), notes);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(placement.Category, Is.EqualTo("Hardware"));
+            Assert.That(placement.Group, Is.EqualTo("BASE TECLADO SENCILLA"));
+            Assert.That(placement.Certain, Is.True, "a known misspelling is corrected, not guessed");
+            Assert.That(notes, Has.Some.Contains("BASE TECLADO SENCILLA"));
+        });
+    }
+
+    [Test]
     public void ANameTheFileShortensIsCompletedAndSaysSo()
     {
         var placement = Resolve("CONGA DOBLE", out var notes);
