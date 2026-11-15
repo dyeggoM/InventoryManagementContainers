@@ -56,7 +56,7 @@ a valid target. Password reset is restricted to `superadmin`.
 | 31 | `POST /api/auth/login` | `Controllers/AuthController.cs:35` | — (nueva) | `PUEDE_SER_ANONIMO` — es la puerta |
 | 32 | `POST /api/auth/refresh` | `Controllers/AuthController.cs:80` | — (nueva) | `PUEDE_SER_ANONIMO` — exige cookie |
 | 33 | `POST /api/auth/logout` | `Controllers/AuthController.cs:132` | — (nueva) | `PUEDE_SER_ANONIMO` — revoca |
-| 34 | `POST /api/auth/stop-impersonation` | `Controllers/AuthController.cs:155` | — (nueva) | `REQUIERE_AUTH` + claim `act` |
+| 34 | `POST /api/auth/stop-impersonation` | `Controllers/AuthController.cs:155` | — (nueva) | `REQUIERE_AUTH` + claim `act` + `imp_sid`; el token del actor solo se devuelve con su cookie de refresco viva (sin ella: `204`) |
 | 35 | `POST /api/item/archive/purge` | `Controllers/Controllers.cs:250` | — (nueva) | `REQUIERE_AUTH (superadmin)`; exige retención configurada o `olderThanDays` |
 | 36 | `POST /api/import/preview` | `Controllers/ImportController.cs:35` | — (nueva) | `REQUIERE_AUTH (admin)`; lee un `.xlsx`/`.xls` y **no escribe**: sin credencial no se puede usar como lector de ficheros arbitrario |
 
