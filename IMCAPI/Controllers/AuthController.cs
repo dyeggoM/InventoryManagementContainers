@@ -175,6 +175,21 @@ public sealed class AuthController : ControllerBase
         var profile = await _context.UserProfiles.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == actorId, cancellationToken);
         if (profile is { IsActive: false }) return Forbid();
 
+        // Holding the borrowed token is not proof of being the actor: it is a bearer handed out to a
+        // session that is meant to be read-only, and anyone who gets it (support, a demo device, the
+        // clipboard, an XSS) could otherwise exchange it here for the actor's full token — measured:
+        // 7 minutes as lector became 15 minutes as superadmin with write. The refresh cookie is that
+        // proof: HttpOnly, scoped to /api/auth, stored only as a hash, and never handed to the
+        // impersonated page.
+        if (!Request.Cookies.TryGetValue(RefreshCookie, out var actorRefresh) || string.IsNullOrWhiteSpace(actorRefresh))
+            return Forbid();
+        var actorHash = AuthTokenService.HashRefreshToken(actorRefresh);
+        var ownsSession = await _context.RefreshTokens.AnyAsync(
+            token => token.TokenHash == actorHash && token.UserId == actor.Id
+                && token.RevokedAtUtc == null && token.ExpiresAtUtc > DateTime.UtcNow,
+            cancellationToken);
+        if (!ownsSession) return Forbid();
+
         await _audit.WriteAsync("ImpersonateEnd", "UserRole", targetRole, actor.Id, actor.Email,
             cancellationToken);
         var access = await _tokens.CreateAccessTokenAsync(actor);
