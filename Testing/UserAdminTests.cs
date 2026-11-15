@@ -160,16 +160,16 @@ public sealed class UserAdminTests
         // Ending the borrow is done from the actor's own session (the browser keeps its refresh
         // cookie), never from a bare holder of the borrowed token — that holder cannot be allowed to
         // collect the actor's token, which is what StopImpersonation_WithoutTheActorsSession pins.
-        Assert.That((await impersonated.PostAsync("/api/auth/stop-impersonation", content: null)).StatusCode,
-            Is.EqualTo(HttpStatusCode.Forbidden), "a bare bearer cannot end — or collect — the borrow");
-        using var stopRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/stop-impersonation");
-        stopRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        var stop = await admin.SendAsync(stopRequest);
-        Assert.That(stop.StatusCode, Is.EqualTo(HttpStatusCode.OK), await stop.Content.ReadAsStringAsync());
-        var normalToken = (await stop.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
-        using var restored = _factory.CreateClient();
-        restored.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", normalToken);
-        Assert.That((await restored.GetAsync("/api/users")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var bareStop = await impersonated.PostAsync("/api/auth/stop-impersonation", content: null);
+        Assert.Multiple(async () =>
+        {
+            Assert.That(bareStop.StatusCode, Is.EqualTo(HttpStatusCode.NoContent),
+                "a bare bearer ends the borrow but is handed nothing");
+            Assert.That(await bareStop.Content.ReadAsStringAsync(), Does.Not.Contain("access_token"));
+        });
+        // The actor's own session is the one that can collect their token back; that path has its own
+        // test (StopImpersonation_WithTheActorsOwnSession_ReturnsTheirToken), and this borrow is already
+        // over. What matters here: the bare holder got nothing, and the pair below is complete.
 
         var audit = scope.ServiceProvider.GetRequiredService<ApplicationContext>().AuditLogs;
         var startAudit = await audit.OrderByDescending(row => row.Id)
@@ -353,15 +353,15 @@ public sealed class UserAdminTests
 
         Assert.Multiple(async () =>
         {
-            Assert.That(exchange.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden),
-                "the borrowed token is not proof of being the actor");
+            Assert.That(exchange.StatusCode, Is.EqualTo(HttpStatusCode.NoContent),
+                "the borrow is closed, and the actor's token is not handed to a bare holder");
             Assert.That(await exchange.Content.ReadAsStringAsync(), Does.Not.Contain("access_token"));
         });
 
-        // The escalation it used to allow: the token it never got.
+        // The escalation it used to allow: the token it never got — and the borrow is gone with it.
         var users = await holder.GetAsync("/api/users");
-        Assert.That(users.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden),
-            "a read-only borrow stays read-only, and user management stays out of reach");
+        Assert.That(users.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
+            "the token died with the borrow, so nothing wider is reachable");
     }
 
     [Test]
@@ -388,6 +388,96 @@ public sealed class UserAdminTests
             Assert.That(claims.Claims.Any(claim => claim.Type == "act"), Is.False,
                 "and nothing of the borrow survives in it");
         });
+    }
+
+    [Test]
+    public async Task Impersonation_EndsOnce_AndTheBorrowedTokenDiesWithIt()
+    {
+        using var root = await SuperadminClient();
+        var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
+        var payload = await start.Content.ReadFromJsonAsync<JsonElement>(Json);
+        var borrowed = payload.GetProperty("access_token").GetString()!;
+        var sessionId = payload.GetProperty("impersonation_session").GetString();
+        Assert.That(sessionId, Is.Not.Null.And.Not.Empty, "the borrow names itself so it can be paired and revoked");
+
+        using var holder = _factory.CreateClient();
+        holder.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
+        Assert.That((await holder.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.OK), "live borrow reads");
+
+        // A holder without the actor's cookie ends the borrow but gets no token back.
+        var firstStop = await holder.PostAsync("/api/auth/stop-impersonation", content: null);
+        Assert.That(firstStop.StatusCode, Is.EqualTo(HttpStatusCode.NoContent),
+            "the borrow closes; the actor's token is not handed to a bare holder");
+        Assert.That(await firstStop.Content.ReadAsStringAsync(), Does.Not.Contain("access_token"));
+
+        // …and the token that was borrowed stops working immediately, not in seven minutes.
+        Assert.That((await holder.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
+            "an ended borrow is a dead token");
+
+        // A second stop finds nothing to end: single use, from any holder.
+        using var actor = await SuperadminClient();
+        using var second = new HttpRequestMessage(HttpMethod.Post, "/api/auth/stop-impersonation");
+        second.Headers.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
+        Assert.That((await actor.SendAsync(second)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
+            "a borrow is ended once: the second attempt has no live token to make it with");
+
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        var session = await context.ImpersonationSessions.SingleAsync(row => row.Id == sessionId);
+        Assert.That(session.EndedAtUtc, Is.Not.Null);
+        Assert.That(session.EndedBy, Is.EqualTo("api"));
+    }
+
+    [Test]
+    public async Task Impersonation_TokenStopsWorkingWhenTheSessionExpires()
+    {
+        using var root = await SuperadminClient();
+        var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "operador" });
+        var payload = await start.Content.ReadFromJsonAsync<JsonElement>(Json);
+        var borrowed = payload.GetProperty("access_token").GetString()!;
+        var sessionId = payload.GetProperty("impersonation_session").GetString()!;
+
+        // Let the borrow run out without waiting seven minutes for it.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+            var session = await context.ImpersonationSessions.SingleAsync(row => row.Id == sessionId);
+            session.ExpiresAtUtc = DateTime.UtcNow.AddSeconds(-1);
+            await context.SaveChangesAsync();
+        }
+
+        using var holder = _factory.CreateClient();
+        holder.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
+        Assert.That((await holder.GetAsync("/api/item")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+    }
+
+    [Test]
+    public async Task Impersonation_AuditNamesTheSessionThatFramedIt()
+    {
+        using var root = await SuperadminClient();
+        var start = await root.PostAsJsonAsync("/api/users/impersonate", new { role = "lector" });
+        var payload = await start.Content.ReadFromJsonAsync<JsonElement>(Json);
+        var sessionId = payload.GetProperty("impersonation_session").GetString()!;
+        var borrowed = payload.GetProperty("access_token").GetString()!;
+
+        using var stopRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/stop-impersonation");
+        stopRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
+        Assert.That((await root.SendAsync(stopRequest)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        var startRow = await context.AuditLogs.SingleAsync(row => row.Action == "ImpersonateStart" && row.ImpersonationSessionId == sessionId);
+        var endRow = await context.AuditLogs.SingleAsync(row => row.Action == "ImpersonateEnd" && row.ImpersonationSessionId == sessionId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(startRow.EntityId, Is.EqualTo("lector"));
+            Assert.That(endRow.EntityId, Is.EqualTo("lector"));
+            Assert.That(startRow.ActorUserId, Is.EqualTo(endRow.ActorUserId), "both name the actor");
+            Assert.That(startRow.AfterJson, Does.Contain(sessionId), "and the payload keeps the pairing");
+        });
+
+        // The session's own row is bookkeeping, not a business change: no Update row for it.
+        Assert.That(await context.AuditLogs.AnyAsync(row => row.Entity == "ImpersonationSession"), Is.False);
     }
 
     private async Task<HttpClient> CreateAndLogin(HttpClient root, string role, string password)

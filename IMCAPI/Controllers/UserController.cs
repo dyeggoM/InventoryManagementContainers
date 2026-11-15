@@ -174,9 +174,30 @@ public sealed class UserController : ControllerBase
         if (callerRole is null || callerRole == "lector") return Forbid();
         var hierarchy = new[] { "superadmin", "admin", "operador", "lector" };
         if (Array.IndexOf(hierarchy, role) <= Array.IndexOf(hierarchy, callerRole)) return BadRequest(new { error = "Target role must be below caller role." });
-        await _audit.WriteAsync("ImpersonateStart", "UserRole", role, actor.Id, actor.Email, cancellationToken);
-        var access = await _tokens.CreateImpersonationTokenAsync(actor, role);
-        return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc, role, scope = "read", impersonated_by = new { id = actor.Id, email = actor.Email } });
+        // The borrow is recorded before the token exists, so the token can name it and the server can
+        // refuse it the moment it is ended. Seven minutes, the same life the token has.
+        var startsAt = DateTime.UtcNow;
+        var session = new ImpersonationSession
+        {
+            ActorUserId = actor.Id,
+            ActorEmail = actor.Email,
+            TargetRole = role,
+            StartedAtUtc = startsAt,
+            ExpiresAtUtc = startsAt.AddMinutes(7)
+        };
+        _context.ImpersonationSessions.Add(session);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _audit.WriteAsync("ImpersonateStart", "UserRole", role, actor.Id, actor.Email, cancellationToken,
+            afterJson: JsonSerializer.Serialize(new { role, impersonation_session = session.Id }, AuditJson),
+            impersonationSessionId: session.Id);
+        var access = await _tokens.CreateImpersonationTokenAsync(actor, role, session.Id, session.ExpiresAtUtc);
+        return Ok(new
+        {
+            access_token = access.Token, expires_at_utc = access.ExpiresAtUtc, role, scope = "read",
+            impersonation_session = session.Id,
+            impersonated_by = new { id = actor.Id, email = actor.Email }
+        });
     }
 
     [HttpPost("{id}/password")]

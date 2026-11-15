@@ -59,7 +59,9 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
         var auditEntries = entries.Where(entry => entry.Entity is AuditLog).ToList();
         if (auditEntries.Any(entry => entry.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("Audit log rows are append-only.");
-        var changed = entries.Where(entry => entry.Entity is not AuditLog
+        // The impersonation session is bookkeeping for the audit trail, not a business change: its
+        // Start/End rows already record what happened, so its own Update would be noise.
+        var changed = entries.Where(entry => entry.Entity is not AuditLog and not ImpersonationSession
             && entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted).ToList();
         if (changed.Count == 0) return;
         try
@@ -80,6 +82,9 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                 ? principal?.FindFirst(ClaimTypes.Email)?.Value ?? principal?.Identity?.Name
                 : principal?.FindFirst("act_email")?.Value;
             var imp = (string?)null;
+            // Which borrow the write happened under. The actor is already in `act`; this names the
+            // session, so a row written during an impersonation can be paired with Start/End.
+            var impSid = impersonated is null ? null : principal?.FindFirst("imp_sid")?.Value;
             var changes = new List<Change>(changed.Count);
             foreach (var entry in changed)
             {
@@ -128,7 +133,7 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                     entry.State == EntityState.Added ? null : Serialize(entry, original: true),
                     entry.State == EntityState.Deleted ? null : Serialize(entry, original: false),
                     now, actorId, actorEmail, imp, http?.Connection.RemoteIpAddress?.ToString(),
-                    http?.Request.Headers.UserAgent.ToString(), http?.TraceIdentifier ?? Activity.Current?.Id));
+                    http?.Request.Headers.UserAgent.ToString(), http?.TraceIdentifier ?? Activity.Current?.Id, impSid));
             }
             _pending.Add(context, new Pending(changes, transaction, owns));
         }
@@ -179,6 +184,7 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                 {
                     TimestampUtc = change.Timestamp, ActorUserId = change.ActorId, ActorEmail = change.Email,
                     ImpersonatedUserId = change.ImpersonatedId, Action = change.Action, Entity = change.Entity,
+                    ImpersonationSessionId = change.ImpersonationSessionId,
                     EntityId = id,
                     BeforeJson = change.Before is null ? null : JsonSerializer.Serialize(change.Before),
                     AfterJson = afterValues is null ? null : JsonSerializer.Serialize(afterValues),
@@ -213,9 +219,10 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
 
     private static async Task InsertLog(DbContext context, AuditLog log, bool async, CancellationToken cancellationToken)
     {
-        const string sql = "INSERT INTO \"AuditLogs\" (\"TimestampUtc\", \"ActorUserId\", \"ActorEmail\", \"ImpersonatedUserId\", \"Action\", \"Entity\", \"EntityId\", \"BeforeJson\", \"AfterJson\", \"IpAddress\", \"UserAgent\", \"RequestId\") VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)";
+        const string sql = "INSERT INTO \"AuditLogs\" (\"TimestampUtc\", \"ActorUserId\", \"ActorEmail\", \"ImpersonatedUserId\", \"ImpersonationSessionId\", \"Action\", \"Entity\", \"EntityId\", \"BeforeJson\", \"AfterJson\", \"IpAddress\", \"UserAgent\", \"RequestId\") VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12)";
         var values = new object?[] { log.TimestampUtc, log.ActorUserId, log.ActorEmail, log.ImpersonatedUserId,
-            log.Action, log.Entity, log.EntityId, log.BeforeJson, log.AfterJson, log.IpAddress, log.UserAgent, log.RequestId };
+            log.ImpersonationSessionId, log.Action, log.Entity, log.EntityId, log.BeforeJson, log.AfterJson,
+            log.IpAddress, log.UserAgent, log.RequestId };
         var connection = context.Database.GetDbConnection();
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
@@ -264,14 +271,16 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
     private sealed record Pending(List<Change> Changes, IDbContextTransaction? Transaction, bool OwnsTransaction);
     private sealed record Change(EntityEntry Entry, string Action, string Entity, string? FixedId,
         Dictionary<string, object?>? Before, Dictionary<string, object?>? After, DateTime Timestamp, string? ActorId,
-        string? Email, string? ImpersonatedId, string? Ip, string? UserAgent, string? RequestId);
+        string? Email, string? ImpersonatedId, string? Ip, string? UserAgent, string? RequestId,
+        string? ImpersonationSessionId);
 }
 
 public sealed class AuditLogWriter(ApplicationContext context, IHttpContextAccessor accessor)
 {
     public async Task WriteAsync(string action, string? entity = null, string? entityId = null,
         string? actorUserId = null, string? actorEmail = null, CancellationToken cancellationToken = default,
-        string? impersonatedUserId = null, string? beforeJson = null, string? afterJson = null)
+        string? impersonatedUserId = null, string? beforeJson = null, string? afterJson = null,
+        string? impersonationSessionId = null)
     {
         var http = accessor.HttpContext;
         var principal = http?.User;
@@ -286,6 +295,10 @@ public sealed class AuditLogWriter(ApplicationContext context, IHttpContextAcces
                 ? principal?.FindFirst(ClaimTypes.Email)?.Value ?? principal?.Identity?.Name
                 : principal?.FindFirst("act_email")?.Value),
             ImpersonatedUserId = impersonatedUserId,
+            // When the row is written from inside a borrow, name it: a superadmin auditing later can
+            // pair the row with the ImpersonateStart/End that framed it. Start/End pass it explicitly:
+            // they are written from outside the borrow (the actor's own token, or the token being closed).
+            ImpersonationSessionId = impersonationSessionId ?? http?.User.FindFirst("imp_sid")?.Value,
             Action = action, Entity = entity, EntityId = entityId,
             BeforeJson = beforeJson, AfterJson = afterJson,
             IpAddress = http?.Connection.RemoteIpAddress?.ToString(), UserAgent = http?.Request.Headers.UserAgent.ToString(),

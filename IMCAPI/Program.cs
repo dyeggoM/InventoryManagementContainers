@@ -160,6 +160,21 @@ namespace IMCAPI
                                 .AnyAsync(profile => ids.Contains(profile.UserId) && !profile.IsActive);
                             if (inactive) context.Fail("The user account is inactive.");
 
+                            // A borrowed token is only good while its borrow is alive. Ending it (or
+                            // letting the seven minutes run out) kills the token on the next request,
+                            // instead of leaving it usable until it expires on its own.
+                            if (actorId is not null)
+                            {
+                                var sessionId = principal.FindFirst("imp_sid")?.Value;
+                                var live = !string.IsNullOrWhiteSpace(sessionId) && await db.ImpersonationSessions
+                                    .AsNoTracking()
+                                    .AnyAsync(session => session.Id == sessionId
+                                        && session.ActorUserId == actorId
+                                        && session.EndedAtUtc == null
+                                        && session.ExpiresAtUtc > DateTime.UtcNow);
+                                if (!live) context.Fail("The impersonation has ended.");
+                            }
+
                             // A rotated security stamp (password reset, forced sign-out) has to kill the
                             // tokens that were minted against the old one. Without this a reset revokes
                             // the refresh tokens and leaves every live access token working.

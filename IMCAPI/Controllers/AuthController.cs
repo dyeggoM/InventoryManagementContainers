@@ -160,6 +160,16 @@ public sealed class AuthController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Ends the borrow. Two separate things happen here, and they are deliberately not the same:
+    ///
+    /// - the session row is closed, which is what makes the borrowed token stop working immediately
+    ///   (the middleware rejects a token whose <c>imp_sid</c> is not live) and is idempotent-safe: a
+    ///   borrow can only be ended once;
+    /// - the actor's own token is handed back **only** with proof that the caller is the actor's
+    ///   session (the refresh cookie, hashed and live). Without that proof the borrow is still closed
+    ///   and the answer is 204 — a client that lost its cookie is logged out, never upgraded.
+    /// </summary>
     [Authorize]
     [HttpPost("stop-impersonation")]
     public async Task<IActionResult> StopImpersonation(CancellationToken cancellationToken)
@@ -167,31 +177,37 @@ public sealed class AuthController : ControllerBase
         var targetRole = User.FindFirst("impersonated_role")?.Value;
         var actorId = User.FindFirst("act")?.Value;
         var actorEmail = User.FindFirst("act_email")?.Value;
+        var sessionId = User.FindFirst("imp_sid")?.Value;
         if (string.IsNullOrWhiteSpace(targetRole) || string.IsNullOrWhiteSpace(actorId)
-            || string.IsNullOrWhiteSpace(actorEmail)) return Forbid();
+            || string.IsNullOrWhiteSpace(actorEmail) || string.IsNullOrWhiteSpace(sessionId)) return Forbid();
 
         var actor = await _users.FindByIdAsync(actorId);
         if (actor is null || !string.Equals(actor.Email, actorEmail, StringComparison.OrdinalIgnoreCase)) return Forbid();
         var profile = await _context.UserProfiles.AsNoTracking().SingleOrDefaultAsync(row => row.UserId == actorId, cancellationToken);
         if (profile is { IsActive: false }) return Forbid();
 
-        // Holding the borrowed token is not proof of being the actor: it is a bearer handed out to a
-        // session that is meant to be read-only, and anyone who gets it (support, a demo device, the
-        // clipboard, an XSS) could otherwise exchange it here for the actor's full token — measured:
-        // 7 minutes as lector became 15 minutes as superadmin with write. The refresh cookie is that
-        // proof: HttpOnly, scoped to /api/auth, stored only as a hash, and never handed to the
-        // impersonated page.
+        var session = await _context.ImpersonationSessions.SingleOrDefaultAsync(
+            row => row.Id == sessionId && row.ActorUserId == actorId, cancellationToken);
+        if (session is null || session.EndedAtUtc is not null) return Forbid();
+        session.EndedAtUtc = DateTime.UtcNow;
+        session.EndedBy = "api";
+        await _context.SaveChangesAsync(cancellationToken);
+        await _audit.WriteAsync("ImpersonateEnd", "UserRole", targetRole, actor.Id, actor.Email,
+            cancellationToken, afterJson: System.Text.Json.JsonSerializer.Serialize(
+                new { role = targetRole, impersonation_session = session.Id }),
+            impersonationSessionId: session.Id);
+
+        // The proof of being the actor: their own refresh cookie, alive and unrevoked. A holder of the
+        // borrowed token alone has nothing to show here, which is the whole point.
         if (!Request.Cookies.TryGetValue(RefreshCookie, out var actorRefresh) || string.IsNullOrWhiteSpace(actorRefresh))
-            return Forbid();
+            return NoContent();
         var actorHash = AuthTokenService.HashRefreshToken(actorRefresh);
         var ownsSession = await _context.RefreshTokens.AnyAsync(
             token => token.TokenHash == actorHash && token.UserId == actor.Id
                 && token.RevokedAtUtc == null && token.ExpiresAtUtc > DateTime.UtcNow,
             cancellationToken);
-        if (!ownsSession) return Forbid();
+        if (!ownsSession) return NoContent();
 
-        await _audit.WriteAsync("ImpersonateEnd", "UserRole", targetRole, actor.Id, actor.Email,
-            cancellationToken);
         var access = await _tokens.CreateAccessTokenAsync(actor);
         return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc });
     }
