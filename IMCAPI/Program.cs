@@ -61,7 +61,11 @@ namespace IMCAPI
                             p.WithOrigins(allowedOrigins);
                         }
 
-                        p.WithMethods("POST", "PUT", "GET", "DELETE")
+                        // Every verb the routes actually use: the archive's restore is a PATCH, and a
+                        // verb missing here is a call a browser refuses before it reaches the server,
+                        // while curl keeps working — which is why it survives review. Pinned by
+                        // Testing/CorsPreflightTests.
+                        p.WithMethods("POST", "PUT", "PATCH", "GET", "DELETE")
                          .AllowAnyHeader()
                          .AllowCredentials();
 
