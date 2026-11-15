@@ -247,3 +247,9 @@ Lo que salió del refactor de legibilidad (2026-11-15), en orden de daño:
   `TrashOperations_RefuseAPathThatEscapesTheMediaRoot` hace `Assert.Ignore` después de crear un
   directorio, que queda sin limpiar.
 
+- [x] **Cobertura de arranque y de la escalera de colocación** — `done` (2026-11-15 · code-orchestrator).
+  19 tests nuevos: el host se niega a arrancar con la clave de desarrollo publicada, con CORS vacío o
+  con `Auth:Enforce=false` fuera de Development (y los acepta dentro, como control); la ventana de login
+  frena a un anónimo, así que el rate limit sigue antes de autenticación; `/test` responde; los tiempos
+  de vida del DI son los que la API espera. Y la escalera de colocación tiene tests unitarios, ya que
+  es lógica pura desde el refactor.

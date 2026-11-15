@@ -383,7 +383,7 @@ public sealed class ItemImporter
                 // or a brand and no name is.
                 if (LooksLikeSectionTitle(row)) { skippedSections++; continue; }
                 var rowCode = Clean(row.Cells.GetValueOrDefault("code"));
-                var orphan = _placement.Resolve(subcategory, name, categories, normalizations);
+                var orphan = SubcategoryPlacement.Resolve(subcategory, name, categories, normalizations);
                 built.Add((orphan, new ImportItem(
                     Label: rowCode is { Length: > 0 } ? rowCode : "(sin nombre)",
                     Code: CleanOrNull(row.Cells.GetValueOrDefault("code")),
@@ -397,7 +397,7 @@ public sealed class ItemImporter
                 continue;
             }
 
-            var placement = _placement.Resolve(subcategory, name, categories, normalizations);
+            var placement = SubcategoryPlacement.Resolve(subcategory, name, categories, normalizations);
             var judged = Judge(name, row, description, brands, takenCodes, seenCodes, duplicates, issues);
             if (!placement.Certain)
             {
