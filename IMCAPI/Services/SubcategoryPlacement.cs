@@ -95,7 +95,7 @@ public sealed class SubcategoryPlacement
     /// shortened or extended form of a name the configuration has. What is left has no home and says
     /// so instead of being guessed into one.
     /// </summary>
-    internal Placement Resolve(string? subcategory, string sheet, CategoryMap map,
+    internal static Placement Resolve(string? subcategory, string sheet, CategoryMap map,
         SortedSet<string> normalizations)
     {
         var input = MatchKey(subcategory);

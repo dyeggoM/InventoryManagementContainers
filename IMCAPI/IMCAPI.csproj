@@ -37,4 +37,11 @@
     <Content Include="DB\Seed\seed.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The placement ladder is pure logic: the tests construct its inputs directly instead of going
+         through the HTTP endpoint. Kept internal so it does not become API somebody depends on. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Testing</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

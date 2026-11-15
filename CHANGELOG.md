@@ -23,6 +23,19 @@ suite, with the 161 tests as the only proof that nothing moved underneath:
   helpers that existed two or three times — 846 lines out, 318 in, 161 tests still green, none removed
   or weakened.
 
+**Added — the parts of the suite that could not see the refactor.** *180 tests* now (19 new):
+
+- `Testing/SubcategoryPlacementTests.cs` — the placement ladder against a hand-built configuration:
+  exact spelling, punctuation-blind matching, a name the file shortens, the shortest candidate, a tie
+  that keeps the file's own words, singular/plural, an extended name, a value that is itself a
+  category, exact-beats-closer, the `Other` fallback and a row with no subcategory. It was only
+  reachable through HTTP before.
+- `Testing/StartupInvariantsTests.cs` — the host refuses to start outside Development with the
+  published development key, with an empty CORS list, or with `Auth:Enforce=false`; the same settings
+  are accepted in Development (the control); the login window throttles an unauthenticated caller, so
+  rate limiting still sits before authentication; the anonymous probe endpoint answers; and the
+  service lifetimes the API depends on are still what they were.
+
 ## #42 — The module map is committed with its files · merged 2026-11-15
 
 **Fixed — the module map is committed with the files it points at.** `AI_INVENTORY.md` is a router
