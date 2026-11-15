@@ -113,6 +113,10 @@ imcui/node_modules/
 Thumbs.db
 Desktop.ini
 
+# The development signing key is generated per machine by scripts/dev-lan.sh. Committing it would
+# hand every reader of the repository the ability to mint a token for any account.
+.dev-jwt-key
+
 ############################################
 # CODE INVENTORY (generated)
 ############################################

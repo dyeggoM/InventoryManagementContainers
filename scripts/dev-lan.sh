@@ -16,7 +16,20 @@ what="${1:-both}"
 
 # Test-only values. Nothing here is a secret worth keeping: the database is the throwaway
 # IMCAPI/imc.db and the account exists so you can log in from the other machine.
-export AUTH_JWT_KEY="${AUTH_JWT_KEY:-dev-lan-signing-key-at-least-32-bytes-long}"
+# The signing key is per machine and never in the repository: a constant here is a constant in every
+# clone, and anyone who can read it can mint a token for any account. Generated once, kept next to the
+# database it protects, ignored by git. Override it with AUTH_JWT_KEY if you need to share a session
+# across two checkouts.
+if [ -z "${AUTH_JWT_KEY:-}" ]; then
+  KEY_FILE="$repo_root/.dev-jwt-key"
+  if [ ! -f "$KEY_FILE" ]; then
+    head -c 48 /dev/urandom | base64 | tr -d '\n' > "$KEY_FILE"
+    chmod 600 "$KEY_FILE"
+    echo "dev-lan: generated a signing key at $KEY_FILE (it will be reused; delete it to rotate)"
+  fi
+  AUTH_JWT_KEY="$(cat "$KEY_FILE")"
+fi
+export AUTH_JWT_KEY
 export AUTH_JWT_ISSUER="${AUTH_JWT_ISSUER:-imc.dev.lan}"
 export AUTH_BOOTSTRAP_EMAIL="${AUTH_BOOTSTRAP_EMAIL:-admin@imc.local}"
 export AUTH_BOOTSTRAP_PASSWORD="${AUTH_BOOTSTRAP_PASSWORD:-ChangeMe!12345}"
