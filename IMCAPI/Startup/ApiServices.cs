@@ -59,5 +59,6 @@ public static class ApiServices
         // Attachment bytes live on disk; only a compressed preview stays in the row.
         builder.Services.AddSingleton<AttachmentStorage>();
         builder.Services.AddScoped<ItemImporter>();
+        builder.Services.AddScoped<SubcategoryPlacement>();
     }
 }
