@@ -101,7 +101,9 @@
     </q-table>
 
     <!-- Below `sm`: action and entity on the first line, who and when on the second; the whole card
-         opens the before/after viewer, so the tap target is the row itself and not a small button. -->
+         opens the before/after viewer, so the tap target is the row itself and not a small button.
+         `full-width` is load-bearing: the card is a flex item of a column and would otherwise take
+         its min-content width, which one long entity id pushes past the phone's screen. -->
     <div v-else class="audit-cards column q-gutter-sm">
       <q-card
         v-for="entry in rows"
@@ -109,7 +111,7 @@
         flat
         bordered
         clickable
-        class="audit-card"
+        class="audit-card full-width"
         @click="openEntry(entry)"
       >
         <q-card-section class="q-py-sm">

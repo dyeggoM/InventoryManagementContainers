@@ -382,6 +382,9 @@ describe('UsersPanel', () => {
 
     const card = wrapper.find('.user-card');
     expect(card.exists()).toBe(true);
+    // The card list is a flex column: without `full-width` the card takes its min-content width, and
+    // one long address pushes it — and its actions — off the right of a 390px screen.
+    expect(card.classes()).toContain('full-width');
     expect(card.text()).toContain('lector@imc.test');
     expect(card.text()).toContain('Lector');
     expect(card.text()).toContain('Activo');

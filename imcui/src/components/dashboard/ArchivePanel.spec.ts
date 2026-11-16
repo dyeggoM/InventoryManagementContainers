@@ -385,6 +385,9 @@ describe('ArchivePanel', () => {
 
     const card = wrapper.find('.archive-card');
     expect(card.exists()).toBe(true);
+    // The card list is a flex column: without `full-width` the card takes its min-content width and
+    // a long label pushes Restaurar off the right of a 390px screen (it measured 421px).
+    expect(card.classes()).toContain('full-width');
     expect(card.text()).toContain('Taladro');
     expect(card.text()).toContain('#7');
     expect(card.text()).toContain(new Date('2026-11-10T12:30:00Z').toLocaleString());
