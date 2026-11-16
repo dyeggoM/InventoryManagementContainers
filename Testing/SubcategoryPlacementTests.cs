@@ -35,6 +35,7 @@ public sealed class SubcategoryPlacementTests
         }
 
         Add("Hardware", "BASE TECLADO SENCILLA");
+        Add("Hardware", "BASE TIPO BOOM");
         Add("Hardware", "BASE TECLADO SENCILLA EN Z");
         Add("Hardware", "BASE CONGA DOBLE");
         Add("Hardware", "BASE CONGA SENCILLA");
@@ -132,6 +133,23 @@ public sealed class SubcategoryPlacementTests
             Assert.That(placement.Group, Is.EqualTo("BASE TECLADO SENCILLA"));
             Assert.That(placement.Certain, Is.True, "a known misspelling is corrected, not guessed");
             Assert.That(notes, Has.Some.Contains("BASE TECLADO SENCILLA"));
+        });
+    }
+
+    [Test]
+    public void TheWorkshopsOtherNameForTheBoomStandIsCertain()
+    {
+        var notes = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var placement = SubcategoryPlacement.Resolve("BASE DE BRAZO", "BACKLINE", Map(), notes);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(placement.Category, Is.EqualTo("Hardware"));
+            Assert.That(placement.Group, Is.EqualTo("BASE TIPO BOOM"));
+            Assert.That(placement.Certain, Is.True, "the workshop's other name is a known alias");
+            Assert.That(placement.Suggestion, Is.Null);
+            Assert.That(placement.Note, Does.Contain("BASE TIPO BOOM"));
+            Assert.That(notes, Has.Some.Contains("BASE TIPO BOOM"));
         });
     }
 

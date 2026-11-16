@@ -17,7 +17,7 @@ Indexed: **6 symbols** across **1 file** (0 C#, 0 Python, 6 JS/TS/Vue) · **41 r
 
 ## Symbols by file
 
-### `imcui/src/services/import.spec.ts` — 559 lines, 6 symbols, index failed
+### `imcui/src/services/import.spec.ts` — 576 lines, 6 symbols, index failed
 
 - `L5` **function** `jsonResponse`(body, status = ...) · ← 1
 - `L10` **method** `jsonResponse.json`()

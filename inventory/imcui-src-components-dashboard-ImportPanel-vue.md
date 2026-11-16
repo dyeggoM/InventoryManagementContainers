@@ -17,7 +17,7 @@ Indexed: **48 symbols** across **1 file** (0 C#, 0 Python, 48 JS/TS/Vue) · **24
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/ImportPanel.vue` — 1383 lines, 48 symbols, index failed
+### `imcui/src/components/dashboard/ImportPanel.vue` — 1601 lines, 48 symbols, index failed
 
 - `L1` **component** `ImportPanel` (SFC) — state: `file, preview, result, lastSkipped, analysing, importing, errorMessage, notice, skippedKeys, onlyRed, onlyYellow, onlyWithCode, onlyWithoutCode, search, rows, summary, totals, codeTotals, visibleRows, visibleSheets` · → 3 (ImportPanel.emptyCounts, ImportPanel.skippedSectionsOf)
 - `L422` **function** `ImportPanel.emptyCounts`() · ← 5
@@ -26,20 +26,20 @@ Indexed: **48 symbols** across **1 file** (0 C#, 0 Python, 48 JS/TS/Vue) · **24
 - `L449` **function** `ImportPanel.matchesText`(row) · ← 3
 - `L463` **function** `ImportPanel.skippedSectionsOf`(sheetName) · ← 1
 - `L510` **function** `ImportPanel.statusOf`(counts) · ← 2
-- `L512` **interface** `ImportPanel.Counts` — fields: `green:number, yellow:number, red:number`
 - `L516` **function** `ImportPanel.statusColour`(counts) · → 2 (ImportPanel.statusColourOf, ImportPanel.statusOf)
-- `L519` **interface** `ImportPanel.FlatRow` — fields: `sheet:string, groupIndex:number, group:string, groupNote:string|null, groupSuggestion:ImportSuggestion|null, item:ImportItem` — One preview row with the names it hangs from, so filtering and counting are a flat pass.
 - `L520` **function** `ImportPanel.statusColourOf`(status) · ← 1
-- `L524` **function** `ImportPanel.statusLabel`(counts) — The group's own explanation, when the API placed it by a rule rather than by its name. · → 1 (ImportPanel.statusOf)
-- `L530` **interface** `ImportPanel.VisibleGroup` — fields: `key:string, name:string, note:string|null, suggestion:ImportSuggestion|null, counts:Counts, rows:FlatRow[]`
+- `L524` **function** `ImportPanel.statusLabel`(counts) — `code`, never the attribute map. A disagreeing `attributes.Code` is reported by the API instead of written, so this row edits The label governed by the correction's `code` property — the one the uniqueness check validates. · → 1 (ImportPanel.statusOf)
 - `L532` **function** `ImportPanel.suggestionLabel`(suggestion)
 - `L536` **function** `ImportPanel.isSkipped`(row) · ← 6
-- `L539` **interface** `ImportPanel.VisibleSheet` — fields: `yellowSelected, importCount, importLabel, skipCodes, resultFacts`
+- `L537` **interface** `ImportPanel.Counts` — fields: `green:number, yellow:number, red:number`
 - `L540` **function** `ImportPanel.setIncluded`(row, included)
+- `L544` **interface** `ImportPanel.FlatRow` — fields: `yellowSelected, importCount` — One preview row with the names it hangs from, so filtering and counting are a flat pass.
+- `L555` **interface** `ImportPanel.VisibleGroup` — fields: `importLabel, skipCodes`
+- `L564` **interface** `ImportPanel.VisibleSheet` — fields: `resultFacts`
 - `L571` **function** `ImportPanel.toggleCodeFilter`(which)
 - `L588` **function** `ImportPanel.formatSize`(bytes)
-- `L594` **function** `ImportPanel.onFile`(value) — The item keys the user unticked. Checked is the default; this is the exception list.
-- `L605` **function** `ImportPanel.analyse`() — The open editor, `null` when there is none. A copy: the tree may be replaced under it.
+- `L594` **function** `ImportPanel.onFile`(value)
+- `L605` **function** `ImportPanel.analyse`()
 - `L629` **function** `ImportPanel.runImport`()
 - `L662` **function** `ImportPanel.reset`()
 

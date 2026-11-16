@@ -17,7 +17,7 @@ Indexed: **19 symbols** across **1 file** (0 C#, 0 Python, 19 JS/TS/Vue) · **26
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/ImportPanel.spec.ts` — 1328 lines, 19 symbols, index failed
+### `imcui/src/components/dashboard/ImportPanel.spec.ts` — 1526 lines, 19 symbols, index failed
 
 - `L23` **method** `useFeedback`()
 - `L94` **method** `setup.onChange`()
@@ -26,14 +26,14 @@ Indexed: **19 symbols** across **1 file** (0 C#, 0 Python, 19 JS/TS/Vue) · **26
 - `L135` **function** `passthrough`(name) · ← 4
 - `L138` **method** `passthrough.setup`(_props, param)
 - `L162` **method** `setup`(props)
-- `L178` **method** `stubs.render`() — Renders its content only while open, which is what "the dialog is closed" has to mean here.
+- `L178` **method** `stubs.render`()
 - `L181` **method** `stubs.setup`(_props, param)
 - `L191` **function** `previewFixture`() · ← 4
 - `L276` **function** `previewWithNote`(note) · → 1 (previewFixture) · ← 5
 - `L294` **function** `previewWithSuggestion`(note, suggestion) · → 1 (previewWithNote) · ← 3
 - `L303` **function** `outcomeFixture`(overrides = ...) · ← 6
 - `L316` **function** `mountPanel`(mobile = ...) · ← 73
-- `L328` **function** `button`(wrapper, startsWith) — every other field stays exactly as in the fixture above. The same tree, with the group the API placed by a rule: it carries the line that says why, and · ← 46
+- `L328` **function** `button`(wrapper, startsWith) · ← 46
 - `L336` **function** `checkbox`(wrapper, label) · ← 12
 - `L344` **function** `chip`(wrapper, label) · ← 12
 - `L352` **function** `itemRows`(wrapper) · ← 39

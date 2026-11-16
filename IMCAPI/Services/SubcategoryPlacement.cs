@@ -18,6 +18,8 @@ public sealed class SubcategoryPlacement
         // The file writes TECALDO for TECLADO, and the configuration's label is the full one: an alias
         // that points at a name Constants does not have resolves to nothing and lands in Other.
         ["TECALDO SENCILLA"] = "BASE TECLADO SENCILLA",
+        // The workshop calls the same stand BASE DE BRAZO or BASE TIPO BOOM.
+        ["BASE DE BRAZO"] = "BASE TIPO BOOM",
         ["MICROFONOS"] = "MICROFONO",
     };
 

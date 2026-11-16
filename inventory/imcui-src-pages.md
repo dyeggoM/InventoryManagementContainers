@@ -67,15 +67,15 @@ Indexed: **80 symbols** across **9 files** (0 C#, 0 Python, 80 JS/TS/Vue) · **8
 
 - `L1` **component** `dashboard` (SFC) — state: `canImport, canImpersonate, tab, subtitle`
 
-### `imcui/src/pages/index/inventory.vue` — 389 lines, 30 symbols
+### `imcui/src/pages/index/inventory.vue` — 315 lines, 30 symbols
 
 - `L1` **component** `inventory` (SFC) — state: `canWrite, attributes, attributeLabels, attributeTypes, attributeLists, attributeNodes, constantPanels, attachmentTypes, attachments, canManageConfiguration`
 - `L109` **local_function** `inventory.blank`() · ← 1
-- `L120` **function** `inventory.blankAttributes`() · ← 3
-- `L128` **function** `inventory.rowsFrom`(raw) — catalogue does not define (a value typed on this item alone must survive a reload). The rows an entry produces: every catalogue attribute, plus any key the record carries that the · → 1 (inventory.parseAttributes) · ← 2
-- `L160` **method** `inventory.addNew`() · → 1 (inventory.blank)
+- `L120` **function** `inventory.blankAttributes`() — catalogue does not define (a value typed on this item alone must survive a reload). The rows an entry produces: every catalogue attribute, plus any key the record carries that the · ← 3
+- `L128` **function** `inventory.rowsFrom`(raw) · → 1 (inventory.parseAttributes) · ← 2
+- `L160` **method** `inventory.addNew`() — The entry alone does not describe the form: the attributes and the attachment rows live here. · → 1 (inventory.blank)
 - `L162` **method** `inventory.flatten`(nodes)
-- `L168` **method** `inventory.dirtySnapshot`(entry) — The entry alone does not describe the form: the attributes and the attachment rows live here.
+- `L168` **method** `inventory.dirtySnapshot`(entry)
 - `L179` **method** `inventory.onSelect`(entry) · → 3 (inventory.blankAttributes, inventory.loadAttachments, inventory.rowsFrom)
 - `L188` **method** `inventory.onDuplicate`(source) · → 1 (inventory.rowsFrom)
 - `L193` **method** `inventory.onReset`() · → 1 (inventory.blankAttributes)
@@ -83,8 +83,8 @@ Indexed: **80 symbols** across **9 files** (0 C#, 0 Python, 80 JS/TS/Vue) · **8
 - `L209` **method** `inventory.beforeSave`(entry)
 - `L214` **method** `inventory.afterSave`(id)
 - `L231` **function** `inventory.loadConstants`(resetRows = ...) · → 1 (inventory.blankAttributes) · ← 5
-- `L272` **function** `inventory.nextSortOrder`(parentId) — Where the new value goes when a list has no values yet. · ← 1
-- `L282` **function** `inventory.createAttributeValue`(label, value) — Returns `false` and leaves the message to the editor when the write fails. Configuration first. Only wired for an admin or a superadmin; the API enforces the same. Saves a value the item form does not find in its list, so the user does not  · → 2 (inventory.loadConstants, inventory.nextSortOrder)
+- `L272` **function** `inventory.nextSortOrder`(parentId) · ← 1
+- `L282` **function** `inventory.createAttributeValue`(label, value) · → 2 (inventory.loadConstants, inventory.nextSortOrder)
 - `L323` **function** `inventory.loadAttachments`(id) · ← 2
 - `L331` **function** `inventory.parseAttributes`(raw) · ← 1
 - `L343` **function** `inventory.addAttachment`()

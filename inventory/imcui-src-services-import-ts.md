@@ -17,32 +17,32 @@ Indexed: **27 symbols** across **1 file** (0 C#, 0 Python, 27 JS/TS/Vue) · **98
 
 ## Symbols by file
 
-### `imcui/src/services/import.ts` — 540 lines, 27 symbols, index failed
+### `imcui/src/services/import.ts` — 565 lines, 27 symbols, index failed
 
 - `L25` **interface** `ImportItem` — fields: `key:string, label:string, code:string|null, brand:string|null, reference:string|null, serial:string|null, notes:string|null, dimensions:string|null, status:ImportStatus, reasons:string[], row:number, source:string|null, raw:Record<string,string>|null`
-- `L91` **interface** `ImportSuggestion` — fields: `label:string, category:string, percent:number` — already the proposed label: the rows really are placed there, so this is advice, never a rename. configuration and a similarity match was close enough to propose one. `name` on the group is The API's recommendation about *where* a group wen
-- `L100` **interface** `ImportGroup` — fields: `name:string, status:ImportStatus, note:string|null, suggestion:ImportSuggestion|null, green:number, yellow:number, red:number, items:ImportItem[]`
-- `L120` **interface** `ImportSheet` — fields: `name:string, status:ImportStatus, green:number, yellow:number, red:number, skippedSections:number, groups:ImportGroup[]`
-- `L131` **interface** `ImportSummary` — fields: `rows:number, sections:number, green:number, yellow:number, red:number, importable:number, skipped:number`
+- `L104` **interface** `ImportSuggestion` — fields: `label:string, category:string, percent:number` — already the proposed label: the rows really are placed there, so this is advice, never a rename. configuration and a similarity match was close enough to propose one. `name` on the group is The API's recommendation about *where* a group wen
+- `L113` **interface** `ImportGroup` — fields: `name:string, status:ImportStatus, note:string|null, suggestion:ImportSuggestion|null, green:number, yellow:number, red:number, items:ImportItem[]`
+- `L133` **interface** `ImportSheet` — fields: `name:string, status:ImportStatus, green:number, yellow:number, red:number, skippedSections:number, groups:ImportGroup[]`
 - `L137` **function** `toStatus`(value) · ← 3
-- `L141` **interface** `ImportIssue` — fields: `sheet:string, row:number, level:string, message:string`
 - `L142` **function** `toNumber`(value) · ← 23
+- `L144` **interface** `ImportSummary` — fields: `rows:number, sections:number, green:number, yellow:number, red:number, importable:number, skipped:number`
 - `L148` **function** `toNullableText`(value) · ← 10
-- `L149` **interface** `ImportPreview` — fields: `sheets:ImportSheet[], summary:ImportSummary, issues:ImportIssue[], normalizations:string[], sourceHeaders:Record<string,string[]>, correctionIssues:string[]`
 - `L153` **function** `toReasons`(value) · ← 1
+- `L154` **interface** `ImportIssue` — fields: `sheet:string, row:number, level:string, message:string`
 - `L158` **function** `record`(value) · ← 8
+- `L162` **interface** `ImportPreview` — fields: `sheets:ImportSheet[], summary:ImportSummary, issues:ImportIssue[], normalizations:string[], sourceHeaders:Record<string,string[]>, correctionIssues:string[]`
 - `L162` **function** `array`(value) · ← 5
 - `L166` **function** `toItem`(raw, sheet, used) · → 11 (record, toNullableText, toNumber, toReasons…) · ← 1
-- `L167` **interface** `ImportRequest` — fields: `includeYellow:boolean, skipCodes:string[], corrections:ImportCorrection[]`
-- `L180` **interface** `ImportOutcome` — fields: `createdSheets:number, createdGroups:number, createdItems:number, skippedRed:number, skippedYellow:number, skippedExisting:number, includeYellow:boolean, corrected:number, correctionIssues:string[]` — What `POST /api/import` answers: what it wrote, and what it left out.
+- `L180` **interface** `ImportRequest` — fields: `includeYellow:boolean, skipCodes:string[], corrections:ImportCorrection[]`
 - `L192` **function** `toGroup`(raw, sheet, used) · → 9 (array, record, toItem, toNullableText…) · ← 1
+- `L193` **interface** `ImportOutcome` — fields: `createdSheets:number, createdGroups:number, createdItems:number, skippedRed:number, skippedYellow:number, skippedExisting:number, includeYellow:boolean, corrected:number, correctionIssues:string[]` — What `POST /api/import` answers: what it wrote, and what it left out.
 - `L211` **function** `toSuggestion`(value) · → 4 (record, toNullableText, toNumber) · ← 1
 - `L224` **function** `toSheet`(raw) · → 8 (array, record, toGroup, toNumber…)
 - `L240` **function** `toSummary`(raw) · → 8 (record, toNumber) · ← 1
 - `L253` **function** `toIssue`(raw) · → 2 (record, toNumber)
 - `L263` **function** `toPreview`(raw) · → 5 (array, record, toSummary) · ← 14
 - `L275` **function** `toOutcome`(raw) · → 7 (record, toNumber) · ← 4
-- `L289` **function** `fileForm`(file) · ← 2
+- `L289` **function** `fileForm`(file) — `source.source` is the sheet the row came from: the record is `source`, the field is `source`. · ← 2
 - `L296` **function** `buildImportForm`(file, request = ...) · → 1 (fileForm) · ← 10
 - `L314` **method** `importService.preview`(file) · → 2 (fileForm, toPreview) · ← 7
 - `L319` **method** `importService.run`(file, request = ...) · → 2 (buildImportForm, toOutcome) · ← 7
