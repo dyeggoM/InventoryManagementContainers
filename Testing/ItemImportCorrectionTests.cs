@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.IO.Compression;
 using System.Text.Json;
 using IMCAPI.DB;
 using Microsoft.EntityFrameworkCore;
@@ -13,18 +14,18 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
 {
     protected override bool FreshApiPerTest => true;
 
-    private async Task<HttpResponseMessage> Send(string route, string? corrections = null)
+    private async Task<HttpResponseMessage> Send(string route, string? corrections = null, byte[]? workbook = null)
     {
         using var form = new MultipartFormDataContent();
-        form.Add(new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath("import-sample.xlsx"))),
+        form.Add(new ByteArrayContent(workbook ?? await File.ReadAllBytesAsync(FixturePath("import-sample.xlsx"))),
             "file", "import-sample.xlsx");
         if (corrections is not null) form.Add(new StringContent(corrections), "corrections");
         return await Client.PostAsync(route, form);
     }
 
-    private async Task<JsonElement> PreviewWith(string? corrections = null)
+    private async Task<JsonElement> PreviewWith(string? corrections = null, byte[]? workbook = null)
     {
-        using var response = await Send("/api/import/preview", corrections);
+        using var response = await Send("/api/import/preview", corrections, workbook);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>(Json);
     }
@@ -54,6 +55,7 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         var item = Items(after).Single(item => Label(item) == "ATRIL CORREGIDO");
         Assert.Multiple(() => {
             Assert.That(item.GetProperty("status").GetString(), Is.EqualTo("green"));
+            Assert.That(after.GetProperty("correctionIssues").GetArrayLength(), Is.Zero);
             Assert.That(after.GetProperty("summary").GetProperty("rows").GetInt32(),
                 Is.EqualTo(before.GetProperty("summary").GetProperty("rows").GetInt32()));
             Assert.That(after.GetProperty("sheets").EnumerateArray().SelectMany(sheet => sheet.GetProperty("groups").EnumerateArray())
@@ -62,6 +64,8 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         });
         using var response = await Send("/api/import", correction);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.That(result.GetProperty("correctionIssues").GetArrayLength(), Is.Zero);
         using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var saved = await context.Items.SingleAsync(row => row.Label == "ATRIL CORREGIDO");
@@ -80,11 +84,121 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
             var response = await PreviewWith(correction);
             Assert.That(response.GetProperty("summary").GetProperty("red").GetInt32(),
                 Is.EqualTo(baseline.GetProperty("summary").GetProperty("red").GetInt32()));
-            Assert.That(response.GetProperty("issues").ToString(), Does.Contain(correction == "not-json" ? "JSON inválido" : "no existe"));
+            Assert.That(response.GetProperty("correctionIssues").ToString(),
+                Does.Contain(correction == "not-json" ? "JSON inválido" : "Fila 999999: no existe"));
+            Assert.That(response.GetProperty("issues").ToString(),
+                Does.Not.Contain(correction == "not-json" ? "JSON inválido" : "no existe"));
         }
         using var imported = await Send("/api/import", "not-json");
         Assert.That(imported.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(await imported.Content.ReadAsStringAsync(), Does.Contain("JSON inválido"));
+        var result = await imported.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.That(result.GetProperty("correctionIssues").ToString(), Does.Contain("JSON inválido"));
+        Assert.That(result.GetProperty("createdItems").GetInt32(), Is.GreaterThan(0));
+    }
+
+    [Test]
+    public async Task AmbiguousCorrection_ReportsRowWithoutChangingEitherSheet_AndImportsTheRest()
+    {
+        var workbook = TwoSheetWorkbook();
+        var baseline = await PreviewWith(workbook: workbook);
+        var twins = Items(baseline).GroupBy(item => item.GetProperty("row").GetInt32())
+            .First(group => group.Select(item => item.GetProperty("source").GetString()).Distinct().Count() > 1)
+            .ToList();
+        var row = twins[0].GetProperty("row").GetInt32();
+        var correction = JsonSerializer.Serialize(new[] { new { row, label = "SHOULD NOT APPLY" } });
+        var preview = await PreviewWith(correction, workbook);
+        var unchanged = Items(preview).Where(item => item.GetProperty("row").GetInt32() == row).ToList();
+        Assert.Multiple(() => {
+            Assert.That(preview.GetProperty("correctionIssues").ToString(), Does.Contain($"Fila {row}: es ambigua"));
+            Assert.That(preview.GetProperty("issues").ToString(), Does.Not.Contain("es ambigua"));
+            Assert.That(unchanged.Select(item => (item.GetProperty("source").GetString(), Label(item),
+                item.GetProperty("status").GetString())), Is.EquivalentTo(twins.Select(item =>
+                (item.GetProperty("source").GetString(), Label(item), item.GetProperty("status").GetString()))));
+        });
+
+        using var imported = await Send("/api/import", correction, workbook);
+        Assert.That(imported.StatusCode, Is.EqualTo(HttpStatusCode.OK), await imported.Content.ReadAsStringAsync());
+        var result = await imported.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.That(result.GetProperty("correctionIssues").ToString(), Does.Contain($"Fila {row}: es ambigua"));
+        Assert.That(result.GetProperty("createdItems").GetInt32(), Is.GreaterThan(0));
+        using var scope = Factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        Assert.That(await context.Items.AnyAsync(item => item.Label == "SHOULD NOT APPLY"), Is.False);
+        Assert.That(await context.Items.CountAsync(), Is.GreaterThan(0));
+    }
+
+    [Test]
+    public async Task SourceQualifiedCorrection_OnlyChangesItsSheet()
+    {
+        var workbook = TwoSheetWorkbook();
+        var baseline = await PreviewWith(workbook: workbook);
+        var correction = "[{\"row\":2,\"source\":\"BACKLINE\",\"label\":\"EDITED BACKLINE\"}]";
+        var preview = await PreviewWith(correction, workbook);
+        var rows = Items(preview).Where(item => item.GetProperty("row").GetInt32() == 2).ToList();
+        Assert.Multiple(() => {
+            Assert.That(preview.GetProperty("correctionIssues").GetArrayLength(), Is.Zero);
+            Assert.That(Label(rows.Single(item => item.GetProperty("source").GetString() == "BACKLINE")),
+                Is.EqualTo("EDITED BACKLINE"));
+            Assert.That(Label(rows.Single(item => item.GetProperty("source").GetString() == "SONIDO")),
+                Is.EqualTo(Label(Items(baseline).Single(item => item.GetProperty("source").GetString() == "SONIDO"))));
+        });
+    }
+
+    private static byte[] TwoSheetWorkbook()
+    {
+        using var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            static void Add(ZipArchive zip, string path, string xml)
+            {
+                using var writer = new StreamWriter(zip.CreateEntry(path).Open());
+                writer.Write(xml);
+            }
+            Add(zip, "[Content_Types].xml", """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+                  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+                  <Default Extension="xml" ContentType="application/xml"/>
+                  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+                  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+                  <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+                </Types>
+                """);
+            Add(zip, "_rels/.rels", """
+                <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+                </Relationships>
+                """);
+            Add(zip, "xl/workbook.xml", """
+                <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                  <sheets><sheet name="BACKLINE" sheetId="1" r:id="rId1"/><sheet name="SONIDO" sheetId="2" r:id="rId2"/></sheets>
+                </workbook>
+                """);
+            Add(zip, "xl/_rels/workbook.xml.rels", """
+                <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+                  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+                </Relationships>
+                """);
+            for (var sheet = 1; sheet <= 2; sheet++)
+                Add(zip, $"xl/worksheets/sheet{sheet}.xml", $$"""
+                    <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                      <sheetData>
+                        <row r="1"><c r="A1" t="inlineStr"><is><t>DESCRIPCION</t></is></c></row>
+                        <row r="2"><c r="A2" t="inlineStr"><is><t>ITEM {{sheet}}</t></is></c></row>
+                      </sheetData>
+                    </worksheet>
+                    """);
+        }
+        return stream.ToArray();
+    }
+
+    [Test]
+    public async Task InvalidField_ReportsCorrectionSeparately()
+    {
+        var preview = await PreviewWith("[{\"row\":3,\"notAField\":\"X\"}]");
+        Assert.That(preview.GetProperty("correctionIssues").ToString(), Does.Contain("Fila 3: corrección inválida"));
+        Assert.That(preview.GetProperty("issues").ToString(), Does.Not.Contain("corrección inválida"));
     }
 
     [Test]

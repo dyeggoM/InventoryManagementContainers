@@ -75,7 +75,10 @@ public sealed class ItemImporter
 
     public sealed record ImportPreview(IReadOnlyList<ImportSheet> Sheets, ImportSummary Summary,
         IReadOnlyList<ImportIssue> Issues, IReadOnlyList<string> Normalizations,
-        IReadOnlyDictionary<string, IReadOnlyList<string>>? SourceHeaders = null);
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? SourceHeaders = null)
+    {
+        public IReadOnlyList<string> CorrectionIssues { get; init; } = Array.Empty<string>();
+    }
 
     private sealed record RawRow(int Row, string Sheet, Dictionary<string, string> Cells,
         IReadOnlyList<string?> Columns, IReadOnlyDictionary<string, string?>? Raw = null);
@@ -226,9 +229,6 @@ public sealed class ItemImporter
                 : row).ToList();
         }
 
-        foreach (var message in correctionMessages)
-            issues.Add(new ImportIssue("*", 0, Yellow, message));
-
         // Count only edits whose final verdict is importable; a failed repair remains a red row.
         applied = planned.Count(row => row.Item.Status != Red &&
             selected.ContainsKey((row.Item.Source!, row.Item.Row)) &&
@@ -285,7 +285,10 @@ public sealed class ItemImporter
                 "El CSV no tiene filas de datos: hace falta una cabecera con DESCRIPCION y al menos un elemento.");
         }
 
-        var preview = new ImportPreview(sheets, summary, issues, normalizations.ToList(), headers);
+        var preview = new ImportPreview(sheets, summary, issues, normalizations.ToList(), headers)
+        {
+            CorrectionIssues = correctionMessages
+        };
         var rowsToWrite = planned
             .Select(row => (Category: row.Placement.Category, Group: row.Placement.Group, Item: row.Item))
             .ToList();
@@ -307,9 +310,7 @@ public sealed class ItemImporter
     {
         var (preview, rows, corrected) = await BuildAsync(stream, format, sourceName, cancellationToken,
             corrections, correctionIssues);
-        var rejected = preview.Issues.Where(issue => issue.Message.Contains("corrección inválida") ||
-            issue.Message.Contains("es ambigua") || issue.Message.Contains("no existe") ||
-            issue.Message.Contains("JSON inválido")).Select(issue => issue.Message).ToList();
+        var rejected = preview.CorrectionIssues;
 
 
         var skip = new HashSet<string>(skipCodes ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);

@@ -30,13 +30,13 @@ Indexed: **6 symbols** across **1 file** (6 C#, 0 Python, 0 JS/TS/Vue) · **7 re
 
 - `Services.CsvSheetReader.Read(Stream stream)` (IMCAPI/Services/CsvSheetReader.cs:27) → Services.CsvSheetReader.Decode(Stream stream)`(L29)`, Services.CsvSheetReader.Parse(string text, char delimiter)`(L30)`, Services.CsvSheetReader.DetectDelimiter(string text)`(L30)`
 - `Services.CsvSheetReader.Parse(string text, char delimiter)` (IMCAPI/Services/CsvSheetReader.cs:105) → Services.CsvSheetReader.EndField()`(L144)`
-- `Services.ItemImporter.ReadCsv(string Name, List<RawRow> Rows)> ItemImporter.ReadCsv(Stream stream, string? sourceName)` (IMCAPI/Services/ItemImporter.cs:604) → Services.CsvSheetReader.Read(Stream stream)`(L611)`
+- `Services.ItemImporter.ReadCsv(string Name, List<RawRow> Rows)> ItemImporter.ReadCsv(Stream stream, string? sourceName)` (IMCAPI/Services/ItemImporter.cs:610) → Services.CsvSheetReader.Read(Stream stream)`(L617)`
 
 ## Impact — who calls what
 
 Changing a symbol means checking every symbol on its right-hand side.
 
-- `Services.CsvSheetReader.Read(Stream stream)` ← Services.ItemImporter.ReadCsv(string Name, List<RawRow> Rows)> ItemImporter.ReadCsv(Stream stream, string? sourceName)`(IMCAPI/Services/ItemImporter.cs:611)`
+- `Services.CsvSheetReader.Read(Stream stream)` ← Services.ItemImporter.ReadCsv(string Name, List<RawRow> Rows)> ItemImporter.ReadCsv(Stream stream, string? sourceName)`(IMCAPI/Services/ItemImporter.cs:617)`
 - `Services.CsvSheetReader.Decode(Stream stream)` ← Services.CsvSheetReader.Read(Stream stream)`(IMCAPI/Services/CsvSheetReader.cs:29)`
 - `Services.CsvSheetReader.DetectDelimiter(string text)` ← Services.CsvSheetReader.Read(Stream stream)`(IMCAPI/Services/CsvSheetReader.cs:30)`
 - `Services.CsvSheetReader.Parse(string text, char delimiter)` ← Services.CsvSheetReader.Read(Stream stream)`(IMCAPI/Services/CsvSheetReader.cs:30)`

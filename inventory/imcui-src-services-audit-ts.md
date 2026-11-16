@@ -17,7 +17,7 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **38
 
 ## Symbols by file
 
-### `imcui/src/services/audit.ts` — 165 lines, 11 symbols
+### `imcui/src/services/audit.ts` — 173 lines, 11 symbols
 
 - `L11` **interface** `AuditEntry` — fields: `id:string|number, occurredAtUtc:string, actorEmail:string, action:string, entity:string, entityId:string|number|null, before:unknown, after:unknown` — GET /api/audit?actor=&entity=&action=&from=&to=&page= call answers 404. not exist in the API yet: the panel is written to this shape and shows "API pendiente" when the The audit contract the dashboard is built against. Like the user routes,
 - `L24` **interface** `AuditQuery` — fields: `actor:string|null, entity:string|null, action:string|null, from:string|null, to:string|null, page:number, pageSize:number`
@@ -25,11 +25,11 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **38
 - `L46` **function** `buildAuditQuery`(query) — Only the filled-in fields go out: an empty filter must not narrow the result to nothing. · → 7 (buildAuditQuery.assign) · ← 4
 - `L48` **local_function** `buildAuditQuery.assign`(key, value) · ← 7
 - `L67` **function** `toEntry`(raw) — A claim or a row value as text: anything that is not a scalar is not a name, and is dropped. · ← 2
-- `L87` **function** `totalOf`(response) · ← 1
+- `L87` **function** `totalOf`(response) — of the page, which is what used to make the pager think it was on the last page. answer neither. Anything that is not a finite number stays unknown rather than becoming the length The API names the count `totalCount` (and the archive calls  · ← 1
 - `L96` **method** `auditService.search`(query = ...) · → 4 (buildAuditQuery, toEntry, totalOf) · ← 1
 - `L121` **function** `csvCell`(value) · ← 8
-- `L129` **function** `auditToCsv`(entries) · → 8 (csvCell) · ← 7
-- `L159` **function** `formatAuditPayload`(value) · ← 8
+- `L129` **function** `auditToCsv`(entries) — The rows as a spreadsheet: RFC 4180 quoting, one row per change, before/after as JSON. · → 8 (csvCell) · ← 7
+- `L159` **function** `formatAuditPayload`(value) — Pretty JSON for the before/after viewer; anything unparseable is shown as it came. · ← 8
 
 ## Call graph (resolved, in-project)
 

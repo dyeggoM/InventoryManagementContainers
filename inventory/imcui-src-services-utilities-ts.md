@@ -17,13 +17,13 @@ Indexed: **5 symbols** across **1 file** (0 C#, 0 Python, 5 JS/TS/Vue) · **38 r
 
 ## Symbols by file
 
-### `imcui/src/services/utilities.ts` — 53 lines, 5 symbols
+### `imcui/src/services/utilities.ts` — 50 lines, 5 symbols
 
 - `L1` **function** `fileToBase64`(file)
-- `L19` **function** `prettyLabel`(key) · ← 9
-- `L27` **function** `asText`(value) · ← 29
-- `L37` **function** `formatTimestamp`(value)
-- `L45` **function** `toDateInputValue`(value)
+- `L19` **function** `prettyLabel`(key) — `BuyPrice` is a key in the data, but a person reads "Buy Price". · ← 9
+- `L27` **function** `asText`(value) — and stringifying it would put "[object Object]" on the screen — so it becomes an empty string. A scalar as text. Anything else (an object, an array, a function) is not a name or a timestamp, · ← 29
+- `L37` **function** `formatTimestamp`(value) — missing value is shown as a dash rather than "Invalid Date". A timestamp for a table cell: the API sends UTC, the reader wants their own clock. An invalid or
+- `L45` **function** `toDateInputValue`(value) — A `yyyy-mm-dd` value for a date input, from an ISO timestamp.
 
 ## Call graph (resolved, in-project)
 

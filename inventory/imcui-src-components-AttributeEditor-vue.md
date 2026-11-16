@@ -20,8 +20,8 @@ Indexed: **33 symbols** across **1 file** (0 C#, 0 Python, 33 JS/TS/Vue) · **18
 ### `imcui/src/components/AttributeEditor.vue` — 601 lines, 33 symbols
 
 - `L1` **component** `AttributeEditor` (SFC) — state: `focusedIndex, filter, valueFilters, creatingIndex, createError`
-- `L257` **interface** `AttributeEditor.ValueSelectHandle` — fields: `visibleRows, availableLabels`
-- `L280` **function** `AttributeEditor.isCustom`(row) · ← 1
+- `L259` **interface** `AttributeEditor.ValueSelectHandle` — fields: `visibleRows, availableLabels`
+- `L280` **function** `AttributeEditor.isCustom`(row) — A row the catalogue cannot name: typed by hand, stored on this item only. · ← 1
 - `L284` **function** `AttributeEditor.labelOptions`(index)
 - `L293` **function** `AttributeEditor.listFor`(label) · ← 3
 - `L298` **function** `AttributeEditor.valueFilterFor`(index) — What the user typed into a row's value list; the filter keeps the caret where they left it. · ← 2

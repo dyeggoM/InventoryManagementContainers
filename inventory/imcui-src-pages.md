@@ -43,15 +43,15 @@ Indexed: **80 symbols** across **9 files** (0 C#, 0 Python, 80 JS/TS/Vue) · **8
 
 - `L1` **component** `` (SFC)
 
-### `imcui/src/pages/index/configuration.vue` — 164 lines, 8 symbols
+### `imcui/src/pages/index/configuration.vue` — 169 lines, 8 symbols
 
 - `L1` **component** `configuration` (SFC) — state: `canWrite, isAttributeDefinition, typeHint`
 - `L96` **local_function** `configuration.blank`() · ← 1
 - `L155` **method** `configuration.addNew`() · → 1 (configuration.blank)
 - `L157` **method** `configuration.flatten`(nodes)
-- `L163` **method** `configuration.dirtySnapshot`(entry)
+- `L163` **method** `configuration.dirtySnapshot`(entry) — Only the entry: a constant is a name, an icon and a parent.
 
-### `imcui/src/pages/index/dashboard.spec.ts` — 166 lines, 9 symbols
+### `imcui/src/pages/index/dashboard.spec.ts` — 170 lines, 9 symbols
 
 - `L16` **function** `makeToken`(claims) · → 1 (makeToken.encode) · ← 1
 - `L17` **local_function** `makeToken.encode`(value) · ← 1
@@ -63,19 +63,19 @@ Indexed: **80 symbols** across **9 files** (0 C#, 0 Python, 80 JS/TS/Vue) · **8
 - `L110` **function** `tabs`(wrapper) · ← 7
 - `L114` **function** `labels`(wrapper) · → 1 (tabs) · ← 4
 
-### `imcui/src/pages/index/dashboard.vue` — 124 lines, 5 symbols
+### `imcui/src/pages/index/dashboard.vue` — 129 lines, 5 symbols
 
 - `L1` **component** `dashboard` (SFC) — state: `canImport, canImpersonate, tab, subtitle`
 
-### `imcui/src/pages/index/inventory.vue` — 394 lines, 30 symbols
+### `imcui/src/pages/index/inventory.vue` — 389 lines, 30 symbols
 
 - `L1` **component** `inventory` (SFC) — state: `canWrite, attributes, attributeLabels, attributeTypes, attributeLists, attributeNodes, constantPanels, attachmentTypes, attachments, canManageConfiguration`
 - `L109` **local_function** `inventory.blank`() · ← 1
 - `L120` **function** `inventory.blankAttributes`() · ← 3
-- `L128` **function** `inventory.rowsFrom`(raw) · → 1 (inventory.parseAttributes) · ← 2
+- `L128` **function** `inventory.rowsFrom`(raw) — catalogue does not define (a value typed on this item alone must survive a reload). The rows an entry produces: every catalogue attribute, plus any key the record carries that the · → 1 (inventory.parseAttributes) · ← 2
 - `L160` **method** `inventory.addNew`() · → 1 (inventory.blank)
 - `L162` **method** `inventory.flatten`(nodes)
-- `L168` **method** `inventory.dirtySnapshot`(entry)
+- `L168` **method** `inventory.dirtySnapshot`(entry) — The entry alone does not describe the form: the attributes and the attachment rows live here.
 - `L179` **method** `inventory.onSelect`(entry) · → 3 (inventory.blankAttributes, inventory.loadAttachments, inventory.rowsFrom)
 - `L188` **method** `inventory.onDuplicate`(source) · → 1 (inventory.rowsFrom)
 - `L193` **method** `inventory.onReset`() · → 1 (inventory.blankAttributes)
@@ -83,14 +83,14 @@ Indexed: **80 symbols** across **9 files** (0 C#, 0 Python, 80 JS/TS/Vue) · **8
 - `L209` **method** `inventory.beforeSave`(entry)
 - `L214` **method** `inventory.afterSave`(id)
 - `L231` **function** `inventory.loadConstants`(resetRows = ...) · → 1 (inventory.blankAttributes) · ← 5
-- `L272` **function** `inventory.nextSortOrder`(parentId) · ← 1
-- `L282` **function** `inventory.createAttributeValue`(label, value) · → 2 (inventory.loadConstants, inventory.nextSortOrder)
+- `L272` **function** `inventory.nextSortOrder`(parentId) — Where the new value goes when a list has no values yet. · ← 1
+- `L282` **function** `inventory.createAttributeValue`(label, value) — Returns `false` and leaves the message to the editor when the write fails. Configuration first. Only wired for an admin or a superadmin; the API enforces the same. Saves a value the item form does not find in its list, so the user does not  · → 2 (inventory.loadConstants, inventory.nextSortOrder)
 - `L323` **function** `inventory.loadAttachments`(id) · ← 2
 - `L331` **function** `inventory.parseAttributes`(raw) · ← 1
-- `L343` **function** `inventory.addAttachment`() — Rows written before the serializer existed can hold invalid JSON; the form must still open.
+- `L343` **function** `inventory.addAttachment`()
 - `L356` **function** `inventory.removeAttachment`(index) · → 1 (inventory.loadAttachments)
 
-### `imcui/src/pages/login.vue` — 137 lines, 8 symbols
+### `imcui/src/pages/login.vue` — 139 lines, 8 symbols
 
 - `L1` **component** `login` (SFC) — state: `email, password, showPassword, localError, message, expired`
 - `L108` **function** `login.submit`()

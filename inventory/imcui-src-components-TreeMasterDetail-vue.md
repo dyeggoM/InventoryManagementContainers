@@ -17,13 +17,13 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **7 
 
 ## Symbols by file
 
-### `imcui/src/components/TreeMasterDetail.vue` — 562 lines, 11 symbols
+### `imcui/src/components/TreeMasterDetail.vue` — 590 lines, 11 symbols
 
 - `L1` **component** `TreeMasterDetail` (SFC) — state: `treePane, detailPane, paneStyle, query, visibleTree, matchCount`
 - `L400` **function** `TreeMasterDetail.measurePanes`() · ← 2
 - `L436` **function** `TreeMasterDetail.collectIds`(nodes, acc = ...) · → 1 (TreeMasterDetail.collectIds) · ← 5
-- `L460` **function** `TreeMasterDetail.onSelect`(id)
-- `L475` **function** `TreeMasterDetail.requestClose`()
+- `L460` **function** `TreeMasterDetail.onSelect`(id) — q-tree emits null when the selection is cleared (clicking the selected node again). Turning that into a null model hides every tab panel, so the last selection is kept instead.
+- `L475` **function** `TreeMasterDetail.requestClose`() — The sheet is the only exit on a phone, so it asks before dropping edits.
 
 ## Call graph (resolved, in-project)
 
