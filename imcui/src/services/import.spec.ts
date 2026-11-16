@@ -1,6 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './api';
-import { buildImportForm, importService, toOutcome, toPreview, type ImportPreview } from './import';
+import {
+  buildImportForm,
+  buildPreviewForm,
+  descriptionFromRaw,
+  importService,
+  subcategoryFromRaw,
+  toCorrectionPayload,
+  toOutcome,
+  toPreview,
+  type ImportItem,
+  type ImportPreview,
+} from './import';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -28,6 +39,13 @@ function form(call: { init?: RequestInit | undefined }): FormData {
   const body = call.init?.body;
   if (!(body instanceof FormData)) throw new Error('the request body is not a FormData');
   return body;
+}
+
+/** The one `corrections` part, parsed: the API reads it as JSON text, never as a repeated part. */
+function correctionsOf(sent: FormData): unknown {
+  const value = sent.get('corrections');
+  if (typeof value !== 'string') throw new Error('the corrections part is not a string');
+  return JSON.parse(value);
 }
 
 function workbook(): File {
@@ -147,6 +165,7 @@ describe('importService.preview', () => {
       reasons: [],
       row: 12,
       source: null,
+      raw: null,
     });
   });
 
@@ -284,6 +303,8 @@ describe('importService.preview', () => {
       summary: { rows: 0, sections: 0, green: 0, yellow: 0, red: 0, importable: 0, skipped: 0 },
       issues: [],
       normalizations: [],
+      sourceHeaders: {},
+      correctionIssues: [],
     });
   });
 
@@ -295,6 +316,15 @@ describe('importService.preview', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(400);
     expect((error as ApiError).message).toBe('The file could not be read.');
+  });
+
+  it('posts the corrections with the preview, in the one form field the API parses', async () => {
+    const calls = captureFetch(previewAnswer());
+
+    await importService.preview(workbook(), [{ source: 'BACKLINE', row: 57, label: 'Conga 11"' }]);
+
+    const sent = form(calls[0]!);
+    expect(correctionsOf(sent)).toEqual([{ source: 'BACKLINE', row: 57, label: 'Conga 11"' }]);
   });
 });
 
@@ -323,6 +353,17 @@ describe('buildImportForm', () => {
     });
 
     expect(sent.getAll('skipCodes')).toEqual(['-H0002', '-H0004']);
+  });
+
+  it('carries the corrections, so the import writes what the user fixed', () => {
+    const sent = buildImportForm(workbook(), {
+      corrections: [{ source: 'BACKLINE', row: 57, label: 'Conga 11"', brand: '' }],
+    });
+
+    expect(sent.get('includeYellow')).toBe('true');
+    expect(correctionsOf(sent)).toEqual([{ source: 'BACKLINE', row: 57, label: 'Conga 11"' }]);
+    // Nothing to correct means no part at all, not an empty array the API has to parse.
+    expect(buildImportForm(workbook()).get('corrections')).toBeNull();
   });
 });
 
@@ -355,6 +396,8 @@ describe('importService.run', () => {
       skippedYellow: 0,
       skippedExisting: 7,
       includeYellow: true,
+      corrected: 0,
+      correctionIssues: [],
     });
   });
 
@@ -384,6 +427,150 @@ describe('importService.run', () => {
       skippedYellow: 0,
       skippedExisting: 0,
       includeYellow: false,
+      corrected: 0,
+      correctionIssues: [],
     });
+  });
+
+  it('reads how many corrections the import applied, and the ones it refused', () => {
+    expect(
+      toOutcome({ createdItems: 1, corrected: 3, correctionIssues: ['Fila 2: no existe.'] }),
+    ).toMatchObject({ corrected: 3, correctionIssues: ['Fila 2: no existe.'] });
+  });
+});
+
+describe('the file row and the corrections', () => {
+  it('reads the header row per sheet, the row itself, and the corrections the server refused', () => {
+    const preview = toPreview({
+      sheets: [
+        {
+          name: 'Percusion',
+          groups: [
+            {
+              name: 'CONGA',
+              items: [
+                {
+                  label: 'Conga 11"',
+                  row: 57,
+                  status: 'red',
+                  source: 'BACKLINE',
+                  reasons: ['Sin descripción.'],
+                  raw: {
+                    CONSECUTIVO: '17',
+                    'SUB CATEGORIA': 'CONGA02',
+                    DESCRIPCION: '',
+                    MARCA: null,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      sourceHeaders: {
+        BACKLINE: ['CONSECUTIVO', 'SUB CATEGORIA', 'DESCRIPCION', 'MARCA'],
+        SONIDO: ['A', ''],
+      },
+      correctionIssues: ['Fila 57: es ambigua; indique source.', ''],
+    });
+
+    expect(preview.sourceHeaders).toEqual({
+      BACKLINE: ['CONSECUTIVO', 'SUB CATEGORIA', 'DESCRIPCION', 'MARCA'],
+      SONIDO: ['A'],
+    });
+    const item = preview.sheets[0]!.groups[0]!.items[0]!;
+    expect(item.source).toBe('BACKLINE');
+    // A null cell keeps its column: the editor shows a row, not a shifted list of values.
+    expect(item.raw).toEqual({
+      CONSECUTIVO: '17',
+      'SUB CATEGORIA': 'CONGA02',
+      DESCRIPCION: '',
+      MARCA: '',
+    });
+    expect(preview.correctionIssues).toEqual(['Fila 57: es ambigua; indique source.']);
+  });
+
+  it('reads the subcategory the file wrote, under any header the reader accepts', () => {
+    const base: ImportItem = {
+      key: 'a#1',
+      label: 'x',
+      code: null,
+      brand: null,
+      reference: null,
+      serial: null,
+      notes: null,
+      dimensions: null,
+      status: 'red',
+      reasons: [],
+      row: 1,
+    };
+
+    expect(subcategoryFromRaw({ ...base, raw: { 'SUB CATEGORÍA': 'CONGA02' } })).toBe('CONGA02');
+    expect(subcategoryFromRaw({ ...base, raw: { GRUPO: 'CASES' } })).toBe('CASES');
+    expect(subcategoryFromRaw({ ...base, raw: { MARCA: 'DW' } })).toBe('');
+    expect(subcategoryFromRaw(base)).toBe('');
+  });
+
+  it('reads the description cell, which is not always what the API calls the label', () => {
+    const base: ImportItem = {
+      key: 'a#1',
+      label: '-P0017-A',
+      code: '-P0017-A',
+      brand: null,
+      reference: null,
+      serial: null,
+      notes: null,
+      dimensions: null,
+      status: 'red',
+      reasons: ['Sin descripción.'],
+      row: 195,
+    };
+
+    expect(descriptionFromRaw({ ...base, raw: { DESCRIPCION: '  Conga 11" ' } })).toBe('Conga 11"');
+    // An empty cell is a real answer: the row has no description, whatever `label` shows.
+    expect(descriptionFromRaw({ ...base, raw: { DESCRIPCION: '' } })).toBe('');
+    expect(descriptionFromRaw({ ...base, raw: { MARCA: 'LP' } })).toBeNull();
+    expect(descriptionFromRaw(base)).toBeNull();
+  });
+
+  it('trims, deduplicates and drops the empty fields instead of clearing a cell', () => {
+    const payload = toCorrectionPayload([
+      { source: ' BACKLINE ', row: 57, label: '  Conga 11"  ', brand: '   ', notes: '' },
+      { source: 'backline', row: 57, label: 'repetida' },
+      { source: 'SONIDO', row: 57, label: '' },
+      { source: 'SONIDO', row: 0, label: 'no' },
+    ]);
+
+    expect(payload).toEqual([
+      { source: 'BACKLINE', row: 57, label: 'Conga 11"' },
+      { source: 'SONIDO', row: 57 },
+    ]);
+  });
+
+  it('puts the corrections in the preview body, and omits the field when there are none', () => {
+    const sent = buildPreviewForm(workbook(), [
+      { source: 'BACKLINE', row: 57, label: 'Conga 11"' },
+    ]);
+
+    expect(sent.get('file')).toBeInstanceOf(File);
+    expect(correctionsOf(sent)).toEqual([{ source: 'BACKLINE', row: 57, label: 'Conga 11"' }]);
+    expect(buildPreviewForm(workbook()).get('corrections')).toBeNull();
+  });
+
+  it('carries the attribute patch, where an empty value is the removal and not an omission', () => {
+    const payload = toCorrectionPayload([
+      {
+        source: 'BACKLINE',
+        row: 57,
+        attributes: { Brand: 'DW', Reference: '', '  ': 'no name' },
+      },
+      // A correction with no attribute at all must not send an empty object: absent is the rule.
+      { source: 'BACKLINE', row: 58, label: 'Conga' },
+    ]);
+
+    expect(payload).toEqual([
+      { source: 'BACKLINE', row: 57, attributes: { Brand: 'DW', Reference: '' } },
+      { source: 'BACKLINE', row: 58, label: 'Conga' },
+    ]);
   });
 });

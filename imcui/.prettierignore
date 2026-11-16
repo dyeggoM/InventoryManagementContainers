@@ -1,0 +1,13 @@
+# Prettier's own ignore list, mirroring what git excludes. The scripts pass no --ignore-path, because
+# a single ignore path cannot express both this list and the one derived from .gitignore, and the
+# generated router types below have to be skipped for a reason git does not know.
+node_modules/
+dist/
+.quasar/
+src-pwa/custom-service-worker.js
+*.tsbuildinfo
+
+# Written by unplugin-vue-router on every dev run and build, in its own formatting. It is committed
+# because `quasar prepare` does not produce it, so a fresh clone can typecheck before the first build —
+# which is exactly why it cannot be held to our formatting rules.
+src/router/typed-router.d.ts

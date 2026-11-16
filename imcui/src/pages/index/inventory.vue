@@ -22,9 +22,19 @@
     @delete="deleteTreeItem"
     @duplicate="duplicateEntry"
   >
-    <div class="imc-section">
-      <div class="row items-center justify-between q-mb-xs">
-        <div class="imc-section__title q-mb-none">Details</div>
+    <item-editor
+      v-model:label="treeItem.label"
+      v-model:parent="treeItem.parentId"
+      v-model:attributes="attributes"
+      :parent-options="parentOptions()"
+      :label-rule="labelRule"
+      :readonly="!canWrite"
+      :attribute-labels="attributeLabels"
+      :attribute-lists="attributeLists"
+      :attribute-types="attributeTypes"
+      :create-value="canManageConfiguration ? createAttributeValue : undefined"
+    >
+      <template v-slot:details-actions>
         <q-btn
           v-if="treeItem.id > 0 && canWrite"
           flat
@@ -35,31 +45,8 @@
           class="q-mb-xs"
           @click="createChildEntry"
         />
-      </div>
-      <q-input label="Name" v-model="treeItem.label" :readonly="!canWrite" :rules="[labelRule]" />
-      <q-select
-        label="Parent item"
-        v-model="treeItem.parentId"
-        :options="parentOptions()"
-        :display-value="treeItem.parentId == null ? 'No parent' : undefined"
-        :readonly="!canWrite"
-        map-options
-        emit-value
-        class="q-mt-sm"
-      />
-    </div>
-
-    <div class="imc-section">
-      <div class="imc-section__title">Attributes</div>
-      <attribute-editor
-        v-model="attributes"
-        :labels="attributeLabels"
-        :lists="attributeLists"
-        :types="attributeTypes"
-        :readonly="!canWrite"
-        :create-value="canManageConfiguration ? createAttributeValue : undefined"
-      />
-    </div>
+      </template>
+    </item-editor>
 
     <div class="imc-section">
       <div class="imc-section__title">Attachments</div>
@@ -77,14 +64,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import TreeMasterDetail from '../../components/TreeMasterDetail.vue';
-import AttributeEditor from '../../components/AttributeEditor.vue';
+import ItemEditor from '../../components/ItemEditor.vue';
 import AttachmentEditor, { type AttachmentRow } from '../../components/AttachmentEditor.vue';
 import { useTreeEditor } from '../../composables/useTreeEditor';
+import { useAttributeCatalogue } from '../../composables/useAttributeCatalogue';
 import { useFeedback } from '../../composables/useFeedback';
 import { useAuthStore } from '../../stores/auth-store';
 import { itemsService, type Item, type Attributes } from '@services/items';
 import { attachmentsService } from '@services/attachment';
-import { constantsService, type Constants } from '@services/constants';
+import { constantsService } from '@services/constants';
 
 const feedback = useFeedback();
 const auth = useAuthStore();
@@ -93,13 +81,17 @@ const auth = useAuthStore();
 const canWrite = computed(() => auth.canWrite);
 
 const attributes = ref<Attributes[]>([]);
-const attributeLabels = ref<string[]>([]);
-const attributeTypes = ref<Record<string, string>>({});
-const attributeLists = ref<Record<string, string[]>>({});
-/** The `Attribute` constants themselves: each one is the parent of its own values. */
-const attributeNodes = ref<Constants[]>([]);
-/** Every constant, flat: needed to place a new value after its siblings. */
-const constantPanels = ref<Constants[]>([]);
+// The attribute half of Configuration is shared with the import's row correction, so it is read
+// through one composable instead of two copies of the same rules.
+const {
+  labels: attributeLabels,
+  lists: attributeLists,
+  types: attributeTypes,
+  load: loadCatalogue,
+  createValue: createAttributeValue,
+} = useAttributeCatalogue({
+  onRefreshError: (error) => feedback.error(error, 'Could not load the constants'),
+});
 const attachmentTypes = ref<string[]>([]);
 const attachments = ref<AttachmentRow[]>([]);
 
@@ -228,90 +220,24 @@ const {
   },
 });
 
-async function loadConstants(resetRows = true) {
+/**
+ * Reads what the form is built from: the attribute catalogue — shared with the import's row
+ * correction, which edits an item with the same fields — and the attachment types, which only this
+ * screen needs.
+ */
+async function loadConstants() {
   try {
-    const [attachmentTypeRows, attributeRows, all] = await Promise.all([
+    const [, attachmentTypeRows] = await Promise.all([
+      loadCatalogue(),
       constantsService.getByGroup('AttachmentType'),
-      constantsService.getByGroup('Attribute'),
-      constantsService.getAll(),
     ]);
-
     attachmentTypes.value = (attachmentTypeRows ?? []).map((row) => row.label);
-    attributeNodes.value = attributeRows ?? [];
-    attributeLabels.value = (attributeRows ?? [])
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((row) => row.label);
-
-    // How each attribute is edited comes from its definition in Configuration.
-    const types: Record<string, string> = {};
-    for (const row of attributeRows ?? []) types[row.label] = row.dataType ?? 'Text';
-    attributeTypes.value = types;
-
-    // A label with children in the constants tree is a choice list; anything else is free text.
-    const lists: Record<string, string[]> = {};
-    for (const constant of all?.panels ?? []) {
-      if (!constant.group || constant.parentId == null) continue;
-      const bucket = lists[constant.group] ?? [];
-      bucket.push(constant.label);
-      lists[constant.group] = bucket;
-    }
-    for (const group of Object.keys(lists)) {
-      lists[group] = (lists[group] ?? []).sort((a, b) => a.localeCompare(b));
-    }
-    attributeLists.value = lists;
-    constantPanels.value = all?.panels ?? [];
-    // Adding a value to the catalogue must not wipe what the user already typed on the form.
-    if (resetRows) attributes.value = blankAttributes();
+    // The catalogue names the rows of a blank item; a later refresh (a value added from the form)
+    // must not go through here, or it would wipe what the user already typed.
+    attributes.value = blankAttributes();
   } catch (error) {
     feedback.error(error, 'Could not load the constants');
   }
-}
-
-/** Where the new value goes when a list has no values yet. */
-function nextSortOrder(parentId: number): number {
-  const siblings = constantPanels.value.filter((constant) => constant.parentId === parentId);
-  return siblings.reduce((highest, constant) => Math.max(highest, constant.sortOrder ?? 0), 0) + 1;
-}
-
-/**
- * Saves a value the item form does not find in its list, so the user does not have to open
- * Configuration first. Only wired for an admin or a superadmin; the API enforces the same.
- * Returns `false` and leaves the message to the editor when the write fails.
- */
-async function createAttributeValue(label: string, value: string): Promise<boolean> {
-  const node = attributeNodes.value.find((constant) => constant.label === label);
-  const trimmed = value.trim();
-  if (!node || !trimmed) return false;
-
-  // The values of a list attribute hang from the catalogue node that owns the group (`Brand` values
-  // under the `Brand` node), not from the `Attribute` definition that merely names the attribute.
-  // Reuse the parent of a value that is already there; with none yet, the definition is the least
-  // wrong place, and the group is what the editor actually reads.
-  const sibling = constantPanels.value.find(
-    (constant) => constant.group === label && constant.parentId != null,
-  );
-  const parentId = sibling?.parentId ?? node.id;
-
-  try {
-    await constantsService.create({
-      id: 0,
-      label: trimmed,
-      icon: '',
-      children: [],
-      sortOrder: nextSortOrder(parentId),
-      group: label,
-      parentId,
-      description: '',
-      parent: undefined,
-    });
-  } catch {
-    return false;
-  }
-
-  // The value is written: a failure here (loadConstants reports it) must not undo the row.
-  await loadConstants(false);
-  return true;
 }
 
 onMounted(async () => {

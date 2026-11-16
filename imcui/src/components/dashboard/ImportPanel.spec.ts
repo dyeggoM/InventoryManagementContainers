@@ -1,22 +1,46 @@
 import { defineComponent, h, type PropType } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { createPinia } from 'pinia';
+import type * as ImportServiceModule from '@services/import';
 import ImportPanel from './ImportPanel.vue';
+import AttributeEditor from '../AttributeEditor.vue';
 import { ApiError } from '@services/api';
-import type { ImportOutcome, ImportPreview, ImportSuggestion } from '@services/import';
+import type { Attributes } from '@services/items';
+import type {
+  ImportCorrection,
+  ImportOutcome,
+  ImportPreview,
+  ImportSuggestion,
+} from '@services/import';
 
 // The panel talks to the API and to Quasar's notifications; both are replaced, so the spec sees the
-// payload that would go out and the copy the user reads, not a network or a toast queue.
+// payload that would go out and the copy the user reads, not a network or a toast queue. The
+// attribute catalogue is Configuration's, and the dialog reads it on mount: it is stubbed too, with
+// the labels the real database defines, so the form under test is the one the app builds.
 const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
   run: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
   info: vi.fn(),
+  getByGroup: vi.fn(),
+  getAll: vi.fn(),
+  createConstant: vi.fn(),
 }));
 
-vi.mock('@services/import', () => ({
-  importService: { preview: mocks.preview, run: mocks.run },
+vi.mock('@services/import', async (importOriginal) => {
+  // The pure helpers (`subcategoryFromRaw`) stay real: only the two calls go to the mock.
+  const actual = await importOriginal<typeof ImportServiceModule>();
+  return { ...actual, importService: { preview: mocks.preview, run: mocks.run } };
+});
+
+vi.mock('@services/constants', () => ({
+  constantsService: {
+    getByGroup: mocks.getByGroup,
+    getAll: mocks.getAll,
+    create: mocks.createConstant,
+  },
 }));
 
 vi.mock('../../composables/useFeedback', () => ({
@@ -60,6 +84,7 @@ const QBtn = defineComponent({
     icon: { type: String, default: '' },
     disable: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
+    ariaLabel: { type: String, default: '' },
   },
   emits: ['click'],
   setup(props, { emit }) {
@@ -68,6 +93,7 @@ const QBtn = defineComponent({
         'button',
         {
           disabled: props.disable,
+          'aria-label': props.ariaLabel || undefined,
           onClick: (event: MouseEvent) => emit('click', event),
         },
         props.label || props.icon,
@@ -132,6 +158,45 @@ const QInput = defineComponent({
   },
 });
 
+const QSelect = defineComponent({
+  name: 'QSelect',
+  props: {
+    modelValue: { type: [String, Number], default: '' },
+    label: { type: String, default: '' },
+    options: { type: Array as PropType<unknown[]>, default: () => [] },
+    displayValue: { type: String, default: '' },
+    placeholder: { type: String, default: '' },
+    hint: { type: String, default: '' },
+    useInput: { type: Boolean, default: false },
+    hideSelected: { type: Boolean, default: false },
+    fillInput: { type: Boolean, default: true },
+    inputDebounce: { type: [Number, String], default: 500 },
+    optionsDense: { type: Boolean, default: false },
+    disable: { type: Boolean, default: false },
+    loading: { type: Boolean, default: false },
+    readonly: { type: Boolean, default: false },
+  },
+  emits: ['update:modelValue', 'filter', 'popup-hide'],
+  setup(props, { slots }) {
+    return () =>
+      h('div', { class: 'q-select-stub', 'data-label': props.label }, [
+        h(
+          'span',
+          { class: 'q-select-stub__display' },
+          props.displayValue || String(props.modelValue ?? ''),
+        ),
+        h(
+          'ul',
+          { class: 'q-select-stub__options' },
+          props.options.map((option) =>
+            h('li', { class: 'q-select-stub__option' }, optionLabel(option)),
+          ),
+        ),
+        slots['no-option']?.({ inputValue: '' }) ?? null,
+      ]);
+  },
+});
+
 function passthrough(name: string) {
   return defineComponent({
     name,
@@ -164,17 +229,50 @@ const QIcon = defineComponent({
   },
 });
 
+/** Renders its content only while open, which is what "the dialog is closed" has to mean here. */
+const QDialog = defineComponent({
+  name: 'QDialog',
+  props: {
+    modelValue: { type: Boolean, default: false },
+    maximized: { type: Boolean, default: false },
+  },
+  emits: ['update:modelValue'],
+  setup(props, { slots }) {
+    return () =>
+      props.modelValue
+        ? h(
+            'div',
+            { class: 'q-dialog-stub', 'data-maximized': String(props.maximized) },
+            slots.default?.(),
+          )
+        : null;
+  },
+});
+
+/** Options are objects carrying a `label` or plain strings, which is what both callers pass. */
+function optionLabel(option: unknown): string {
+  if (typeof option === 'string') return option;
+  if (option && typeof option === 'object' && 'label' in option) {
+    const label = (option as { label?: unknown }).label;
+    return typeof label === 'string' ? label : '';
+  }
+  return '';
+}
+
 const stubs = {
   QFile,
   QBtn,
   QCheckbox,
   QChip,
   QInput,
+  QSelect,
   QBadge,
   QBanner,
   QIcon,
+  QDialog,
   QCard: passthrough('QCard'),
   QCardSection: passthrough('QCardSection'),
+  QCardActions: passthrough('QCardActions'),
   QSpace: defineComponent({ name: 'QSpace', render: () => h('span', { class: 'q-space' }) }),
   QTooltip: defineComponent({
     name: 'QTooltip',
@@ -231,6 +329,14 @@ function previewFixture(): ImportPreview {
                 status: 'yellow',
                 reasons: ['Sin dimensiones declaradas'],
                 row: 13,
+                source: 'BACKLINE',
+                raw: {
+                  CONSECUTIVO: '-H0002',
+                  'SUB CATEGORIA': 'BASE TIPO BOOM',
+                  DESCRIPCION: 'Cuerpo de bombo',
+                  MARCA: 'Pearl',
+                  DIMENSIONES: '',
+                },
               },
               {
                 key: 'BACKLINE#14',
@@ -257,6 +363,14 @@ function previewFixture(): ImportPreview {
                 status: 'red',
                 reasons: ['Código duplicado en la hoja'],
                 row: 15,
+                source: 'BACKLINE',
+                raw: {
+                  CONSECUTIVO: '-H0004',
+                  'SUB CATEGORIA': 'BASE TIPO BOOM',
+                  DESCRIPCION: 'Soporte roto',
+                  MARCA: 'DW',
+                  DIMENSIONES: '',
+                },
               },
             ],
           },
@@ -266,6 +380,10 @@ function previewFixture(): ImportPreview {
     summary: { rows: 4, sections: 2, green: 1, yellow: 2, red: 1, importable: 3, skipped: 1 },
     issues: [{ sheet: 'BACKLINE', row: 15, level: 'red', message: 'Código duplicado' }],
     normalizations: ['«GTAR COMBO» → «GTR COMBO»'],
+    sourceHeaders: {
+      BACKLINE: ['CONSECUTIVO', 'SUB CATEGORIA', 'DESCRIPCION', 'MARCA', 'DIMENSIONES'],
+    },
+    correctionIssues: [],
   };
 }
 
@@ -309,7 +427,45 @@ function outcomeFixture(overrides: Partial<ImportOutcome> = {}): ImportOutcome {
     skippedYellow: 0,
     skippedExisting: 2,
     includeYellow: true,
+    corrected: 0,
+    correctionIssues: [],
     ...overrides,
+  };
+}
+
+/**
+ * The answer a corrected red row comes back as: the row the message fixed is green, in its group,
+ * and it still carries the file's row for the editor's top half. The server decides the colour, so
+ * the panel only has to render this.
+ */
+function correctedPreview(label = 'CONGA LP GALAXY 11 3/4'): ImportPreview {
+  const preview = previewFixture();
+  const sheet = preview.sheets[0]!;
+  const group = sheet.groups[0]!;
+  const red = group.items[3]!;
+  return {
+    ...preview,
+    sheets: [
+      {
+        ...sheet,
+        status: 'yellow',
+        green: 2,
+        red: 0,
+        groups: [
+          {
+            ...group,
+            status: 'yellow',
+            green: 2,
+            red: 0,
+            items: [
+              ...group.items.slice(0, 3),
+              { ...red, label, status: 'green', reasons: [], raw: null },
+            ],
+          },
+        ],
+      },
+    ],
+    summary: { ...preview.summary, green: 2, red: 0, importable: 4, skipped: 0 },
   };
 }
 
@@ -317,6 +473,8 @@ async function mountPanel(mobile = false): Promise<VueWrapper> {
   const wrapper = mount(ImportPanel, {
     global: {
       stubs,
+      // The panel reads who is signed in: adding a value to Configuration is an admin's write.
+      plugins: [createPinia()],
       // `$q` is a Quasar plugin global property, injected the way every spec provides one.
       mocks: { $q: { screen: { lt: { sm: mobile } } } },
     },
@@ -349,8 +507,49 @@ function chip(wrapper: VueWrapper, label: string) {
   return found;
 }
 
+/** One field of the editor, found by the label the user reads above it. */
+function input(wrapper: VueWrapper, label: string) {
+  const found = wrapper
+    .findAllComponents({ name: 'QInput' })
+    .find((candidate) => candidate.props('label') === label);
+  if (!found) throw new Error(`no input labelled ${label}`);
+  return found;
+}
+
 function itemRows(wrapper: VueWrapper) {
   return wrapper.findAll('.import-item');
+}
+
+/** A select by its label, the way the dialog words it. */
+function select(wrapper: VueWrapper, label: string) {
+  const found = wrapper
+    .findAllComponents({ name: 'QSelect' })
+    .find((candidate) => candidate.props('label') === label);
+  if (!found) throw new Error(`no select labelled ${label}`);
+  return found;
+}
+
+/** The attribute rows the dialog is editing: the shared editor's model, not a copy of the DOM. */
+function attributeRows(wrapper: VueWrapper): Attributes[] {
+  return (wrapper.findComponent(AttributeEditor).props() as { modelValue: Attributes[] })
+    .modelValue;
+}
+
+/** One attribute row's value, by its label. */
+function attributeRow(rows: Attributes[], label: string): string | undefined {
+  return rows.find((row) => row.label === label)?.value;
+}
+
+/** Replaces the attribute rows the way the editor does: it emits the model it was given. */
+async function setAttributeRows(wrapper: VueWrapper, rows: Attributes[]): Promise<void> {
+  wrapper.findComponent(AttributeEditor).vm.$emit('update:modelValue', rows);
+  await flushPromises();
+}
+
+/** Types one attribute's value, leaving the rest of the rows as they were. */
+async function setAttribute(wrapper: VueWrapper, label: string, value: string): Promise<void> {
+  const rows = attributeRows(wrapper).map((row) => (row.label === label ? { ...row, value } : row));
+  await setAttributeRows(wrapper, rows);
 }
 
 /** Picks the file the way the QFile stub would, then presses Analizar and waits for the tree. */
@@ -362,8 +561,27 @@ async function analyse(wrapper: VueWrapper, file = new File(['x'.repeat(12800)],
   return file;
 }
 
+/**
+ * Configuration's attributes, as the real database defines them: `Brand` and `Notes` are configured,
+ * `Description` is the one the name field carries, and `Code`, `Reference`, `Serial` and `Dimensions`
+ * come from the importer alone. That mix is the interesting case — a form built only from the
+ * catalogue would have no field for the code the file writes.
+ */
+function catalogueFixture(): void {
+  mocks.getByGroup.mockResolvedValue([
+    { id: 701, label: 'Brand', sortOrder: 0, dataType: 'Text' },
+    { id: 708, label: 'Notes', sortOrder: 1, dataType: 'LongText' },
+    { id: 707, label: 'Description', sortOrder: 2, dataType: 'LongText' },
+    { id: 702, label: 'Category', sortOrder: 3, dataType: 'Text' },
+  ]);
+  mocks.getAll.mockResolvedValue({ tree: [], panels: [] });
+}
+
 beforeEach(() => {
   localStorage.clear();
+  catalogueFixture();
+  mocks.getByGroup.mockClear();
+  mocks.getAll.mockClear();
   mocks.preview.mockReset();
   mocks.run.mockReset();
   mocks.success.mockReset();
@@ -400,7 +618,7 @@ describe('ImportPanel — reading the file', () => {
     const wrapper = await mountPanel();
     const file = await analyse(wrapper);
 
-    expect(mocks.preview).toHaveBeenCalledWith(file);
+    expect(mocks.preview).toHaveBeenCalledWith(file, []);
     expect(wrapper.find('.sheet-name').text()).toBe('BACKLINE');
     expect(wrapper.find('.group-name').text()).toBe('BASE TIPO BOOM');
     expect(itemRows(wrapper)).toHaveLength(4);
@@ -952,5 +1170,357 @@ describe('ImportPanel — below sm', () => {
       includeYellow: true,
       skipCodes: ['-H0002'],
     });
+  });
+});
+
+describe('ImportPanel — correcting a row', () => {
+  /** Opens the fourth row's editor (the red one) and waits for the dialog to render. */
+  async function openRedRow(wrapper: VueWrapper) {
+    await itemRows(wrapper)[3]!.trigger('click');
+    await flushPromises();
+    return wrapper.find('.editor-card');
+  }
+
+  it('opens the file row for a red one: headers, values, and the editable item below', async () => {
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+
+    // A green row has nothing to correct — it is already importable, so it opens nothing.
+    await itemRows(wrapper)[0]!.trigger('click');
+    expect(wrapper.find('.editor-card').exists()).toBe(false);
+
+    const editor = await openRedRow(wrapper);
+    expect(editor.exists()).toBe(true);
+    // The top half is the file: its own header row, then the row itself, same column order.
+    expect(wrapper.findAll('.file-header').map((cell) => cell.text())).toEqual([
+      'CONSECUTIVO',
+      'SUB CATEGORIA',
+      'DESCRIPCION',
+      'MARCA',
+      'DIMENSIONES',
+    ]);
+    expect(wrapper.findAll('.file-cell').map((cell) => cell.text())).toEqual([
+      '-H0004',
+      'BASE TIPO BOOM',
+      'Soporte roto',
+      'DW',
+      '',
+    ]);
+    expect(editor.text()).toContain('El archivo dice');
+    expect(editor.text()).toContain('Lo que se importará · editable');
+    // The bottom half is the item as it would be imported, prefilled from the item and the file:
+    // the same form the inventory creates an item with, on the same attribute set.
+    expect(input(wrapper, 'Descripción').props('modelValue')).toBe('Soporte roto');
+    expect(select(wrapper, 'Subcategoría').props('modelValue')).toBe('BASE TIPO BOOM');
+    expect(attributeRow(attributeRows(wrapper), 'Brand')).toBe('DW');
+    expect(attributeRow(attributeRows(wrapper), 'Code')).toBe('-H0004');
+    // Where the row would land, in the words of the tree.
+    expect(editor.text()).toContain('BACKLINE › BASE TIPO BOOM');
+  });
+
+  it('prefills the description from the file cell, not from the code the API shows as label', async () => {
+    const preview = previewFixture();
+    const group = preview.sheets[0]!.groups[0]!;
+    const red = group.items[3]!;
+    mocks.preview.mockResolvedValue({
+      ...preview,
+      sheets: [
+        {
+          ...preview.sheets[0]!,
+          groups: [
+            {
+              ...group,
+              items: [
+                ...group.items.slice(0, 3),
+                { ...red, label: '-H0004', raw: { ...red.raw!, DESCRIPCION: '' } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+
+    // The real API fills `label` with the code for a "Sin descripción" row: editing that would
+    // write a code as a name, so the description comes from the file's own cell.
+    expect(input(wrapper, 'Descripción').props('modelValue')).toBe('');
+    expect(button(wrapper, 'Guardar').props('disable')).toBe(true);
+    // The code keeps its own row, prefilled from the item.
+    expect(attributeRow(attributeRows(wrapper), 'Code')).toBe('-H0004');
+  });
+
+  it('shows no correction chip and opens nothing for a green row', async () => {
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+
+    const green = itemRows(wrapper)[0]!;
+    expect(green.find('.corrected-chip').exists()).toBe(false);
+    expect(green.find('.edit-hint').exists()).toBe(false);
+    expect(green.attributes('role')).toBeUndefined();
+
+    await green.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.editor-card')).toHaveLength(0);
+    expect(mocks.preview).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves a description as a correction and shows the server answer, not a local guess', async () => {
+    mocks.preview.mockReset();
+    mocks.preview.mockResolvedValueOnce(previewFixture()).mockResolvedValueOnce(correctedPreview());
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+
+    input(wrapper, 'Descripción').vm.$emit('update:modelValue', '  CONGA LP GALAXY 11 3/4  ');
+    await flushPromises();
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    // One correction, trimmed, carrying the sheet the row came from: row numbers repeat. The code,
+    // the brand and the subcategory are the file's own, so they are **not** in the payload: a
+    // correction is the difference from the file, never the whole form.
+    expect(mocks.preview).toHaveBeenLastCalledWith(expect.any(File), [
+      {
+        source: 'BACKLINE',
+        row: 15,
+        label: 'CONGA LP GALAXY 11 3/4',
+      },
+    ]);
+    const [, sent] = mocks.preview.mock.calls[1] as [File, ImportCorrection[]];
+    expect(sent[0]).not.toHaveProperty('attributes');
+
+    // The dialog is done and the tree is the answer: that row is green under its group now.
+    expect(wrapper.find('.editor-card').exists()).toBe(false);
+    const rows = itemRows(wrapper);
+    expect(rows).toHaveLength(4);
+    expect(rows[3]!.find('.item-status').text()).toBe('verde');
+    expect(rows[3]!.text()).toContain('CONGA LP GALAXY 11 3/4');
+    expect(rows[3]!.find('.corrected-chip').text()).toBe('Corregido');
+    // The counters moved with it, because they are read off the server's tree.
+    expect(wrapper.find('.sheet-row .count-green').text()).toBe('2');
+    expect(wrapper.find('.sheet-row .count-red').text()).toBe('0');
+  });
+
+  it('accumulates corrections: the second preview carries both', async () => {
+    mocks.preview.mockReset();
+    mocks.preview
+      .mockResolvedValueOnce(previewFixture())
+      .mockResolvedValueOnce(correctedPreview())
+      .mockResolvedValueOnce(correctedPreview());
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+
+    await openRedRow(wrapper);
+    input(wrapper, 'Descripción').vm.$emit('update:modelValue', 'CONGA LP GALAXY 11 3/4');
+    await flushPromises();
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    // The yellow one, still where the server put it.
+    await itemRows(wrapper)[1]!.trigger('click');
+    await flushPromises();
+    input(wrapper, 'Descripción').vm.$emit('update:modelValue', 'Cuerpo de bombo 22"');
+    await flushPromises();
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    const [, sent] = mocks.preview.mock.calls[2] as [File, ImportCorrection[]];
+    expect(sent.map((correction) => correction.row)).toEqual([13, 15]);
+    expect(sent[0]).toMatchObject({ source: 'BACKLINE', row: 13, label: 'Cuerpo de bombo 22"' });
+    expect(sent[1]).toMatchObject({
+      source: 'BACKLINE',
+      row: 15,
+      label: 'CONGA LP GALAXY 11 3/4',
+    });
+  });
+
+  it('undoes a correction with one button, and asks for the file back', async () => {
+    mocks.preview.mockReset();
+    mocks.preview
+      .mockResolvedValueOnce(previewFixture())
+      .mockResolvedValueOnce(correctedPreview())
+      .mockResolvedValueOnce(previewFixture());
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+    input(wrapper, 'Descripción').vm.$emit('update:modelValue', 'CONGA LP GALAXY 11 3/4');
+    await flushPromises();
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.findAll('.corrected-chip')).toHaveLength(1);
+    await wrapper.find('.undo-correction').trigger('click');
+    await flushPromises();
+
+    // Back to the file: the payload is empty again and the mark is gone.
+    expect(mocks.preview).toHaveBeenLastCalledWith(expect.any(File), []);
+    expect(wrapper.findAll('.corrected-chip')).toHaveLength(0);
+    expect(itemRows(wrapper)[3]!.find('.item-status').text()).toBe('rojo');
+  });
+
+  it('sends the corrections with the import, so the write is what the user fixed', async () => {
+    mocks.preview.mockReset();
+    mocks.preview.mockResolvedValueOnce(previewFixture()).mockResolvedValueOnce(correctedPreview());
+    mocks.run.mockResolvedValue(outcomeFixture({ corrected: 1 }));
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+    input(wrapper, 'Descripción').vm.$emit('update:modelValue', 'CONGA LP GALAXY 11 3/4');
+    await flushPromises();
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    await button(wrapper, 'Importar').trigger('click');
+    await flushPromises();
+
+    expect(mocks.run).toHaveBeenCalledWith(expect.any(File), {
+      includeYellow: true,
+      skipCodes: [],
+      corrections: [
+        {
+          source: 'BACKLINE',
+          row: 15,
+          label: 'CONGA LP GALAXY 11 3/4',
+        },
+      ],
+    });
+    expect(wrapper.find('.result-skipped').text()).toContain('Correcciones aplicadas: 1');
+  });
+
+  it('refuses to save without a description, which the import could not take anyway', async () => {
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+
+    input(wrapper, 'Descripción').vm.$emit('update:modelValue', '   ');
+    await flushPromises();
+
+    expect(button(wrapper, 'Guardar').props('disable')).toBe(true);
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+    // Only the analyse call so far: an empty description was never sent.
+    expect(mocks.preview).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the corrections the server refused instead of dropping them silently', async () => {
+    mocks.preview.mockReset();
+    mocks.preview.mockResolvedValueOnce(previewFixture()).mockResolvedValueOnce({
+      ...previewFixture(),
+      correctionIssues: ['Fila 15: es ambigua; indique source.'],
+    });
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+    input(wrapper, 'Descripción').vm.$emit('update:modelValue', 'CONGA');
+    await flushPromises();
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    const banner = wrapper.find('.corrections-warning');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('es ambigua; indique source');
+  });
+
+  it('offers the same attribute set the inventory does, and the name owns the description', async () => {
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+
+    // Configuration's labels first, then the seven the importer derives — a code the file writes is
+    // an attribute the form has to be able to reach. `Description` is absent because the name field
+    // above the form already is it: two fields for one cell can only disagree.
+    expect(attributeRows(wrapper).map((row) => row.label)).toEqual([
+      'Brand',
+      'Notes',
+      'Category',
+      'Code',
+      'Reference',
+      'Serial',
+      'Dimensions',
+    ]);
+  });
+
+  it('sends a cleared attribute as an empty string, which is how the API removes it', async () => {
+    mocks.preview.mockReset();
+    mocks.preview.mockResolvedValueOnce(previewFixture()).mockResolvedValueOnce(correctedPreview());
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+
+    // The file says the brand is DW; the user empties it. Nothing else is touched.
+    await setAttribute(wrapper, 'Brand', '');
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    expect(mocks.preview).toHaveBeenLastCalledWith(expect.any(File), [
+      {
+        source: 'BACKLINE',
+        row: 15,
+        attributes: { Brand: '' },
+      },
+    ]);
+  });
+
+  it('sends a new attribute the file never had, and no untouched one beside it', async () => {
+    mocks.preview.mockReset();
+    mocks.preview.mockResolvedValueOnce(previewFixture()).mockResolvedValueOnce(correctedPreview());
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+
+    await setAttributeRows(wrapper, [
+      ...attributeRows(wrapper),
+      { label: 'Estado', value: 'Bueno' },
+    ]);
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    // One key, the one that was typed: the rows prefilled from the file are the file, not edits.
+    expect(mocks.preview).toHaveBeenLastCalledWith(expect.any(File), [
+      {
+        source: 'BACKLINE',
+        row: 15,
+        attributes: { Estado: 'Bueno' },
+      },
+    ]);
+  });
+
+  it('sends nothing at all when the user changed nothing', async () => {
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+    await openRedRow(wrapper);
+
+    await button(wrapper, 'Guardar').trigger('click');
+    await flushPromises();
+
+    // No correction, no round trip: only the analyse call so far and the dialog is closed. A
+    // correction that carries the file unchanged would be counted as an edit nobody made.
+    expect(mocks.preview).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('.editor-card').exists()).toBe(false);
+  });
+
+  it('opens maximized below sm, where the file row is wider than the phone', async () => {
+    const wrapper = await mountPanel(true);
+    await analyse(wrapper);
+
+    expect(wrapper.findComponent({ name: 'QDialog' }).props('maximized')).toBe(true);
+
+    await wrapper.findAll('.import-card')[3]!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.editor-card').exists()).toBe(true);
+    // The spreadsheet row keeps its columns and scrolls sideways instead of squeezing into 390px.
+    expect(wrapper.find('.file-sheet-scroll').exists()).toBe(true);
+    expect(wrapper.findAll('.file-header')).toHaveLength(5);
   });
 });
