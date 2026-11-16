@@ -36,12 +36,7 @@
           @click="createChildEntry"
         />
       </div>
-      <q-input
-        label="Name"
-        v-model="treeItem.label"
-        :readonly="!canWrite"
-        :rules="[labelRule]"
-      />
+      <q-input label="Name" v-model="treeItem.label" :readonly="!canWrite" :rules="[labelRule]" />
       <q-select
         label="Parent item"
         v-model="treeItem.parentId"

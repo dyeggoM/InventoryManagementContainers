@@ -31,7 +31,10 @@
         type="button"
         @click="addCustom"
       />
-      <span class="text-caption text-grey-7" v-if="availableLabels.length === 0 && labels.length > 0">
+      <span
+        class="text-caption text-grey-7"
+        v-if="availableLabels.length === 0 && labels.length > 0"
+      >
         all listed
       </span>
     </div>
@@ -204,7 +207,6 @@
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -287,8 +289,6 @@ function labelOptions(index: number): { label: string; value: string; disable?: 
     disable: label !== own && rows.value.some((row) => row.label === label),
   }));
 }
-
-
 
 function listFor(label: string): string[] {
   return props.lists[label] ?? [];

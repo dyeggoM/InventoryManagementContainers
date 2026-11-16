@@ -77,8 +77,11 @@ const QBtn = defineComponent({
   },
   emits: ['click'],
   render() {
-    return h('button', { disabled: this.disable, onClick: (e: MouseEvent) => this.$emit('click', e) },
-      this.label);
+    return h(
+      'button',
+      { disabled: this.disable, onClick: (e: MouseEvent) => this.$emit('click', e) },
+      this.label,
+    );
   },
 });
 
@@ -233,7 +236,8 @@ describe('AttributeEditor', () => {
 
   it('adds a custom row with an empty key when asked', async () => {
     const wrapper = mountEditor(rowsFixture());
-    const addCustom = wrapper.findAllComponents({ name: 'QBtn' })
+    const addCustom = wrapper
+      .findAllComponents({ name: 'QBtn' })
       .find((button) => button.props('label') === 'Add custom')!;
 
     await addCustom.trigger('click');
@@ -245,7 +249,8 @@ describe('AttributeEditor', () => {
     const wrapper = mountEditor(rowsFixture());
     expect(wrapper.findAll('.attribute-row')).toHaveLength(6);
 
-    const filter = wrapper.findAllComponents({ name: 'QInput' })
+    const filter = wrapper
+      .findAllComponents({ name: 'QInput' })
       .find((input) => input.props('placeholder') === 'Filter attributes')!;
     expect(filter).toBeTruthy();
 
@@ -300,9 +305,7 @@ describe('AttributeEditor', () => {
 
   it('adds the value only once the write resolves, with the field busy meanwhile', async () => {
     let resolveWrite: (created: boolean) => void = () => undefined;
-    const createValue = vi.fn(
-      () => new Promise<boolean>((resolve) => (resolveWrite = resolve)),
-    );
+    const createValue = vi.fn(() => new Promise<boolean>((resolve) => (resolveWrite = resolve)));
     const wrapper = mountEditor(rowsFixture(), {
       lists: { Brand: brandValues },
       createValue,

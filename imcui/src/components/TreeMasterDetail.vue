@@ -52,45 +52,51 @@
 
               <q-tree
                 :key="treeVersion"
-            :nodes="visibleTree"
-            node-key="id"
-            no-connectors
-            icon="chevron_right"
-            selected-color="primary"
-            :selected="selected"
-            v-model:expanded="expanded"
-            class="imc-tree"
-            @update:selected="onSelect"
-          >
-            <template v-slot:default-header="prop">
-              <div class="row items-center no-wrap imc-tree__row">
-                <q-icon v-if="prop.node.icon" :name="prop.node.icon" size="18px" class="q-mr-xs" />
-                <div class="column imc-tree__text">
-                  <span
-                    class="ellipsis imc-tree__label"
-                    :class="{ 'text-weight-medium': prop.node.children?.length }"
-                    >{{ prop.node.label }}</span
-                  >
-                  <span v-if="prop.node.match" class="ellipsis imc-tree__match">
-                    {{ prettyLabel(prop.node.match.label) }} · {{ shortValue(prop.node.match.value) }}
-                  </span>
-                </div>
-                <q-icon
-                  v-if="prop.node.attachmentCount"
-                  name="attach_file"
-                  size="16px"
-                  class="imc-attach"
-                  aria-label="Has attachments"
-                />
-                <q-space />
-                <span
-                  v-if="prop.node.children?.length && !expanded.includes(prop.node.id)"
-                  class="imc-count"
-                >
-                  {{ prop.node.children.length }}
-                </span>
-                <q-icon v-else name="chevron_right" size="18px" class="imc-chevron" />
-              </div>
+                :nodes="visibleTree"
+                node-key="id"
+                no-connectors
+                icon="chevron_right"
+                selected-color="primary"
+                :selected="selected"
+                v-model:expanded="expanded"
+                class="imc-tree"
+                @update:selected="onSelect"
+              >
+                <template v-slot:default-header="prop">
+                  <div class="row items-center no-wrap imc-tree__row">
+                    <q-icon
+                      v-if="prop.node.icon"
+                      :name="prop.node.icon"
+                      size="18px"
+                      class="q-mr-xs"
+                    />
+                    <div class="column imc-tree__text">
+                      <span
+                        class="ellipsis imc-tree__label"
+                        :class="{ 'text-weight-medium': prop.node.children?.length }"
+                        >{{ prop.node.label }}</span
+                      >
+                      <span v-if="prop.node.match" class="ellipsis imc-tree__match">
+                        {{ prettyLabel(prop.node.match.label) }} ·
+                        {{ shortValue(prop.node.match.value) }}
+                      </span>
+                    </div>
+                    <q-icon
+                      v-if="prop.node.attachmentCount"
+                      name="attach_file"
+                      size="16px"
+                      class="imc-attach"
+                      aria-label="Has attachments"
+                    />
+                    <q-space />
+                    <span
+                      v-if="prop.node.children?.length && !expanded.includes(prop.node.id)"
+                      class="imc-count"
+                    >
+                      {{ prop.node.children.length }}
+                    </span>
+                    <q-icon v-else name="chevron_right" size="18px" class="imc-chevron" />
+                  </div>
                 </template>
               </q-tree>
             </template>
@@ -100,57 +106,68 @@
 
       <template v-slot:after>
         <div ref="detailPane" class="imc-pane imc-pane--detail" :style="paneStyle">
-        <div v-if="selected < 0" class="imc-empty">
-          <q-icon name="touch_app" />
-          <div class="text-subtitle1 q-mt-sm">Select an item to edit it</div>
-          <div class="text-caption q-mt-xs">or start a new one</div>
-        </div>
-        <q-tab-panels
-          v-model="selected"
-          animated
-          transition-prev="jump-up"
-          transition-next="jump-up"
-        >
-          <q-tab-panel v-for="panel in panels" :key="panel.id" :name="panel.id">
-            <div class="row items-center justify-between q-mb-md">
-              <div class="column">
-                <div class="text-h6">
-                  {{ panel.id > 0 ? entryLabel || `${entityLabel} #${panel.id}` : `New ${entityLabel.toLowerCase()}` }}
+          <div v-if="selected < 0" class="imc-empty">
+            <q-icon name="touch_app" />
+            <div class="text-subtitle1 q-mt-sm">Select an item to edit it</div>
+            <div class="text-caption q-mt-xs">or start a new one</div>
+          </div>
+          <q-tab-panels
+            v-model="selected"
+            animated
+            transition-prev="jump-up"
+            transition-next="jump-up"
+          >
+            <q-tab-panel v-for="panel in panels" :key="panel.id" :name="panel.id">
+              <div class="row items-center justify-between q-mb-md">
+                <div class="column">
+                  <div class="text-h6">
+                    {{
+                      panel.id > 0
+                        ? entryLabel || `${entityLabel} #${panel.id}`
+                        : `New ${entityLabel.toLowerCase()}`
+                    }}
+                  </div>
+                  <div v-if="panel.id > 0" class="text-caption">
+                    <span class="text-grey-7">{{ entityLabel }} #{{ panel.id }}</span>
+                    <span v-if="dirty" class="text-orange-8 q-ml-sm">· unsaved changes</span>
+                  </div>
                 </div>
-                <div v-if="panel.id > 0" class="text-caption">
-                  <span class="text-grey-7">{{ entityLabel }} #{{ panel.id }}</span>
-                  <span v-if="dirty" class="text-orange-8 q-ml-sm">· unsaved changes</span>
+                <q-btn
+                  v-if="panel.id > 0 && !readonly"
+                  flat
+                  round
+                  dense
+                  icon="more_vert"
+                  aria-label="More actions"
+                >
+                  <q-menu anchor="bottom right" self="top right" auto-close>
+                    <q-list dense style="min-width: 200px">
+                      <q-item clickable v-close-popup @click="emit('duplicate')">
+                        <q-item-section avatar>
+                          <q-icon name="content_copy" />
+                        </q-item-section>
+                        <q-item-section>Duplicate {{ entityLabel.toLowerCase() }}</q-item-section>
+                      </q-item>
+                      <q-separator />
+                      <q-item clickable v-close-popup @click="emit('delete')">
+                        <q-item-section avatar>
+                          <q-icon name="delete_outline" color="negative" />
+                        </q-item-section>
+                        <q-item-section>Delete {{ entityLabel.toLowerCase() }}</q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
+              </div>
+              <q-form @submit="emit('submit')" @reset="emit('reset')" class="q-gutter-md">
+                <slot />
+                <div v-if="!readonly" class="row q-gutter-sm q-mt-md">
+                  <q-btn label="Save" type="submit" color="primary" :loading="saving" />
+                  <q-btn label="Reset" type="reset" color="grey-9" flat />
                 </div>
-              </div>
-              <q-btn v-if="panel.id > 0 && !readonly" flat round dense icon="more_vert" aria-label="More actions">
-                <q-menu anchor="bottom right" self="top right" auto-close>
-                  <q-list dense style="min-width: 200px">
-                    <q-item clickable v-close-popup @click="emit('duplicate')">
-                      <q-item-section avatar>
-                        <q-icon name="content_copy" />
-                      </q-item-section>
-                      <q-item-section>Duplicate {{ entityLabel.toLowerCase() }}</q-item-section>
-                    </q-item>
-                    <q-separator />
-                    <q-item clickable v-close-popup @click="emit('delete')">
-                      <q-item-section avatar>
-                        <q-icon name="delete_outline" color="negative" />
-                      </q-item-section>
-                      <q-item-section>Delete {{ entityLabel.toLowerCase() }}</q-item-section>
-                    </q-item>
-                  </q-list>
-                </q-menu>
-              </q-btn>
-            </div>
-            <q-form @submit="emit('submit')" @reset="emit('reset')" class="q-gutter-md">
-              <slot />
-              <div v-if="!readonly" class="row q-gutter-sm q-mt-md">
-                <q-btn label="Save" type="submit" color="primary" :loading="saving" />
-                <q-btn label="Reset" type="reset" color="grey-9" flat />
-              </div>
-            </q-form>
-          </q-tab-panel>
-        </q-tab-panels>
+              </q-form>
+            </q-tab-panel>
+          </q-tab-panels>
         </div>
       </template>
     </q-splitter>
@@ -179,9 +196,7 @@
         />
       </div>
       <template v-else>
-        <div v-if="!visibleTree.length" class="text-grey-7">
-          Nothing matches “{{ query }}”.
-        </div>
+        <div v-if="!visibleTree.length" class="text-grey-7">Nothing matches “{{ query }}”.</div>
         <template v-else>
           <div v-if="query" class="text-caption text-grey-7 q-mb-sm">
             {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
@@ -189,44 +204,45 @@
 
           <q-tree
             :key="treeVersion"
-        :nodes="visibleTree"
-        node-key="id"
-        no-connectors
-        icon="chevron_right"
-        selected-color="primary"
-        :selected="selected"
-        v-model:expanded="expanded"
-        class="imc-tree"
-        @update:selected="onSelect"
-      >
-        <template v-slot:default-header="prop">
-          <div class="row items-center no-wrap imc-tree__row">
-            <div class="column imc-tree__text">
-              <span
-                class="ellipsis imc-tree__label"
-                :class="{ 'text-weight-medium': prop.node.children?.length }"
-                >{{ prop.node.label }}</span
-              >
-              <span v-if="prop.node.match" class="ellipsis imc-tree__match">
-                {{ prettyLabel(prop.node.match.label) }} · {{ shortValue(prop.node.match.value) }}
-              </span>
-            </div>
-            <q-icon
-              v-if="prop.node.attachmentCount"
-              name="attach_file"
-              size="16px"
-              class="imc-attach"
-              aria-label="Has attachments"
-            />
-            <q-space />
-            <span
-              v-if="prop.node.children?.length && !expanded.includes(prop.node.id)"
-              class="imc-count"
-            >
-              {{ prop.node.children.length }}
-            </span>
-            <q-icon v-else name="chevron_right" size="18px" class="imc-chevron" />
-          </div>
+            :nodes="visibleTree"
+            node-key="id"
+            no-connectors
+            icon="chevron_right"
+            selected-color="primary"
+            :selected="selected"
+            v-model:expanded="expanded"
+            class="imc-tree"
+            @update:selected="onSelect"
+          >
+            <template v-slot:default-header="prop">
+              <div class="row items-center no-wrap imc-tree__row">
+                <div class="column imc-tree__text">
+                  <span
+                    class="ellipsis imc-tree__label"
+                    :class="{ 'text-weight-medium': prop.node.children?.length }"
+                    >{{ prop.node.label }}</span
+                  >
+                  <span v-if="prop.node.match" class="ellipsis imc-tree__match">
+                    {{ prettyLabel(prop.node.match.label) }} ·
+                    {{ shortValue(prop.node.match.value) }}
+                  </span>
+                </div>
+                <q-icon
+                  v-if="prop.node.attachmentCount"
+                  name="attach_file"
+                  size="16px"
+                  class="imc-attach"
+                  aria-label="Has attachments"
+                />
+                <q-space />
+                <span
+                  v-if="prop.node.children?.length && !expanded.includes(prop.node.id)"
+                  class="imc-count"
+                >
+                  {{ prop.node.children.length }}
+                </span>
+                <q-icon v-else name="chevron_right" size="18px" class="imc-chevron" />
+              </div>
             </template>
           </q-tree>
         </template>
@@ -257,7 +273,11 @@
       <q-card class="dialog-card column no-wrap">
         <q-toolbar class="dialog-header q-px-md">
           <q-toolbar-title class="text-subtitle1 text-weight-medium ellipsis">
-            {{ entryId > 0 ? entryLabel || `${entityLabel} #${entryId}` : `New ${entityLabel.toLowerCase()}` }}
+            {{
+              entryId > 0
+                ? entryLabel || `${entityLabel} #${entryId}`
+                : `New ${entityLabel.toLowerCase()}`
+            }}
           </q-toolbar-title>
           <q-btn
             v-if="entryId > 0 && !readonly"
@@ -299,7 +319,14 @@
             <q-space />
             <div class="row items-center q-gutter-x-sm">
               <q-btn v-if="!readonly" label="Reset" color="grey-9" flat type="reset" />
-              <q-btn v-if="!readonly" label="Save" color="primary" type="submit" :loading="saving" class="q-px-lg" />
+              <q-btn
+                v-if="!readonly"
+                label="Save"
+                color="primary"
+                type="submit"
+                :loading="saving"
+                class="q-px-lg"
+              />
             </div>
           </div>
         </q-form>
@@ -371,7 +398,8 @@ const detailPane = ref<HTMLElement | null>(null);
 const paneStyle = ref<Record<string, string>>({});
 
 function measurePanes(): void {
-  const top = detailPane.value?.getBoundingClientRect().top ?? treePane.value?.getBoundingClientRect().top;
+  const top =
+    detailPane.value?.getBoundingClientRect().top ?? treePane.value?.getBoundingClientRect().top;
   if (top === undefined) return;
   const available = Math.max(240, window.innerHeight - top - 8);
   paneStyle.value = { height: `${available}px` };

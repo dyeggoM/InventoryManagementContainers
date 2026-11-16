@@ -31,7 +31,11 @@ const QTab = defineComponent({
     return () =>
       h(
         'button',
-        { class: 'q-tab-stub', 'data-name': props.name, 'aria-label': props.ariaLabel || undefined },
+        {
+          class: 'q-tab-stub',
+          'data-name': props.name,
+          'aria-label': props.ariaLabel || undefined,
+        },
         props.label,
       );
   },

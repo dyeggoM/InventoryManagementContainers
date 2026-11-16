@@ -31,7 +31,13 @@ function makeToken(claims: Record<string, unknown>): string {
 }
 
 function superadminToken(exp = Math.floor(Date.now() / 1000) + 3600): string {
-  return makeToken({ sub: 'u-1', email: 'root@imc.test', unique_name: 'root', role: ['superadmin'], exp });
+  return makeToken({
+    sub: 'u-1',
+    email: 'root@imc.test',
+    unique_name: 'root',
+    role: ['superadmin'],
+    exp,
+  });
 }
 
 /** The JSON body the transport sent, read without stringifying a `BodyInit` blindly. */
@@ -83,7 +89,10 @@ describe('auth store', () => {
   });
 
   it('reports bad credentials instead of pretending the session exists', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(emptyResponse(401))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(emptyResponse(401))),
+    );
 
     const auth = useAuthStore();
     const signedIn = await auth.login('root@imc.test', 'wrong');
@@ -100,7 +109,10 @@ describe('auth store', () => {
     const auth = useAuthStore();
     expect(auth.isAuthenticated).toBe(true);
 
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('offline'))),
+    );
 
     await auth.signOut();
 
@@ -136,7 +148,10 @@ describe('auth store', () => {
     const auth = useAuthStore();
     expect(auth.isAuthenticated).toBe(true);
 
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(emptyResponse(401))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(emptyResponse(401))),
+    );
 
     const refreshed = await auth.refresh();
 
@@ -164,8 +179,7 @@ describe('auth store', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     // The retry carries the new token, not the stale one.
     const retryHeaders = (fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.headers as
-      | Record<string, string>
-      | undefined;
+      Record<string, string> | undefined;
     expect(retryHeaders?.Authorization).toBe(`Bearer ${fresh}`);
     expect(auth.token).toBe(fresh);
     expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(fresh);
@@ -324,7 +338,10 @@ describe('auth store', () => {
     it('keeps the notice and the borrowed session across a reload', async () => {
       localStorage.setItem(ACCESS_TOKEN_KEY, superadminToken());
       const auth = useAuthStore();
-      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse(impersonationAnswer('admin')))));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(jsonResponse(impersonationAnswer('admin')))),
+      );
 
       await auth.impersonate('admin');
 
@@ -500,7 +517,10 @@ describe('auth store', () => {
     it('ends the impersonation when the borrowed token is refreshed, instead of bouncing to /login', async () => {
       localStorage.setItem(ACCESS_TOKEN_KEY, superadminToken());
       const auth = useAuthStore();
-      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse(impersonationAnswer('lector')))));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(jsonResponse(impersonationAnswer('lector')))),
+      );
       await auth.impersonate('lector');
 
       const refreshed = superadminToken();
@@ -526,10 +546,16 @@ describe('auth store', () => {
     it('ends the impersonation when the session is lost', async () => {
       localStorage.setItem(ACCESS_TOKEN_KEY, superadminToken());
       const auth = useAuthStore();
-      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse(impersonationAnswer('lector')))));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(jsonResponse(impersonationAnswer('lector')))),
+      );
       await auth.impersonate('lector');
 
-      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(emptyResponse(401))));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(emptyResponse(401))),
+      );
       await api.get('/item').catch(() => undefined);
 
       expect(auth.isImpersonating).toBe(false);

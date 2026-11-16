@@ -73,8 +73,7 @@ function toEntry(raw: Record<string, unknown>): AuditEntry {
     actorEmail: asText(raw.actorEmail) || asText(raw.actor),
     action: asText(raw.action),
     entity: asText(raw.entity),
-    entityId:
-      typeof entityId === 'string' || typeof entityId === 'number' ? entityId : null,
+    entityId: typeof entityId === 'string' || typeof entityId === 'number' ? entityId : null,
     before: raw.before ?? null,
     after: raw.after ?? null,
   };
@@ -128,7 +127,16 @@ function csvCell(value: unknown): string {
 
 /** The rows as a spreadsheet: RFC 4180 quoting, one row per change, before/after as JSON. */
 export function auditToCsv(entries: readonly AuditEntry[]): string {
-  const header = ['id', 'occurredAtUtc', 'actorEmail', 'action', 'entity', 'entityId', 'before', 'after'];
+  const header = [
+    'id',
+    'occurredAtUtc',
+    'actorEmail',
+    'action',
+    'entity',
+    'entityId',
+    'before',
+    'after',
+  ];
   const lines = [header.join(',')];
   for (const entry of entries) {
     lines.push(

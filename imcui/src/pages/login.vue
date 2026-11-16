@@ -101,7 +101,9 @@ const localError = ref<string | null>(null);
 
 const message = computed(() => localError.value ?? auth.error);
 /** The guard sent the user here from somewhere: say why before they type. */
-const expired = computed(() => typeof route.query.redirect === 'string' && route.query.redirect !== '');
+const expired = computed(
+  () => typeof route.query.redirect === 'string' && route.query.redirect !== '',
+);
 
 async function submit(): Promise<void> {
   localError.value = null;

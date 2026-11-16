@@ -252,10 +252,7 @@ function user(overrides: Partial<ManagedUser> = {}): ManagedUser {
   };
 }
 
-async function mountPanel(
-  rows: ManagedUser[] = [user()],
-  mobile = false,
-): Promise<VueWrapper> {
+async function mountPanel(rows: ManagedUser[] = [user()], mobile = false): Promise<VueWrapper> {
   mocks.list.mockResolvedValue(rows);
   localStorage.setItem(
     ACCESS_TOKEN_KEY,
@@ -402,9 +399,9 @@ describe('UsersPanel', () => {
 
     const wrapper = await mountPanel([user()], true);
 
-    await wrapper.find('button[aria-label="Restablecer contraseña de lector@imc.test"]').trigger(
-      'click',
-    );
+    await wrapper
+      .find('button[aria-label="Restablecer contraseña de lector@imc.test"]')
+      .trigger('click');
     await flushPromises();
     await wrapper.find('form').trigger('submit');
     await flushPromises();

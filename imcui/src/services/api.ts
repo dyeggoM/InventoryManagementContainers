@@ -140,7 +140,11 @@ async function performRefresh(): Promise<string | null> {
   }
 }
 
-async function send(endpoint: string, options: RequestInit, isFormData: boolean): Promise<Response> {
+async function send(
+  endpoint: string,
+  options: RequestInit,
+  isFormData: boolean,
+): Promise<Response> {
   // Read the token per request, never at import time: it changes on login, refresh and logout.
   const token = getStoredToken();
   try {

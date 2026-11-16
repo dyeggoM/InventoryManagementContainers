@@ -41,7 +41,8 @@ interface StoredImpersonation {
 
 function readStoredImpersonation(): StoredImpersonation | null {
   try {
-    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(IMPERSONATION_KEY);
+    const raw =
+      typeof localStorage === 'undefined' ? null : localStorage.getItem(IMPERSONATION_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
@@ -97,7 +98,11 @@ export const useAuthStore = defineStore('auth', () => {
       ? (stored?.role ?? user.value?.roles[0] ?? null)
       : null;
   const borrowed: StoredImpersonation | null = borrowedRole
-    ? { role: borrowedRole, actor: stored?.actor ?? null, originalToken: stored?.originalToken ?? null }
+    ? {
+        role: borrowedRole,
+        actor: stored?.actor ?? null,
+        originalToken: stored?.originalToken ?? null,
+      }
     : null;
   const impersonatedRole = ref<Role | null>(borrowed?.role ?? null);
   const impersonatedBy = ref<{ id: string; email: string } | null>(borrowed?.actor ?? null);
