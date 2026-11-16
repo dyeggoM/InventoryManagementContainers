@@ -31,9 +31,12 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   (comma, semicolon or tab).
 - **A restore gives the files back.** Deleting a record moves its attachments to `media/trash`; a
   restore returns them, and only a purge that passes the retention age destroys the bytes.
-- **The archive has a retention switch** (`POST /api/item/archive/purge`, superadmin): rows older than
-  `Archive:Retention:Days` can be removed on demand, and with nothing configured the route refuses
-  instead of guessing. Live records and files are never touched by it.
+- **The archive keeps a month, and the clock enforces it**: rows deleted more than
+  `Archive:Retention:Days` ago (**30 by default**) are removed by a daily sweep
+  (`Services/ArchiveRetentionSweeper.cs`) and by `POST /api/item/archive/purge` (superadmin, on demand,
+  optionally with another age). Both destroy the files the purged rows were the last owner of and both
+  leave an `ArchivePurge` audit row — the sweep names itself. Setting the age to `0` turns the sweep
+  off. Live records and files are never touched by it.
 - **The archive is a screen, not a database table** (`components/dashboard/ArchivePanel.vue`): the
   superadmin filters by label, by who deleted it and by a date range, pages through the server's
   total, and restores a record with a confirmation. A restored row is marked and cannot be restored
@@ -78,9 +81,13 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
 - The list is the page and the form is a full-height sheet with a pinned footer above the safe area;
   the action that matters is never below the fold.
 - Unsaved edits are protected: closing the sheet, or switching record on a desktop, asks first.
-- The API binds `0.0.0.0:5173` and the UI `0.0.0.0:9000` in the `lan` profile, development CORS is
-  open, and the client derives the API host from the page it was served from — so the same build
-  works from `localhost` and from the LAN address.
+- **The dashboard works on a phone**: at 390 px the five tabs fit without arrows (the import tab
+  reads "Importar", full name in `aria-label`), and the cards in users, audit and archive take the
+  panel's width so a long entity id truncates instead of pushing the row's action off screen. Desktop
+  is unchanged, measured at 1300 px.
+- The API binds `0.0.0.0:5173` and the UI `0.0.0.0:9000` in the `lan` profile, and the client derives
+  the API host from the page it was served from — so the same build works from `localhost` and from
+  the LAN address. Development CORS reflects only loopback and private-network origins.
 
 ## Installable
 

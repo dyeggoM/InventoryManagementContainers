@@ -6,7 +6,55 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
-## Pending — `refactor/readability-and-tests`
+## #51 — The dashboard is usable on a phone · merged 2026-11-15
+
+**Fixed — the management screens were cut off at 390 px.** The tab bar held 534 px of tabs in a 356 px
+bar (the last tab sat entirely off screen), and the three panels with mobile cards took their
+`min-content` width, so one long entity id pushed the row and its action button past the edge with no
+scroll to reach them. Below `sm` the import tab reads "Importar" with the full name in `aria-label`,
+the tabs are tighter, and the cards carry Quasar's `full-width`. Import and impersonation measured
+clean and were left alone; desktop at 1300 px is unchanged.
+
+## #50 — The ledger keeps a month, and the clock enforces it · merged 2026-11-15
+
+**Changed — the delete ledger keeps a month, and now something enforces it.** `Archive:Retention:Days`
+had no default, so `POST /api/item/archive/purge` answered `400` unless somebody configured an age or
+passed one; the policy existed in a document. The default is now **30 days**, and a daily sweep
+(`ArchiveRetentionSweeper`) applies it without anyone calling the endpoint: the rows older than the
+cutoff go, the files they were the last owner of go with them, and the purge leaves an `ArchivePurge`
+audit row either way — `by: "archive-retention"` for the sweep, the caller's id for the endpoint. The
+age resolves in one place for both: request → `ARCHIVE_RETENTION_DAYS` → `Archive:Retention:Days` →
+30. Setting `0` turns the sweep off and leaves the endpoint as the only way in, which is what a dev box
+may prefer.
+
+## #49 — An accented subcategory finds the configuration entry · merged 2026-11-15
+
+**Fixed — the real inventory parked nine shelves in `Other`.** The file writes `SILLA BATERÍA` and
+`Constants` says `SILLA BATERIA`; the importer's fold used `string.Normalize`, which this API cannot
+use — `InvariantGlobalization` makes it a no-op at runtime, while the unit tests, in a project without
+that setting, kept folding and kept passing. The fold is a table of the diacritics these names use,
+the regression test posts a CSV through the endpoint, and the `TECALDO` alias now points at a label
+the configuration actually has (`BASE TECLADO SENCILLA`) instead of one it does not. On the real file:
+green 230 → 239, `Other` 83 → 74 yellow, import unchanged at 455 records.
+
+## #48 — The test harness stops deciding where the next host connects · merged 2026-11-15
+
+**Changed — the test harness stops deciding where the next host connects.** `ApiFactory` handed its
+own connection string and media root to the process as environment variables, so every host built
+afterwards inherited them: a second factory pointed at the first one's database, and a host created
+for a different purpose migrated a file another test had already migrated ("table AspNetRoles already
+exists", seen for real while writing the startup tests). Each host now receives its settings with
+`UseSetting`, which is what a value read during startup needs — `ConfigureAppConfiguration` arrives
+too late for the JWT key the API reads in `Main`. A test builds two factories and checks the second
+one does not see the first one's data, and that the process environment stays untouched.
+
+**Changed — two tests named more than they checked.** `Preview_RequiresAnAdminAndASpreadsheet`
+asserted a missing credential and nothing about the role; it is now two tests, and the second one
+signs in as a `lector` and gets 403, which is the half the old name was claiming and nobody was
+checking. `TrashOperations_RefuseAPathThatEscapesTheMediaRoot` created a file and then skipped the
+test when the platform refuses a symlink, leaving the file behind; the symlink is attempted first now.
+
+## #46 — The composition root and the controllers are readable · merged 2026-11-15
 
 **Changed — no behaviour change, and that is the point.** A readability pass over the API and the
 suite, with the 161 tests as the only proof that nothing moved underneath:
@@ -36,26 +84,6 @@ suite, with the 161 tests as the only proof that nothing moved underneath:
   rate limiting still sits before authentication; the anonymous probe endpoint answers; and the
   service lifetimes the API depends on are still what they were.
 
-## Pending — `chore/archive-retention`
-
-**Changed — the delete ledger keeps a month, and now something enforces it.** `Archive:Retention:Days`
-had no default, so `POST /api/item/archive/purge` answered `400` unless somebody configured an age or
-passed one; the policy existed in a document. The default is now **30 days**, and a daily sweep
-(`ArchiveRetentionSweeper`) applies it without anyone calling the endpoint: the rows older than the
-cutoff go, the files they were the last owner of go with them, and the purge leaves an `ArchivePurge`
-audit row either way — `by: "archive-retention"` for the sweep, the caller's id for the endpoint. The
-age resolves in one place for both: request → `ARCHIVE_RETENTION_DAYS` → `Archive:Retention:Days` →
-30. Setting `0` turns the sweep off and leaves the endpoint as the only way in, which is what a dev box
-may prefer.
-
-## #42 — The module map is committed with its files · merged 2026-11-15
-
-**Fixed — the module map is committed with the files it points at.** `AI_INVENTORY.md` is a router
-index into `inventory/<module>.md`, and those 74 module documents were in `.gitignore`: on GitHub,
-and in any fresh clone, every link in the map was dead. They are tracked from now on (676 KB) and the
-pre-commit hook, which already staged them, now has something to stage. Six orphan slices left behind
-by renamed files went with the regeneration; the index and the directory now agree exactly.
-
 ## #43 — The import keeps the configuration's tree · merged 2026-11-15
 
 **Changed — the import builds the configuration's tree, not the spreadsheet's.** A row used to land
@@ -76,6 +104,14 @@ yellow, saying why — measured on the sample file: `CASE PARA CONGAS` there, `I
 **Measured**: `dotnet test` 158 passed. The fixtures' verdicts moved with the rule — one green, five
 yellow, three red on the sample workbook — and every count in the tests was re-derived from a real
 preview, not adjusted until it passed.
+
+## #42 — The module map is committed with its files · merged 2026-11-15
+
+**Fixed — the module map is committed with the files it points at.** `AI_INVENTORY.md` is a router
+index into `inventory/<module>.md`, and those 74 module documents were in `.gitignore`: on GitHub,
+and in any fresh clone, every link in the map was dead. They are tracked from now on (676 KB) and the
+pre-commit hook, which already staged them, now has something to stage. Six orphan slices left behind
+by renamed files went with the regeneration; the index and the directory now agree exactly.
 
 ## #41 — A borrowed token cannot become the actor · merged 2026-11-15
 
@@ -110,24 +146,7 @@ phone on the workshop wifi — keeps working, verified both ways.
 `Salir` would have answered `403` and quietly skipped `ImpersonateEnd`. Every call carries the cookie
 now; the cookie is HttpOnly and scoped to `/api/auth`, so it only ever reaches the auth routes.
 
-## Pending — `chore/test-smells`
-
-**Changed — the test harness stops deciding where the next host connects.** `ApiFactory` handed its
-own connection string and media root to the process as environment variables, so every host built
-afterwards inherited them: a second factory pointed at the first one's database, and a host created
-for a different purpose migrated a file another test had already migrated ("table AspNetRoles already
-exists", seen for real while writing the startup tests). Each host now receives its settings with
-`UseSetting`, which is what a value read during startup needs — `ConfigureAppConfiguration` arrives
-too late for the JWT key the API reads in `Main`. A test builds two factories and checks the second
-one does not see the first one's data, and that the process environment stays untouched.
-
-**Changed — two tests named more than they checked.** `Preview_RequiresAnAdminAndASpreadsheet`
-asserted a missing credential and nothing about the role; it is now two tests, and the second one
-signs in as a `lector` and gets 403, which is the half the old name was claiming and nobody was
-checking. `TrashOperations_RefuseAPathThatEscapesTheMediaRoot` created a file and then skipped the
-test when the platform refuses a symlink, leaving the file behind; the symlink is attempted first now.
-
-## Pending — `feat/spreadsheet-import`
+## #34 — Stock can be imported from a spreadsheet · merged 2026-11-15
 
 **A spreadsheet can be read before it is imported.** `POST /api/import/preview` (admin) reads an
 `.xlsx`/`.xls` and answers the tree it describes — sheet, subcategory, record — with every row marked
