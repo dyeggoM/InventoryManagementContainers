@@ -71,7 +71,12 @@
         :readonly="!canWrite"
         class="q-mt-md"
       />
-      <q-input label="Sort order" v-model="treeItem.sortOrder" :readonly="!canWrite" class="q-mt-md" />
+      <q-input
+        label="Sort order"
+        v-model="treeItem.sortOrder"
+        :readonly="!canWrite"
+        class="q-mt-md"
+      />
     </div>
   </tree-master-detail>
 </template>

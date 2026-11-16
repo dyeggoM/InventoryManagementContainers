@@ -43,7 +43,9 @@
       <!-- The buttons take a row of their own on a phone instead of squeezing into the last column. -->
       <div
         class="filter-actions row items-center"
-        :class="$q.screen.lt.sm ? 'full-width q-gutter-x-sm' : 'col-12 col-sm-6 col-md-2 q-gutter-xs'"
+        :class="
+          $q.screen.lt.sm ? 'full-width q-gutter-x-sm' : 'col-12 col-sm-6 col-md-2 q-gutter-xs'
+        "
       >
         <q-btn unelevated no-caps color="primary" icon="search" label="Buscar" @click="apply" />
         <q-btn flat no-caps label="Limpiar" @click="clear" />
@@ -88,14 +90,7 @@
 
       <template v-slot:body-cell-detail="props">
         <q-td :props="props" class="text-right">
-          <q-btn
-            flat
-            dense
-            no-caps
-            icon="visibility"
-            label="Ver"
-            @click="openEntry(props.row)"
-          />
+          <q-btn flat dense no-caps icon="visibility" label="Ver" @click="openEntry(props.row)" />
         </q-td>
       </template>
     </q-table>
@@ -119,10 +114,7 @@
             <div class="col">
               <div class="text-body2 text-weight-medium ellipsis">
                 {{ entry.action }} · {{ entry.entity }}
-                <span
-                  v-if="entry.entityId !== null && entry.entityId !== ''"
-                  class="text-grey-7"
-                >
+                <span v-if="entry.entityId !== null && entry.entityId !== ''" class="text-grey-7">
                   #{{ entry.entityId }}
                 </span>
               </div>

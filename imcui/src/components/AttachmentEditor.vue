@@ -95,7 +95,9 @@
         type="button"
         @click="emit('add')"
       />
-      <span v-if="rows.length" class="text-caption text-grey-7">{{ rows.length }} on this item</span>
+      <span v-if="rows.length" class="text-caption text-grey-7"
+        >{{ rows.length }} on this item</span
+      >
     </div>
 
     <!-- The original lives behind the token, so it is fetched and shown here instead of in a tab. -->

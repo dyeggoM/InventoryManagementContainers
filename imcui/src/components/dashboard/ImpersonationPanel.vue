@@ -96,9 +96,7 @@ const caption = computed(() => {
   const roles = auth.impersonatable;
   if (roles.length === 0) return 'No hay ningún rol por debajo del tuyo.';
   const list =
-    roles.length === 1
-      ? roles[0]
-      : `${roles.slice(0, -1).join(', ')} o ${roles[roles.length - 1]}`;
+    roles.length === 1 ? roles[0] : `${roles.slice(0, -1).join(', ')} o ${roles[roles.length - 1]}`;
   return `Puedes entrar como ${list}.`;
 });
 

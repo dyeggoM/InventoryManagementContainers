@@ -56,7 +56,10 @@ describe('api transport', () => {
   });
 
   it('marks a 404 as a route the API has not built yet', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse({ title: 'Not Found' }, 404))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse({ title: 'Not Found' }, 404))),
+    );
 
     const error = await api.get('/users').catch((caught: unknown) => caught);
 
@@ -66,7 +69,10 @@ describe('api transport', () => {
   });
 
   it('turns an unreachable API into a readable message instead of a bare TypeError', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
+    );
 
     const error = await api.get('/item').catch((caught: unknown) => caught);
 

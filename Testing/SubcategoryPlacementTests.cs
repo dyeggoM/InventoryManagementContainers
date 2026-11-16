@@ -296,4 +296,96 @@ public sealed class SubcategoryPlacementTests
             Assert.That(placement.Group, Is.EqualTo("BASE CONGA DOBLE"));
         });
     }
+
+    [TestCase("CONGA03", "CONGA", "Percusion")]
+    [TestCase("TUMBADORA03", "TUMBADORA", "Percusion")]
+    [TestCase("TRIGER", "TRIGGER", "Instruments")]
+    [TestCase("BAJO ELECTROACUSTICO", "BAJO ELECTRO-ACUSTICO", "Instruments")]
+    public void SimilarityPlacesTheProposedConfiguredNameForReview(string source, string label, string category)
+    {
+        var subs = new Dictionary<string, SubcategoryPlacement.CategoryValue>(StringComparer.Ordinal)
+        {
+            ["CONGA"] = new("Percusion", "CONGA", "CONGA"),
+            ["TUMBADORA"] = new("Percusion", "TUMBADORA", "TUMBADORA"),
+            ["TRIGGER"] = new("Instruments", "TRIGGER", "TRIGGER"),
+            ["BAJO ELECTRO ACUSTICO"] = new("Instruments", "BAJO ELECTRO-ACUSTICO", "BAJO ELECTRO ACUSTICO"),
+        };
+        var map = new SubcategoryPlacement.CategoryMap(subs, Map().CategoryByLabel, "Other");
+        var placement = SubcategoryPlacement.Resolve(source, "BACKLINE", map, new());
+        Assert.Multiple(() =>
+        {
+            Assert.That(placement.Category, Is.EqualTo(category));
+            Assert.That(placement.Group, Is.EqualTo(label));
+            Assert.That(placement.Certain, Is.False);
+            Assert.That(placement.Suggestion?.Label, Is.EqualTo(label));
+            Assert.That(placement.Suggestion?.Category, Is.EqualTo(category));
+            Assert.That(placement.Suggestion?.Percent, Is.InRange(80, 100));
+            Assert.That(placement.Note, Does.Contain($"({placement.Suggestion?.Percent}%)"));
+        });
+    }
+
+    [TestCase("LUZ")]
+    [TestCase("SET")]
+    [TestCase("BODEGA")]
+    [TestCase("STAGEBOX")]
+    [TestCase("INTERFAZ MADI")]
+    [TestCase("SERVER")]
+    [TestCase("SOFTWARE")]
+    [TestCase("CASE PARA CONGAS")]
+    [TestCase("CASE PARA SPD SX")]
+    [TestCase("ATRIL CONGA")]
+    public void ADifferentWordIsNotATypo_EvenWhenTheLettersAgree(string source)
+    {
+        var placement = SubcategoryPlacement.Resolve(source, "BACKLINE", Map(), new());
+        Assert.Multiple(() =>
+        {
+            Assert.That(placement.Category, Is.EqualTo("Other"));
+            Assert.That(placement.Group, Is.EqualTo(source));
+            Assert.That(placement.Suggestion, Is.Null);
+            Assert.That(placement.Note, Does.Contain("para revisarla"));
+        });
+    }
+
+    [Test]
+    public void EquallyPlausibleNamesDoNotGetAProposal()
+    {
+        var subs = new Dictionary<string, SubcategoryPlacement.CategoryValue>(StringComparer.Ordinal)
+        {
+            ["TRIGGERA"] = new("Instruments", "TRIGGERA", "TRIGGERA"),
+            ["TRIGGERB"] = new("Instruments", "TRIGGERB", "TRIGGERB"),
+        };
+        var map = new SubcategoryPlacement.CategoryMap(subs, Map().CategoryByLabel, "Other");
+        var placement = SubcategoryPlacement.Resolve("TRIGER", "BACKLINE", map, new());
+        Assert.That(placement.Suggestion, Is.Null);
+    }
+
+    [TestCase("BODEGA")]
+    [TestCase("CASE")]
+    [TestCase("GUITARRA FENDER")]
+    public void SharedLettersWithoutTheSameObjectDoNotGetAProposal(string source)
+    {
+        var subs = new Dictionary<string, SubcategoryPlacement.CategoryValue>(StringComparer.Ordinal)
+        {
+            ["BODYPACK"] = new("Sonido", "BODYPACK", "BODYPACK"),
+            ["CRASH"] = new("Cymbals", "CRASH", "CRASH"),
+            ["GUITARRA ELECTRICA"] = new("Instruments", "GUITARRA ELECTRICA", "GUITARRA ELECTRICA"),
+        };
+        var placement = SubcategoryPlacement.Resolve(source, "BACKLINE",
+            new(subs, Map().CategoryByLabel, "Other"), new());
+        Assert.That(placement.Suggestion, Is.Null);
+    }
+
+    [Test]
+    public void ExactAndAliasAreStillCertainAndNeverSuggested()
+    {
+        foreach (var source in new[] { "BASE TECLADO SENCILLA", "TECALDO SENCILLA" })
+        {
+            var placement = Resolve(source, out _);
+            Assert.Multiple(() =>
+            {
+                Assert.That(placement.Certain, Is.True);
+                Assert.That(placement.Suggestion, Is.Null);
+            });
+        }
+    }
 }

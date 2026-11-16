@@ -162,6 +162,7 @@ describe('importService.preview', () => {
     // The two placement fields are optional on the wire, so an answer without them is not an error.
     expect(red.source).toBeNull();
     expect(preview.sheets[0]!.groups[0]!.note).toBeNull();
+    expect(preview.sheets[0]!.groups[0]!.suggestion).toBeNull();
   });
 
   it('reads the group note and the row source when the API sends them', () => {
@@ -185,6 +186,60 @@ describe('importService.preview', () => {
       '«CASE PARA CONGAS» no está en la configuración: se coloca en «Other» para revisarla.',
     );
     expect(group.items[0]!.source).toBe('CASES');
+  });
+
+  it('reads the similarity proposal the API sends beside a note that proposes one', () => {
+    const preview = toPreview({
+      sheets: [
+        {
+          name: 'Percusion',
+          groups: [
+            {
+              name: 'CONGA',
+              note: '«CONGA02» no está en la configuración; se propone «CONGA» (Percusion) por similitud (94%).',
+              suggestion: { label: 'CONGA', category: 'Percusion', percent: 94 },
+              items: [{ label: 'Conga 11"', row: 3, status: 'yellow' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(preview.sheets[0]!.groups[0]!.suggestion).toEqual({
+      label: 'CONGA',
+      category: 'Percusion',
+      percent: 94,
+    });
+  });
+
+  it('reads an incomplete proposal as no proposal, and keeps the percentage in range', () => {
+    const preview = toPreview({
+      sheets: [
+        {
+          name: 'Percusion',
+          groups: [
+            // No label: there is nothing to recommend, whatever the rest says.
+            { name: 'A', suggestion: { category: 'Percusion', percent: 94 }, items: [] },
+            // No categoría: the panel does not need it, and the label is the recommendation.
+            { name: 'B', suggestion: { label: 'CONGA', percent: 94 }, items: [] },
+            // A number that is not a percentage is clamped instead of printed as "9400%".
+            {
+              name: 'C',
+              suggestion: { label: 'CONGA', category: 'Percusion', percent: 9400 },
+              items: [],
+            },
+            // The contract says absent *or null*; both mean the same to the panel.
+            { name: 'D', suggestion: null, items: [] },
+          ],
+        },
+      ],
+    });
+
+    const [noLabel, noCategory, clamped, nulled] = preview.sheets[0]!.groups;
+    expect(noLabel!.suggestion).toBeNull();
+    expect(noCategory!.suggestion).toEqual({ label: 'CONGA', category: '', percent: 94 });
+    expect(clamped!.suggestion!.percent).toBe(100);
+    expect(nulled!.suggestion).toBeNull();
   });
 
   it('gives every row a key of its own, even when two rows claim the same line', () => {

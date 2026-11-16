@@ -17,7 +17,7 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **36
 
 ## Symbols by file
 
-### `imcui/src/services/archive.ts` — 138 lines, 11 symbols
+### `imcui/src/services/archive.ts` — 141 lines, 11 symbols
 
 - `L11` **interface** `ArchiveEntry` — fields: `archiveId:number, itemId:number, label:string, icon:string, parentId:number|null, attributes:string|null, isActive:boolean, createdAt:string|null, createdBy:string|null, updatedAt:string|null, updatedBy:string|null, deletedAtUtc:string|null, deletedById:string|null, deletedBy:string|null, attachmentsJson:string|null, restoredAtUtc:string|null, restoredById:string|null` — PATCH /api/item/{id}/activate (admin and up) GET /api/item/archive?page=&pageSize=&from=&to=&actor=&label= (superadmin) to `ItemsArchive` with its attachments, and the API can list it back and restore it. The archive contract the dashboard 
 - `L34` **interface** `ArchiveQuery` — fields: `page:number, pageSize:number, from:string|null, to:string|null, actor:string|null, label:string|null`
@@ -29,7 +29,7 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **36
 - `L84` **local_function** `toEntry.number`(value) · ← 2
 - `L86` **local_function** `toEntry.text`(value) · ← 11
 - `L113` **method** `archiveService.list`(query = ...) · → 2 (buildArchiveQuery, toEntry) · ← 7
-- `L135` **method** `archiveService.restore`(itemId) — the caller can say "already restored" and reload instead of treating it as a failure. Puts an archived item back. A 404 means there is no unrestored snapshot left for that id, so · ← 5
+- `L138` **method** `archiveService.restore`(itemId) — the caller can say "already restored" and reload instead of treating it as a failure. Puts an archived item back. A 404 means there is no unrestored snapshot left for that id, so · ← 5
 
 ## Call graph (resolved, in-project)
 

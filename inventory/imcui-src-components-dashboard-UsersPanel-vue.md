@@ -17,31 +17,31 @@ Indexed: **29 symbols** across **1 file** (0 C#, 0 Python, 29 JS/TS/Vue) · **3 
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/UsersPanel.vue` — 518 lines, 29 symbols
+### `imcui/src/components/dashboard/UsersPanel.vue` — 511 lines, 29 symbols
 
 - `L1` **component** `UsersPanel` (SFC) — state: `users, loading, pending, errorMessage, busyId, showCreate, creating, createError, draft, showReset, resetting, resetError, resetTarget, resetDraft, showPassword, passwordValue, passwordFor, copied`
-- `L362` **function** `UsersPanel.load`() · ← 1
-- `L380` **function** `UsersPanel.openCreate`()
-- `L388` **function** `UsersPanel.create`() · → 2 (UsersPanel.load, UsersPanel.showInitialPassword)
-- `L417` **function** `UsersPanel.openReset`(user)
-- `L424` **function** `UsersPanel.submitReset`() · → 1 (UsersPanel.showInitialPassword)
-- `L442` **function** `UsersPanel.showInitialPassword`(value, email) · ← 2
-- `L449` **function** `UsersPanel.copyPassword`()
-- `L459` **function** `UsersPanel.closePassword`()
-- `L465` **function** `UsersPanel.changeRoles`(user, roles)
-- `L481` **function** `UsersPanel.deactivate`(user)
+- `L355` **function** `UsersPanel.load`() · ← 1
+- `L373` **function** `UsersPanel.openCreate`()
+- `L381` **function** `UsersPanel.create`() · → 2 (UsersPanel.load, UsersPanel.showInitialPassword)
+- `L410` **function** `UsersPanel.openReset`(user)
+- `L417` **function** `UsersPanel.submitReset`() · → 1 (UsersPanel.showInitialPassword)
+- `L435` **function** `UsersPanel.showInitialPassword`(value, email) · ← 2
+- `L442` **function** `UsersPanel.copyPassword`()
+- `L452` **function** `UsersPanel.closePassword`()
+- `L458` **function** `UsersPanel.changeRoles`(user, roles)
+- `L474` **function** `UsersPanel.deactivate`(user)
 
 ## Call graph (resolved, in-project)
 
-- `UsersPanel.create()` (imcui/src/components/dashboard/UsersPanel.vue:388) → UsersPanel.load()`(L404)`, UsersPanel.showInitialPassword(value, email)`(L406)`
-- `UsersPanel.submitReset()` (imcui/src/components/dashboard/UsersPanel.vue:424) → UsersPanel.showInitialPassword(value, email)`(L432)`
+- `UsersPanel.create()` (imcui/src/components/dashboard/UsersPanel.vue:381) → UsersPanel.load()`(L397)`, UsersPanel.showInitialPassword(value, email)`(L399)`
+- `UsersPanel.submitReset()` (imcui/src/components/dashboard/UsersPanel.vue:417) → UsersPanel.showInitialPassword(value, email)`(L425)`
 
 ## Impact — who calls what
 
 Changing a symbol means checking every symbol on its right-hand side.
 
-- `UsersPanel.showInitialPassword(value, email)` ← UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:406)`, UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:432)`
-- `UsersPanel.load()` ← UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:404)`
+- `UsersPanel.showInitialPassword(value, email)` ← UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:399)`, UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:425)`
+- `UsersPanel.load()` ← UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:397)`
 
 ## Framework / dynamic calls (unresolved)
 

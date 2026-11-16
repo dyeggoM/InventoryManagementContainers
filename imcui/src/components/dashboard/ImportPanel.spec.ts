@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ImportPanel from './ImportPanel.vue';
 import { ApiError } from '@services/api';
-import type { ImportOutcome, ImportPreview } from '@services/import';
+import type { ImportOutcome, ImportPreview, ImportSuggestion } from '@services/import';
 
 // The panel talks to the API and to Quasar's notifications; both are replaced, so the spec sees the
 // payload that would go out and the copy the user reads, not a network or a toast queue.
@@ -284,6 +284,19 @@ function previewWithNote(note: string): ImportPreview {
         groups: [{ ...group, note }],
       },
     ],
+  };
+}
+
+/**
+ * The group the API placed by similarity: the note explains where it went and the suggestion says
+ * how close the match was. The group's own name is the proposed label — that is the real contract.
+ */
+function previewWithSuggestion(note: string, suggestion: ImportSuggestion): ImportPreview {
+  const preview = previewWithNote(note);
+  const group = preview.sheets[0]!.groups[0]!;
+  return {
+    ...preview,
+    sheets: [{ ...preview.sheets[0]!, groups: [{ ...group, suggestion }] }],
   };
 }
 
@@ -573,6 +586,97 @@ describe('ImportPanel — the tree', () => {
 
     expect(wrapper.find('.sheet-row .status-marker').text()).toBe('verde');
     expect(wrapper.find('.sheet-row .status-marker').attributes('data-color')).toBe('positive');
+  });
+});
+
+describe('ImportPanel — the similarity suggestion', () => {
+  const note =
+    '«CONGA02» no está en la configuración; se propone «CONGA» (Percusion) por similitud (94%).';
+
+  it('flags the proposal with a chip beside the name and keeps the note that explains it', async () => {
+    mocks.preview.mockResolvedValue(
+      previewWithSuggestion(note, { label: 'CONGA', category: 'Percusion', percent: 94 }),
+    );
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+
+    const group = wrapper.find('.import-group');
+    const row = group.find('.group-row');
+    const chipEl = row.find('.suggestion-chip');
+
+    // The chip is in the header, next to the group name, and it says *sugerencia*: nothing was
+    // renamed, the rows are already under that name.
+    expect(chipEl.exists()).toBe(true);
+    expect(chipEl.text()).toBe('Sugerencia · 94%');
+    expect(row.find('.group-name').text()).toBe('BASE TIPO BOOM');
+    // The explanation is still there — the chip flags, the note explains.
+    expect(group.find('.group-note').text()).toBe(note);
+    // A red group keeps both signals: the red count and the proposal, neither behind the other.
+    expect(row.find('.count-red').text()).toBe('1');
+    expect(row.find('.status-marker').text()).toBe('rojo');
+    expect(row.find('.status-marker').attributes('data-color')).toBe('negative');
+    // At desktop width the header stays on one line.
+    expect(row.classes()).not.toContain('group-row--wrap');
+  });
+
+  it('renders no chip and no empty container for the groups that carry no proposal', async () => {
+    // The common case, and the one that matters: only one of the two groups has a suggestion.
+    const preview = previewWithSuggestion(note, {
+      label: 'CONGA',
+      category: 'Percusion',
+      percent: 94,
+    });
+    const withSuggestion = preview.sheets[0]!.groups[0]!;
+    mocks.preview.mockResolvedValue({
+      ...preview,
+      sheets: [
+        {
+          ...preview.sheets[0]!,
+          groups: [
+            withSuggestion,
+            // Placed by its own name: no note, no suggestion, no chip.
+            {
+              ...withSuggestion,
+              name: 'BASE TIPO BOOM II',
+              note: null,
+              suggestion: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    const wrapper = await mountPanel();
+    await analyse(wrapper);
+
+    expect(wrapper.findAll('.suggestion-chip')).toHaveLength(1);
+    const groups = wrapper.findAll('.import-group');
+    expect(groups[0]!.find('.suggestion-chip').exists()).toBe(true);
+    // No chip *and* no placeholder left behind: the second header holds only what it had before.
+    expect(groups[1]!.find('.suggestion-chip').exists()).toBe(false);
+    expect(groups[1]!.find('.group-note').exists()).toBe(false);
+    expect(groups[1]!.find('.group-row').text()).not.toContain('Sugerencia');
+    // Four children: icon, name, badge, counts. No chip, and no empty slot where one would be.
+    expect(groups[1]!.findAll('.group-row > *')).toHaveLength(4);
+    expect(groups[1]!.find('.group-name').text()).toBe('BASE TIPO BOOM II');
+  });
+
+  it('keeps the chip beside the name on a phone, wrapping the header instead of widening it', async () => {
+    mocks.preview.mockResolvedValue(
+      previewWithSuggestion(note, { label: 'CONGA', category: 'Percusion', percent: 94 }),
+    );
+
+    const wrapper = await mountPanel(true);
+    await analyse(wrapper);
+
+    const row = wrapper.find('.import-group .group-row');
+    // Same header, now allowed to wrap: at 390px the chip drops under the name rather than
+    // pushing the badge and the counts past the panel's edge.
+    expect(row.classes()).toContain('group-row--wrap');
+    expect(row.find('.suggestion-chip').text()).toBe('Sugerencia · 94%');
+    expect(row.find('.count-red').text()).toBe('1');
+    expect(wrapper.find('.import-group .group-note').text()).toBe(note);
   });
 });
 

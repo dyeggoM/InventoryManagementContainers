@@ -6,6 +6,35 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — `feat/import-similarity`
+
+**Changed — `npm run lint:check` checks formatting instead of printing it.** The script ran
+`prettier "…"` with no `--check`, so it formatted to stdout and exited `0` on every file: the CI step
+that was supposed to catch a badly formatted file could never fail. It passes `--check` now, and the 31
+files that had drifted are formatted — the only change in them is whitespace and quotes.
+
+**Added — when the file writes a name the configuration almost has, the import proposes it instead of
+filing it under `Other`.** The placement ladder (exact → alias → value is a category → whole-word
+completes → plurals → truncates) is unchanged; a Jaro-Winkler score now runs only where every rung failed,
+proposes the closest configured value when it scores **≥ 0.80** and beats the runner-up by **≥ 0.02**, and
+**places the row there** in yellow — "se puede importar, conviene revisar" — with the percentage in the
+group's note and a structured `suggestion` in the preview (`{ label, category, percent }`). Green still
+means the configuration spells it exactly that way, and nothing is written to `Constants`.
+
+A proposal is a recommendation attached to a destination, not a silent rename: the row is importable
+where it now sits, and the note says why. A word guard refuses candidates whose first word differs and
+which neither contains the other, because that is what stops `ATRIL CONGA` from becoming `CONGA` at 83 %
+— an atril is a stand, not a drum — and what keeps `BODEGA → BODYPACK` (81 %), `CASE → CRASH` (81 %) and
+`GUITARRA FENDER → GUITARRA ELECTRICA` (89 %) out of the file.
+
+On the owner's spreadsheet, against a clean database: `Other` drops from **120 rows in 50 groups to 112 in
+42** — `CONGA02`, `CONGA03`, `TUMBADORA02`, `TUMBADORA03`, `TUMBA`, `TRIGER`, `BAJO ELECTROACUSTICO` and
+`MEDICIONES` land where they belong at 91–99 %. Four of those eight rows are red for "Sin descripción"
+and stay excluded until somebody names them. `LUZ` (18 rows), `SET` (10), `BODEGA`, `STAGEBOX`,
+`INTERFAZ MADI`, `SERVER`, `SOFTWARE`, `PANTALLA` and the 24 `CASE PARA …` labels get no proposal: they
+are concepts the configuration does not have, not typos, and guessing them would file stock in the wrong
+place. The preview shows the recommendation as a chip before anything is imported.
+
 ## #51 — The dashboard is usable on a phone · merged 2026-11-15
 
 **Fixed — the management screens were cut off at 390 px.** The tab bar held 534 px of tabs in a 356 px

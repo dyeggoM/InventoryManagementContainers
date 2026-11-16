@@ -10,7 +10,8 @@
  * Quasar injects `QUASAR_SERVICE_WORKER_FILE` when it builds the PWA; the fallback keeps a plain
  * `quasar build` working even when that variable is absent.
  */
-const workerFile = (import.meta.env.QUASAR_SERVICE_WORKER_FILE as string | undefined) ?? 'service-worker.js';
+const workerFile =
+  (import.meta.env.QUASAR_SERVICE_WORKER_FILE as string | undefined) ?? 'service-worker.js';
 
 export function registerServiceWorker(): void {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;

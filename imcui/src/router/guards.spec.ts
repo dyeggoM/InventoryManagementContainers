@@ -23,7 +23,11 @@ describe('router guards', () => {
   });
 
   it('keeps a signed-in user out of the login page', () => {
-    const decision = resolveNavigation({ path: '/login', isAuthenticated: true, roles: ['lector'] });
+    const decision = resolveNavigation({
+      path: '/login',
+      isAuthenticated: true,
+      roles: ['lector'],
+    });
 
     expect(decision.allowed).toBe(false);
     expect(decision.redirect).toBe(DEFAULT_PATH);
@@ -108,7 +112,8 @@ describe('router guards', () => {
 
   it('ignores a trailing slash', () => {
     expect(
-      resolveNavigation({ path: '/configuration/', isAuthenticated: true, roles: ['admin'] }).allowed,
+      resolveNavigation({ path: '/configuration/', isAuthenticated: true, roles: ['admin'] })
+        .allowed,
     ).toBe(true);
   });
 

@@ -23,13 +23,20 @@ export interface SessionUser {
  * mapping of `ClaimTypes` is the short JWT name, so `role` and `email` — the long URI forms are
  * accepted too, because a token minted by another handler still has to work.
  */
-const EMAIL_CLAIMS = ['email', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'];
+const EMAIL_CLAIMS = [
+  'email',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
+];
 const NAME_CLAIMS = [
   'unique_name',
   'name',
   'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name',
 ];
-const ID_CLAIMS = ['sub', 'nameid', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
+const ID_CLAIMS = [
+  'sub',
+  'nameid',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier',
+];
 const ROLE_CLAIMS = [
   'role',
   'roles',

@@ -15,12 +15,9 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-
 /** `BuyPrice` is a key in the data, but a person reads "Buy Price". */
 export function prettyLabel(key: string): string {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/^\s+|\s+$/g, '');
+  return key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^\s+|\s+$/g, '');
 }
 
 /**

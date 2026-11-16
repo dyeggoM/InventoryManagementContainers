@@ -225,6 +225,16 @@ en disco) y los cuatro bajos (**B-1..B-4**) en un solo pase.
   un `admin` ve *Importar* y *Suplantación* y no ve usuarios, auditoría ni archivo.
   Primera importación real sobre la base de desarrollo: 455 registros, 90 grupos, 5 raíces; la segunda
   pasada del mismo fichero creó 0.
+  Cerrado después: **propuesta por similitud** (`feat/import-similarity`). Donde la escalera no llega,
+  Jaro-Winkler propone el valor configurado más cercano con umbral *80 %* y margen *2 puntos*, y la fila
+  se coloca ahí en amarillo con el porcentaje en la nota y `suggestion` en el preview. Sobre base limpia,
+  `Other` baja de *120 filas en 50 grupos a 112 en 42*: `CONGA02/03`, `TUMBADORA02/03`, `TUMBA`, `TRIGER`,
+  `BAJO ELECTROACUSTICO`, `MEDICIONES` (91–99 %). Descartadas por el guarda léxico: `BODEGA → BODYPACK`
+  (81 %), `CASE → CRASH` (81 %), `GUITARRA FENDER → GUITARRA ELECTRICA` (89 %), `ATRIL CONGA → CONGA`
+  (83 %). Pendiente por decisión del propietario: *no* se añaden valores nuevos a `Constants`, así que
+  `LUZ` (18), `SET` (10), `BODEGA`, `STAGEBOX`, `INTERFAZ MADI` siguen en `Other`; y dos mejoras
+  conocidas, `CASE` → categoría `Cases` (94 %, hoy la similitud solo mira subcategorías) y `HI HAT 14"`
+  → `HIHAT` (la guarda exige primera palabra; queda como fallo conocido).
 
 Entering a kit still means one record at a time. Duplicate covers the repeated-attributes case; the
 next step is a CSV/Excel template the user fills in (parent, children, attributes per row, one column

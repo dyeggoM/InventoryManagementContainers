@@ -29,6 +29,14 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   imports, yellow imports but is worth a look, red never goes in — and lets the user untick yellow rows
   before writing. A second run of the same file creates nothing. It reads `.xlsx`, `.xls` and `.csv`
   (comma, semicolon or tab).
+- **A near-miss subcategory is proposed, not guessed** (`Services/SubcategoryPlacement.cs`): when the
+  configuration has nothing exact, an alias, a completed word, a plural or a truncation for the name the
+  file wrote, a Jaro-Winkler score proposes the closest configured value — at **≥ 80 %** and **≥ 2 points**
+  ahead of the runner-up — and the row is placed there in *yellow* with the percentage in the note and a
+  `suggestion` in the preview, which the panel shows as a chip. The guard requires the first word to
+  match or one name to contain the other, so `ATRIL CONGA` is not read as `CONGA`; names that are
+  concepts the configuration lacks (`LUZ`, `SET`, `BODEGA`) get no proposal and stay in `Other`. Nothing
+  is written to `Constants`.
 - **A restore gives the files back.** Deleting a record moves its attachments to `media/trash`; a
   restore returns them, and only a purge that passes the retention age destroys the bytes.
 - **The archive keeps a month, and the clock enforces it**: rows deleted more than

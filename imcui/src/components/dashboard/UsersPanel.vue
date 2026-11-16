@@ -3,15 +3,7 @@
     <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-subtitle1 text-weight-medium">Usuarios</div>
       <q-space />
-      <q-btn
-        flat
-        dense
-        no-caps
-        icon="refresh"
-        label="Recargar"
-        :loading="loading"
-        @click="load"
-      />
+      <q-btn flat dense no-caps icon="refresh" label="Recargar" :loading="loading" @click="load" />
       <q-btn
         unelevated
         no-caps
@@ -41,7 +33,8 @@
       :columns="columns"
       row-key="id"
       dense
-      flat bordered
+      flat
+      bordered
       :loading="loading"
       :rows-per-page-options="[0]"
       no-data-label="Todavía no hay usuarios para mostrar"

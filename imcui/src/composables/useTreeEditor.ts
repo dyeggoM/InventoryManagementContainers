@@ -213,7 +213,8 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
         await options.service.update(id, treeItem.value);
         feedback.success(`${cap(options.entity)} updated`);
       } else {
-        const created = (await options.service.create(treeItem.value)) as { id?: number } | undefined;
+        const created = (await options.service.create(treeItem.value)) as
+          { id?: number } | undefined;
         savedId = typeof created?.id === 'number' ? created.id : 0;
         feedback.success(`${cap(options.entity)} created`);
       }
@@ -254,7 +255,12 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     }
   }
 
-  function parentOptions(): { value: number | null; label: string; displayLabel: string; depth: number }[] {
+  function parentOptions(): {
+    value: number | null;
+    label: string;
+    displayLabel: string;
+    depth: number;
+  }[] {
     return options
       .flatten(tree.value)
       .filter((entry) => entry.id != treeItem.value.id || treeItem.value.id === 0)

@@ -123,7 +123,10 @@ export const archiveService = {
       items,
       page: response?.page ?? page,
       pageSize: response?.pageSize ?? pageSize,
-      total: typeof response?.total === 'number' && Number.isFinite(response.total) ? response.total : null,
+      total:
+        typeof response?.total === 'number' && Number.isFinite(response.total)
+          ? response.total
+          : null,
       hasMore: (response as { hasMore?: boolean })?.hasMore,
     };
   },

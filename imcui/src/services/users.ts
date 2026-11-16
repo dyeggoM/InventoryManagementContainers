@@ -114,8 +114,7 @@ export const usersService = {
     const returnedRole = normalizeRoles([asText(response?.role)])[0] ?? role;
     return {
       access_token: asText(response?.access_token),
-      expires_at_utc:
-        typeof response?.expires_at_utc === 'string' ? response.expires_at_utc : null,
+      expires_at_utc: typeof response?.expires_at_utc === 'string' ? response.expires_at_utc : null,
       role: returnedRole,
       scope: asText(response?.scope),
       impersonated_by:

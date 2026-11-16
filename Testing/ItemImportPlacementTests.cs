@@ -112,6 +112,94 @@ public sealed class ItemImportPlacementTests : ApiTestBase
     }
 
     [Test]
+    [Order(1)]
+    public async Task Preview_PlacesYellowSimilarityProposalsUnderConfiguredNames()
+    {
+        var preview = await Preview("import-similarity.csv", Csv);
+        var groups = preview.GetProperty("sheets").EnumerateArray()
+            .SelectMany(sheet => sheet.GetProperty("groups").EnumerateArray()
+                .Select(group => (Category: sheet.GetProperty("name").GetString()!, Group: group)))
+            .ToDictionary(entry => entry.Group.GetProperty("name").GetString()!, entry => entry);
+
+        foreach (var (source, label, category) in new[]
+        {
+            ("CONGA03", "CONGA", "Percusion"),
+            ("TUMBADORA03", "TUMBADORA", "Percusion"),
+            ("TRIGER", "TRIGGER", "Instruments"),
+            ("BAJO ELECTROACUSTICO", "BAJO ELECTRO-ACUSTICO", "Instruments"),
+        })
+        {
+            var (destination, group) = groups[label];
+            var suggestion = group.GetProperty("suggestion");
+            var percent = suggestion.GetProperty("percent").GetInt32();
+            Assert.Multiple(() =>
+            {
+                Assert.That(destination, Is.EqualTo(category), $"{source} lands under its configured category");
+                Assert.That(group.GetProperty("name").GetString(), Is.EqualTo(label));
+                Assert.That(group.GetProperty("status").GetString(), Is.EqualTo("yellow"));
+                Assert.That(group.GetProperty("yellow").GetInt32(), Is.EqualTo(1));
+                Assert.That(group.GetProperty("red").GetInt32(), Is.Zero);
+                Assert.That(suggestion.GetProperty("label").GetString(), Is.EqualTo(label));
+                Assert.That(suggestion.GetProperty("category").GetString(), Is.EqualTo(category));
+                Assert.That(percent, Is.InRange(80, 100));
+                Assert.That(group.GetProperty("note").GetString(), Does.Contain($"({percent}%)"));
+                Assert.That(group.GetProperty("items")[0].GetProperty("status").GetString(), Is.EqualTo("yellow"));
+            });
+        }
+
+        foreach (var source in new[] { "CASE PARA CONGAS", "BODEGA", "CASE", "GUITARRA FENDER" })
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(groups[source].Category, Is.EqualTo("Other"));
+                Assert.That(groups[source].Group.TryGetProperty("suggestion", out var suggestion)
+                    ? suggestion.ValueKind == JsonValueKind.Null : true, Is.True);
+            });
+        }
+        Assert.Multiple(() =>
+        {
+            var atril = groups.Values.Single(entry => entry.Group.GetProperty("items").EnumerateArray()
+                .Any(item => item.GetProperty("label").GetString() == "ATRIL DE PRUEBA"));
+            Assert.That(atril.Group.TryGetProperty("suggestion", out var atrilSuggestion)
+                ? atrilSuggestion.ValueKind == JsonValueKind.Null : true, Is.True,
+                "the competing whole-word candidates ATRIL and CONGA do not justify a proposal");
+            Assert.That(groups["BASE TECLADO SENCILLA"].Category, Is.EqualTo("Hardware"));
+            Assert.That(groups["BASE TECLADO SENCILLA"].Group.GetProperty("status").GetString(), Is.EqualTo("green"));
+            Assert.That(groups["BASE TECLADO SENCILLA"].Group.TryGetProperty("suggestion", out var suggestion)
+                ? suggestion.ValueKind == JsonValueKind.Null : true, Is.True);
+        });
+    }
+
+    [Test]
+    [Order(3)]
+    public async Task Import_WritesProposedYellowRowsUnderTheirConfiguredGroups()
+    {
+        var response = await PostImport("import-similarity.csv", Csv, includeYellow: true);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+
+        using var scope = Factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        var items = await context.Items.IgnoreQueryFilters().ToListAsync();
+        foreach (var (label, group, category) in new[]
+        {
+            ("CONGA DE PRUEBA", "CONGA", "Percusion"),
+            ("TUMBADORA DE PRUEBA", "TUMBADORA", "Percusion"),
+            ("TRIGGER DE PRUEBA", "TRIGGER", "Instruments"),
+            ("BAJO DE PRUEBA", "BAJO ELECTRO-ACUSTICO", "Instruments"),
+        })
+        {
+            var item = items.Single(row => row.Label == label);
+            var parent = items.Single(row => row.Id == item.ParentId);
+            var root = items.Single(row => row.Id == parent.ParentId);
+            Assert.Multiple(() =>
+            {
+                Assert.That(parent.Label, Is.EqualTo(group));
+                Assert.That(root.Label, Is.EqualTo(category));
+            });
+        }
+    }
+
+    [Test]
     [Order(2)]
     public async Task Import_WritesTheConfigurationTree_NotTheSheetNames()
     {

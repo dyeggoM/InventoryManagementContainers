@@ -28,9 +28,7 @@ describe('audit query string', () => {
         to: '2026-11-10',
         page: 2,
       }),
-    ).toBe(
-      '?actor=root%40imc.test&entity=Item&action=Update&from=2026-11-01&to=2026-11-10&page=2',
-    );
+    ).toBe('?actor=root%40imc.test&entity=Item&action=Update&from=2026-11-01&to=2026-11-10&page=2');
   });
 });
 

@@ -10,8 +10,8 @@
 
     <q-banner v-if="auth.isImpersonating" dense class="bg-orange-1 text-orange-10 q-mb-md">
       <template v-slot:avatar><q-icon name="switch_account" /></template>
-      {{ auth.impersonationNotice }}: las escrituras están bloqueadas.
-      Usa el botón Salir del aviso superior para volver a tu sesión.
+      {{ auth.impersonationNotice }}: las escrituras están bloqueadas. Usa el botón Salir del aviso
+      superior para volver a tu sesión.
     </q-banner>
 
     <q-card flat bordered>
@@ -38,7 +38,12 @@
           :label="$q.screen.lt.sm ? 'Importar' : 'Importar desde Excel'"
           aria-label="Importar desde Excel"
         />
-        <q-tab v-if="canImpersonate" name="impersonation" icon="switch_account" label="Suplantación" />
+        <q-tab
+          v-if="canImpersonate"
+          name="impersonation"
+          icon="switch_account"
+          label="Suplantación"
+        />
       </q-tabs>
 
       <q-separator />

@@ -54,7 +54,9 @@ public sealed class ItemImporter
     /// application already has. <paramref name="Note"/> says when the file spelled it differently.
     /// </summary>
     public sealed record ImportGroup(string Name, string Status, int Green, int Yellow, int Red,
-        IReadOnlyList<ImportItem> Items, string? Note = null);
+        IReadOnlyList<ImportItem> Items, string? Note = null, ImportSuggestion? Suggestion = null);
+
+    public sealed record ImportSuggestion(string Label, string Category, int Percent);
 
     /// <summary>
     /// One configuration category and what would land under it. The name is no longer the spreadsheet
@@ -171,7 +173,10 @@ public sealed class ItemImporter
                         group.Count(row => row.Item.Status == Yellow),
                         group.Count(row => row.Item.Status == Red),
                         group.Select(row => row.Item).ToList(),
-                        group.Select(row => row.Placement.Note).FirstOrDefault(note => !string.IsNullOrWhiteSpace(note))))
+                        group.Select(row => row.Placement.Note).FirstOrDefault(note => !string.IsNullOrWhiteSpace(note)),
+                        group.Select(row => row.Placement.Suggestion).OfType<SubcategoryPlacement.Suggestion>()
+                            .Select(suggestion => new ImportSuggestion(suggestion.Label, suggestion.Category, suggestion.Percent))
+                            .FirstOrDefault()))
                     .ToList()))
             .ToList();
 

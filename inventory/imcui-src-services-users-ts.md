@@ -17,7 +17,7 @@ Indexed: **14 symbols** across **1 file** (0 C#, 0 Python, 14 JS/TS/Vue) · **16
 
 ## Symbols by file
 
-### `imcui/src/services/users.ts` — 132 lines, 14 symbols
+### `imcui/src/services/users.ts` — 131 lines, 14 symbols
 
 - `L11` **interface** `ManagedUser` — fields: `id:string, email:string, roles:Role[], isActive:boolean, lastAccessUtc:string|null` — `isApiPending`) instead of an empty table that looks like a bug. A route the API has not deployed still answers 404, and the panels show "API pendiente" (see `PUT /api/users/{id}/roles`, `POST /api/users/{id}/password` and `DELETE /api/user
 - `L20` **interface** `CreateUserRequest` — fields: `email:string, password:string, roles:Role[]`
@@ -32,20 +32,20 @@ Indexed: **14 symbols** across **1 file** (0 C#, 0 Python, 14 JS/TS/Vue) · **16
 - `L90` **method** `usersService.updateRoles`(id, roles) — Replaces the whole role set: a user with two roles keeps them both. · ← 1
 - `L99` **method** `usersService.resetPassword`(id, password) — in again. `initialPassword` once; either way the account's refresh tokens are revoked, so it has to sign Sets or resets a password (superadmin only). Without one the API generates it and answers · → 1 (initialPasswordOf) · ← 4
 - `L112` **method** `usersService.impersonate`(role) — below the caller's, and 400/403 with its own message when the request is not allowed. Borrows a role, never an account: the API answers a read-only token whose role sits strictly · ← 2
-- `L129` **method** `usersService.deactivate`(id) — Deactivates the account; nothing is deleted from the audit trail. · ← 1
+- `L128` **method** `usersService.deactivate`(id) — Deactivates the account; nothing is deleted from the audit trail. · ← 1
 
 ## Call graph (resolved, in-project)
 
-- `UsersPanel.load()` (imcui/src/components/dashboard/UsersPanel.vue:362) → usersService.list()`(L367)`
-- `UsersPanel.create()` (imcui/src/components/dashboard/UsersPanel.vue:388) → usersService.create(request)`(L397)`
-- `UsersPanel.submitReset()` (imcui/src/components/dashboard/UsersPanel.vue:424) → usersService.resetPassword(id, password)`(L430)`
-- `UsersPanel.changeRoles(user, roles)` (imcui/src/components/dashboard/UsersPanel.vue:465) → usersService.updateRoles(id, roles)`(L469)`
-- `UsersPanel.deactivate(user)` (imcui/src/components/dashboard/UsersPanel.vue:481) → usersService.deactivate(id)`(L485)`
+- `UsersPanel.load()` (imcui/src/components/dashboard/UsersPanel.vue:355) → usersService.list()`(L360)`
+- `UsersPanel.create()` (imcui/src/components/dashboard/UsersPanel.vue:381) → usersService.create(request)`(L390)`
+- `UsersPanel.submitReset()` (imcui/src/components/dashboard/UsersPanel.vue:417) → usersService.resetPassword(id, password)`(L423)`
+- `UsersPanel.changeRoles(user, roles)` (imcui/src/components/dashboard/UsersPanel.vue:458) → usersService.updateRoles(id, roles)`(L462)`
+- `UsersPanel.deactivate(user)` (imcui/src/components/dashboard/UsersPanel.vue:474) → usersService.deactivate(id)`(L478)`
 - `<module>` (imcui/src/services/users.spec.ts) → usersService.create(request)`(L52)`, usersService.resetPassword(id, password)`(L94)`, usersService.impersonate(role)`(L128)`
 - `usersService.list()` (imcui/src/services/users.ts:78) → toUser(raw)`(L81)`
 - `usersService.create(request)` (imcui/src/services/users.ts:84) → toUser(raw)`(L86)`, initialPasswordOf(raw)`(L86)`
 - `usersService.resetPassword(id, password)` (imcui/src/services/users.ts:99) → initialPasswordOf(raw)`(L105)`
-- `impersonate(role)` (imcui/src/stores/auth-store.ts:228) → usersService.impersonate(role)`(L245)`
+- `impersonate(role)` (imcui/src/stores/auth-store.ts:233) → usersService.impersonate(role)`(L250)`
 
 ## Impact — who calls what
 
@@ -53,12 +53,12 @@ Changing a symbol means checking every symbol on its right-hand side.
 
 - `toUser(raw)` ← usersService.list()`(imcui/src/services/users.ts:81)`, usersService.create(request)`(imcui/src/services/users.ts:86)`
 - `initialPasswordOf(raw)` ← usersService.create(request)`(imcui/src/services/users.ts:86)`, usersService.resetPassword(id, password)`(imcui/src/services/users.ts:105)`
-- `usersService.create(request)` ← UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:397)`, <module>`(imcui/src/services/users.spec.ts:52)`
-- `usersService.resetPassword(id, password)` ← UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:430)`, <module>`(imcui/src/services/users.spec.ts:94)`
-- `usersService.impersonate(role)` ← <module>`(imcui/src/services/users.spec.ts:128)`, impersonate(role)`(imcui/src/stores/auth-store.ts:245)`
-- `usersService.list()` ← UsersPanel.load()`(imcui/src/components/dashboard/UsersPanel.vue:367)`
-- `usersService.updateRoles(id, roles)` ← UsersPanel.changeRoles(user, roles)`(imcui/src/components/dashboard/UsersPanel.vue:469)`
-- `usersService.deactivate(id)` ← UsersPanel.deactivate(user)`(imcui/src/components/dashboard/UsersPanel.vue:485)`
+- `usersService.create(request)` ← UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:390)`, <module>`(imcui/src/services/users.spec.ts:52)`
+- `usersService.resetPassword(id, password)` ← UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:423)`, <module>`(imcui/src/services/users.spec.ts:94)`
+- `usersService.impersonate(role)` ← <module>`(imcui/src/services/users.spec.ts:128)`, impersonate(role)`(imcui/src/stores/auth-store.ts:250)`
+- `usersService.list()` ← UsersPanel.load()`(imcui/src/components/dashboard/UsersPanel.vue:360)`
+- `usersService.updateRoles(id, roles)` ← UsersPanel.changeRoles(user, roles)`(imcui/src/components/dashboard/UsersPanel.vue:462)`
+- `usersService.deactivate(id)` ← UsersPanel.deactivate(user)`(imcui/src/components/dashboard/UsersPanel.vue:478)`
 
 ## Framework / dynamic calls (unresolved)
 

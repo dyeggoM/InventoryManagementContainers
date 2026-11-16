@@ -17,17 +17,17 @@ Indexed: **5 symbols** across **1 file** (0 C#, 0 Python, 5 JS/TS/Vue) · **38 r
 
 ## Symbols by file
 
-### `imcui/src/services/utilities.ts` — 53 lines, 5 symbols
+### `imcui/src/services/utilities.ts` — 50 lines, 5 symbols
 
 - `L1` **function** `fileToBase64`(file)
-- `L20` **function** `prettyLabel`(key) — `BuyPrice` is a key in the data, but a person reads "Buy Price". · ← 9
-- `L30` **function** `asText`(value) — and stringifying it would put "[object Object]" on the screen — so it becomes an empty string. A scalar as text. Anything else (an object, an array, a function) is not a name or a timestamp, · ← 29
-- `L40` **function** `formatTimestamp`(value) — missing value is shown as a dash rather than "Invalid Date". A timestamp for a table cell: the API sends UTC, the reader wants their own clock. An invalid or
-- `L48` **function** `toDateInputValue`(value) — A `yyyy-mm-dd` value for a date input, from an ISO timestamp.
+- `L19` **function** `prettyLabel`(key) — `BuyPrice` is a key in the data, but a person reads "Buy Price". · ← 9
+- `L27` **function** `asText`(value) — and stringifying it would put "[object Object]" on the screen — so it becomes an empty string. A scalar as text. Anything else (an object, an array, a function) is not a name or a timestamp, · ← 29
+- `L37` **function** `formatTimestamp`(value) — missing value is shown as a dash rather than "Invalid Date". A timestamp for a table cell: the API sends UTC, the reader wants their own clock. An invalid or
+- `L45` **function** `toDateInputValue`(value) — A `yyyy-mm-dd` value for a date input, from an ISO timestamp.
 
 ## Call graph (resolved, in-project)
 
-- `AttributeEditor.labelOptions(index)` (imcui/src/components/AttributeEditor.vue:282) → prettyLabel(key)`(L285)`
+- `AttributeEditor.labelOptions(index)` (imcui/src/components/AttributeEditor.vue:284) → prettyLabel(key)`(L287)`
 - `AttributeEditor.createFromList(index)` (imcui/src/components/AttributeEditor.vue:373) → prettyLabel(key)`(L404)`
 - `setup(_props, param)` (imcui/src/components/dashboard/ArchivePanel.spec.ts:161) → asText(value)`(L95)`
 - `setup(props)` (imcui/src/components/dashboard/AuditPanel.spec.ts:128) → asText(value)`(L89)`
@@ -36,16 +36,16 @@ Indexed: **5 symbols** across **1 file** (0 C#, 0 Python, 5 JS/TS/Vue) · **38 r
 - `toEntry.number(value)` (imcui/src/services/archive.ts:84) → asText(value)`(L85)`
 - `toEntry.text(value)` (imcui/src/services/archive.ts:86) → asText(value)`(L87)`
 - `toEntry(raw)` (imcui/src/services/audit.ts:67) → asText(value)`(L72)`
-- `toStatus(value)` (imcui/src/services/import.ts:118) → asText(value)`(L119)`
-- `toNumber(value)` (imcui/src/services/import.ts:123) → asText(value)`(L125)`
-- `toNullableText(value)` (imcui/src/services/import.ts:129) → asText(value)`(L130)`
-- `toReasons(value)` (imcui/src/services/import.ts:134) → asText(value)`(L136)`
-- `toItem(raw, sheet, used)` (imcui/src/services/import.ts:147) → asText(value)`(L158)`
-- `toGroup(raw, sheet, used)` (imcui/src/services/import.ts:173) → asText(value)`(L176)`
-- `toSheet(raw)` (imcui/src/services/import.ts:187) → asText(value)`(L189)`
-- `toIssue(raw)` (imcui/src/services/import.ts:216) → asText(value)`(L219)`
-- `toPreview(raw)` (imcui/src/services/import.ts:226) → asText(value)`(L233)`
-- `decodeAccessToken(token)` (imcui/src/services/session.ts:107) → asText(value)`(L116)`
+- `toStatus(value)` (imcui/src/services/import.ts:137) → asText(value)`(L138)`
+- `toNumber(value)` (imcui/src/services/import.ts:142) → asText(value)`(L144)`
+- `toNullableText(value)` (imcui/src/services/import.ts:148) → asText(value)`(L149)`
+- `toReasons(value)` (imcui/src/services/import.ts:153) → asText(value)`(L155)`
+- `toItem(raw, sheet, used)` (imcui/src/services/import.ts:166) → asText(value)`(L177)`
+- `toGroup(raw, sheet, used)` (imcui/src/services/import.ts:192) → asText(value)`(L195)`
+- `toSheet(raw)` (imcui/src/services/import.ts:224) → asText(value)`(L226)`
+- `toIssue(raw)` (imcui/src/services/import.ts:253) → asText(value)`(L256)`
+- `toPreview(raw)` (imcui/src/services/import.ts:263) → asText(value)`(L270)`
+- `decodeAccessToken(token)` (imcui/src/services/session.ts:114) → asText(value)`(L123)`
 - `toUser(raw)` (imcui/src/services/users.ts:54) → asText(value)`(L63)`
 - `usersService.impersonate(role)` (imcui/src/services/users.ts:112) → asText(value)`(L114)`
 - `<module>` (imcui/src/services/utilities.spec.ts) → prettyLabel(key)`(L6)`
@@ -55,7 +55,7 @@ Indexed: **5 symbols** across **1 file** (0 C#, 0 Python, 5 JS/TS/Vue) · **38 r
 Changing a symbol means checking every symbol on its right-hand side.
 
 - `asText(value)` ← setup(_props, param)`(imcui/src/components/dashboard/ArchivePanel.spec.ts:95)`, setup(props)`(imcui/src/components/dashboard/AuditPanel.spec.ts:89)`, setup(_props, param)`(imcui/src/components/dashboard/UsersPanel.spec.ts:144)`, toEntry.number(value)`(imcui/src/services/archive.ts:85)`, toEntry.text(value)`(imcui/src/services/archive.ts:87)`, toEntry(raw)`(imcui/src/services/archive.ts:94)` +13 more
-- `prettyLabel(key)` ← AttributeEditor.labelOptions(index)`(imcui/src/components/AttributeEditor.vue:285)`, AttributeEditor.createFromList(index)`(imcui/src/components/AttributeEditor.vue:404)`, <module>`(imcui/src/services/utilities.spec.ts:6)`
+- `prettyLabel(key)` ← AttributeEditor.labelOptions(index)`(imcui/src/components/AttributeEditor.vue:287)`, AttributeEditor.createFromList(index)`(imcui/src/components/AttributeEditor.vue:404)`, <module>`(imcui/src/services/utilities.spec.ts:6)`
 
 ## Framework / dynamic calls (unresolved)
 

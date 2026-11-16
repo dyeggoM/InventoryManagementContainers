@@ -31,17 +31,19 @@ interface Captured {
 
 function makeEditor(captured: Captured) {
   const service = {
-    getAll: vi.fn(() => Promise.resolve({
-      tree: [
-        {
-          id: 1,
-          label: 'Kit',
-          icon: 'drum',
-          children: [{ id: 2, label: 'Part', icon: '', children: [], parentId: 1 }],
-        },
-      ],
-      panels: [],
-    })),
+    getAll: vi.fn(() =>
+      Promise.resolve({
+        tree: [
+          {
+            id: 1,
+            label: 'Kit',
+            icon: 'drum',
+            children: [{ id: 2, label: 'Part', icon: '', children: [], parentId: 1 }],
+          },
+        ],
+        panels: [],
+      }),
+    ),
     create: vi.fn(() => Promise.resolve(undefined)),
     update: vi.fn(() => Promise.resolve(undefined)),
     delete: vi.fn(() => Promise.resolve(undefined)),
@@ -54,12 +56,12 @@ function makeEditor(captured: Captured) {
     flatten: (nodes) =>
       [{ id: 0, label: 'Add New', hierarchicalLabel: 'Add New', depth: 0 }].concat(
         nodes.flatMap((node) => [
-        {
-          id: node.id,
-          label: node.label,
-          hierarchicalLabel: node.label,
-          depth: 0,
-        },
+          {
+            id: node.id,
+            label: node.label,
+            hierarchicalLabel: node.label,
+            depth: 0,
+          },
           ...(node.children ?? []).map((child) => ({
             id: child.id,
             label: child.label,
@@ -272,7 +274,10 @@ describe('useTreeEditor', () => {
     await editor.deleteTreeItem();
 
     expect(feedback.error).toHaveBeenCalled();
-    expect(editor.treeItem.value.id, 'the form still holds the record that could not be deleted').toBe(2);
+    expect(
+      editor.treeItem.value.id,
+      'the form still holds the record that could not be deleted',
+    ).toBe(2);
   });
 
   it('takes the page snapshot into account when deciding what is dirty', async () => {

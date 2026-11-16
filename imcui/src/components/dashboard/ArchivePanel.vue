@@ -29,7 +29,9 @@
       <!-- The buttons take a row of their own on a phone instead of squeezing into the last column. -->
       <div
         class="filter-actions row items-center"
-        :class="$q.screen.lt.sm ? 'full-width q-gutter-x-sm' : 'col-12 col-sm-6 col-md-2 q-gutter-xs'"
+        :class="
+          $q.screen.lt.sm ? 'full-width q-gutter-x-sm' : 'col-12 col-sm-6 col-md-2 q-gutter-xs'
+        "
       >
         <q-btn unelevated no-caps color="primary" icon="search" label="Buscar" @click="apply" />
         <q-btn flat no-caps label="Limpiar" @click="clear" />
@@ -129,11 +131,7 @@
       >
         <q-card-section class="q-py-sm">
           <div class="row items-center no-wrap">
-            <q-icon
-              :name="entry.icon || 'inventory_2'"
-              size="18px"
-              class="text-grey-7 q-mr-xs"
-            />
+            <q-icon :name="entry.icon || 'inventory_2'" size="18px" class="text-grey-7 q-mr-xs" />
             <span class="text-body2 text-weight-medium ellipsis">{{ entry.label }}</span>
             <span class="text-caption text-grey-7 q-ml-xs">#{{ entry.itemId }}</span>
             <q-space />
@@ -284,7 +282,9 @@ const pageCount = computed(() =>
 const canGoNext = computed(() => {
   // The server knows whether another page exists; a full page is only a guess at it.
   if (hasMore.value !== null) return hasMore.value;
-  return pageCount.value === null ? rows.value.length >= pageSize.value : page.value < pageCount.value;
+  return pageCount.value === null
+    ? rows.value.length >= pageSize.value
+    : page.value < pageCount.value;
 });
 
 async function load(): Promise<void> {

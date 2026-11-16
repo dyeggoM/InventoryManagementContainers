@@ -40,15 +40,12 @@ const QBtn = defineComponent({
   emits: ['click'],
   render() {
     // Attributes such as aria-label stay on $attrs (they are not camelCased props): forward them.
-    return h(
-      'button',
-      {
-        'data-icon': this.icon,
-        'aria-label': this.ariaLabel,
-        ...this.$attrs,
-        onClick: (e: MouseEvent) => this.$emit('click', e),
-      },
-    );
+    return h('button', {
+      'data-icon': this.icon,
+      'aria-label': this.ariaLabel,
+      ...this.$attrs,
+      onClick: (e: MouseEvent) => this.$emit('click', e),
+    });
   },
 });
 
@@ -106,7 +103,8 @@ function mountEditor(rows: AttachmentRow[], types: string[] = ['Photo', 'User Ma
     props: {
       types,
       modelValue: rows,
-      'onUpdate:modelValue': (value: AttachmentRow[]) => holder.wrapper?.setProps({ modelValue: value }),
+      'onUpdate:modelValue': (value: AttachmentRow[]) =>
+        holder.wrapper?.setProps({ modelValue: value }),
     },
     global: { stubs },
   });
@@ -123,7 +121,9 @@ describe('AttachmentEditor', () => {
     expect(file.props('accept')).toBe('image/*');
     expect(file.props('capture')).toBe('environment');
     expect(
-      wrapper.findAllComponents({ name: 'QBtn' }).some((b) => b.props('label') === 'Pick from gallery instead'),
+      wrapper
+        .findAllComponents({ name: 'QBtn' })
+        .some((b) => b.props('label') === 'Pick from gallery instead'),
     ).toBe(true);
   });
 
@@ -135,13 +135,17 @@ describe('AttachmentEditor', () => {
     expect(file.props('accept')).toBeUndefined();
     expect(file.props('capture')).toBeUndefined();
     expect(
-      wrapper.findAllComponents({ name: 'QBtn' }).some((b) => b.props('label') === 'Pick from gallery instead'),
+      wrapper
+        .findAllComponents({ name: 'QBtn' })
+        .some((b) => b.props('label') === 'Pick from gallery instead'),
     ).toBe(false);
   });
 
   it('shows the preview when the row has one and an icon when it does not', () => {
     const withPreview = mountEditor([row({ thumbnailBase64: 'data:image/jpeg;base64,AAAA' })]);
-    expect(withPreview.findComponent({ name: 'QImg' }).props('src')).toBe('data:image/jpeg;base64,AAAA');
+    expect(withPreview.findComponent({ name: 'QImg' }).props('src')).toBe(
+      'data:image/jpeg;base64,AAAA',
+    );
 
     const without = mountEditor([row()]);
     expect(without.findComponent({ name: 'QImg' }).exists()).toBe(false);
@@ -165,7 +169,8 @@ describe('AttachmentEditor', () => {
 
   it('asks the page to add a row and reports how many the record has', async () => {
     const wrapper = mountEditor([row({ fileName: 'a.png' }), row({ fileName: 'b.png' })]);
-    const add = wrapper.findAllComponents({ name: 'QBtn' })
+    const add = wrapper
+      .findAllComponents({ name: 'QBtn' })
       .find((button) => button.props('label') === 'Add attachment')!;
 
     await add.trigger('click');
@@ -189,7 +194,9 @@ describe('AttachmentEditor', () => {
     expect(dialog.props('fileName')).toBe('x.png');
 
     const draft = mountEditor([row({ id: 0, fileName: 'new.png' })]);
-    expect(draft.findAllComponents({ name: 'QBtn' }).some((b) => b.props('label') === 'Open')).toBe(false);
+    expect(draft.findAllComponents({ name: 'QBtn' }).some((b) => b.props('label') === 'Open')).toBe(
+      false,
+    );
   });
 
   it('reads a picked file into the row as a data URL', async () => {

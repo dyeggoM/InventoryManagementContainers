@@ -186,9 +186,21 @@
           </div>
 
           <div v-for="group in sheet.groups" :key="group.key" class="import-group">
-            <div class="group-row row items-center no-wrap q-gutter-x-sm">
+            <div
+              class="group-row row items-center no-wrap q-gutter-x-sm"
+              :class="$q.screen.lt.sm ? 'group-row--wrap' : ''"
+            >
               <q-icon name="folder_open" size="16px" class="text-grey-6" />
               <span class="group-name text-body2 text-weight-medium">{{ group.name }}</span>
+              <!-- The proposal is a chip, not another sentence: it has to be seen before the button
+                   is pressed, and a note reads like every other explanation. Warning, never
+                   negative — the rows are placed where the header says; this only says "look". -->
+              <q-chip
+                v-if="group.suggestion"
+                dense
+                class="suggestion-chip"
+                :label="suggestionLabel(group.suggestion)"
+              />
               <q-badge :color="statusColour(group.counts)" rounded class="status-marker">
                 {{ statusLabel(group.counts) }}
               </q-badge>
@@ -310,6 +322,7 @@ import {
   type ImportOutcome,
   type ImportPreview,
   type ImportStatus,
+  type ImportSuggestion,
 } from '@services/import';
 import { useFeedback } from '../../composables/useFeedback';
 
@@ -344,6 +357,8 @@ interface FlatRow {
   group: string;
   /** The group's own explanation, when the API placed it by a rule rather than by its name. */
   groupNote: string | null;
+  /** The similarity proposal behind that explanation, when there is one. */
+  groupSuggestion: ImportSuggestion | null;
   item: ImportItem;
 }
 
@@ -351,6 +366,7 @@ interface VisibleGroup {
   key: string;
   name: string;
   note: string | null;
+  suggestion: ImportSuggestion | null;
   counts: Counts;
   rows: FlatRow[];
 }
@@ -392,6 +408,7 @@ const rows = computed<FlatRow[]>(() => {
           groupIndex,
           group: group.name,
           groupNote: group.note ?? null,
+          groupSuggestion: group.suggestion ?? null,
           item,
         });
       }
@@ -474,6 +491,7 @@ const visibleSheets = computed<VisibleSheet[]>(() => {
         key: groupKey,
         name: row.group,
         note: row.groupNote,
+        suggestion: row.groupSuggestion,
         counts: emptyCounts(),
         rows: [],
       };
@@ -505,6 +523,14 @@ function statusColourOf(status: ImportStatus): string {
 
 function statusLabel(counts: Counts): string {
   return STATUS_LABELS[statusOf(counts)];
+}
+
+/**
+ * The chip's whole text. It says *sugerencia* on purpose: the rows are already where the header
+ * points, so the reader must not think the import renamed anything.
+ */
+function suggestionLabel(suggestion: ImportSuggestion): string {
+  return `Sugerencia · ${suggestion.percent}%`;
 }
 
 function isSkipped(row: FlatRow): boolean {
@@ -675,6 +701,29 @@ function reset(): void {
 
 .group-row {
   padding-left: 28px;
+}
+
+/* The name is the one thing in the header allowed to shrink: a long one wraps inside the panel
+   instead of pushing the badge and the counts out of it at 390px. */
+.group-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Below `sm` the header wraps like the item cards do: the suggestion chip drops to a second line
+   with the name instead of forcing the row wider than the panel. */
+.group-row--wrap {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+/* The similarity proposal: the warning pair from the theme tokens, so it reads as "you can, look
+   first" in both modes and never as an error. It is a chip so the eye finds it, the note explains. */
+.suggestion-chip {
+  background: var(--imc-warning-bg);
+  color: var(--imc-warning-text);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* The one line that explains a rule-made placement. It sits under the header, aligned with the

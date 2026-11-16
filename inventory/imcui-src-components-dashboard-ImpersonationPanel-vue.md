@@ -17,11 +17,11 @@ Indexed: **9 symbols** across **1 file** (0 C#, 0 Python, 9 JS/TS/Vue) · **0 re
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/ImpersonationPanel.vue` — 142 lines, 9 symbols
+### `imcui/src/components/dashboard/ImpersonationPanel.vue` — 140 lines, 9 symbols
 
 - `L1` **component** `ImpersonationPanel` (SFC) — state: `selectedRole, starting, stopping, errorMessage, roleOptions, caption`
-- `L105` **function** `ImpersonationPanel.start`()
-- `L124` **function** `ImpersonationPanel.stop`() — reset once the store has actually swapped the token back. Leaving is a round-trip — the API writes the `ImpersonateEnd` audit row — so the picker is only
+- `L103` **function** `ImpersonationPanel.start`()
+- `L122` **function** `ImpersonationPanel.stop`() — reset once the store has actually swapped the token back. Leaving is a round-trip — the API writes the `ImpersonateEnd` audit row — so the picker is only
 
 ## Framework / dynamic calls (unresolved)
 
