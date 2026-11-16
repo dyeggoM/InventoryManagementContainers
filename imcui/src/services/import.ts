@@ -81,6 +81,19 @@ export interface ImportCorrection {
   serial?: string;
   notes?: string;
   dimensions?: string;
+  /**
+   * The item's attribute set, keyed by the label Configuration gives the attribute.
+   *
+   * The map is a **patch**, not a snapshot, and the API reads the two cases apart: a key that is
+   * absent leaves the file's value alone, and a key sent as `""` removes the attribute. That is what
+   * lets the editor say "I did not touch this" and "I cleared this" without inventing a third state.
+   *
+   * Two labels do not belong here. `Code` is governed by `code`, the one property the uniqueness
+   * check validates, and a disagreeing `attributes.Code` is reported instead of written; and a
+   * correction named after one of the seven fields the importer derives is applied to that cell, so
+   * `Brand` here is the same thing as `brand` above.
+   */
+  attributes?: Record<string, string>;
 }
 
 /**
@@ -401,11 +414,14 @@ const CORRECTION_FIELDS = [
  * The corrections as the API parses them: one JSON array, every property a string, `source` and
  * `row` identifying the line. Trimmed, deduplicated by `source`+`row`, and **with empty fields left
  * out** — an empty string would clear the cell rather than keep what the file says.
+ *
+ * The attribute map is the one place where an empty string is data: it is how the editor says the
+ * attribute is gone, so an empty value is written as `""` and only an empty *name* is dropped.
  */
 export function toCorrectionPayload(
   corrections: readonly ImportCorrection[],
-): Record<string, string | number>[] {
-  const payload: Record<string, string | number>[] = [];
+): Record<string, unknown>[] {
+  const payload: Record<string, unknown>[] = [];
   const seen = new Set<string>();
 
   for (const correction of corrections) {
@@ -419,13 +435,22 @@ export function toCorrectionPayload(
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const entry: Record<string, string | number> = {};
+    const entry: Record<string, unknown> = {};
     if (source) entry.source = source;
     entry.row = row;
     for (const field of CORRECTION_FIELDS) {
       const value = (correction[field] ?? '').trim();
       if (value) entry[field] = value;
     }
+
+    const attributes: Record<string, string> = {};
+    for (const [label, value] of Object.entries(correction.attributes ?? {})) {
+      const name = label.trim();
+      if (!name) continue;
+      attributes[name] = (value ?? '').trim();
+    }
+    if (Object.keys(attributes).length > 0) entry.attributes = attributes;
+
     payload.push(entry);
   }
 

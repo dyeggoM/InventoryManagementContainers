@@ -410,30 +410,25 @@
           <div class="editor-label text-caption text-grey-7 q-mt-md">
             Lo que se importará · editable
           </div>
+          <!-- The same form the inventory uses to create an item: an imported record must be
+               editable with the fields it was created with, or the import writes items the app
+               cannot fix. `mode="group"` is what changes meaning: here the second field is the
+               subcategory the row will be created under, not an item id. -->
           <div class="editor-form">
-            <q-input
-              v-model="editor.draft.label"
-              dense
-              outlined
-              label="Descripción"
-              hint="Obligatoria: sin descripción la fila no se puede importar."
-              :error="editorTouched && !editor.draft.label.trim()"
-              error-message="Escribe una descripción para poder importar la fila."
-              class="editor-description"
+            <item-editor
+              v-model:label="editor.draft.label"
+              v-model:parent="editor.draft.subcategory"
+              v-model:attributes="editor.draft.attributes"
+              mode="group"
+              :parent-options="groupOptions"
+              :label-rule="descriptionRule"
+              :copy="editorCopy"
+              :attribute-labels="attributeLabels"
+              :attribute-lists="attributeLists"
+              :attribute-types="attributeTypes"
+              :readonly="false"
+              :create-value="canManageConfiguration ? createAttributeValue : undefined"
             />
-            <q-input v-model="editor.draft.code" dense outlined label="Código" />
-            <q-input
-              v-model="editor.draft.subcategory"
-              dense
-              outlined
-              label="Subcategoría"
-              hint="El nombre con el que se colocará en el árbol."
-            />
-            <q-input v-model="editor.draft.brand" dense outlined label="Marca" />
-            <q-input v-model="editor.draft.reference" dense outlined label="Referencia" />
-            <q-input v-model="editor.draft.serial" dense outlined label="Serial" />
-            <q-input v-model="editor.draft.notes" dense outlined label="Notas" />
-            <q-input v-model="editor.draft.dimensions" dense outlined label="Dimensiones" />
           </div>
         </q-card-section>
 
@@ -470,8 +465,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { getErrorMessage } from '@services/api';
+import ItemEditor from '../ItemEditor.vue';
+import type { ItemEditorCopy } from '../ItemEditor.vue';
+import { useAttributeCatalogue } from '../../composables/useAttributeCatalogue';
+import { useAuthStore } from '../../stores/auth-store';
+import type { Attributes } from '@services/items';
 import {
   importService,
   subcategoryFromRaw,
@@ -509,6 +509,31 @@ const STATUS_LABELS: Record<ImportStatus, string> = {
   red: 'rojo',
 };
 
+/**
+ * The label whose value the name field above the form carries. It is also one of the seven the
+ * importer derives, and the two are the same cell on the wire, so its attribute row is left out:
+ * two fields for one value can only end up disagreeing.
+ */
+const DESCRIPTION_LABEL = 'Description';
+
+/**
+ * The label governed by the correction's `code` property — the one the uniqueness check validates.
+ * A disagreeing `attributes.Code` is reported by the API instead of written, so this row edits
+ * `code`, never the attribute map.
+ */
+const CODE_LABEL = 'Code';
+
+/** The seven fields the importer derives from a row, as attribute labels. */
+const DERIVED_LABELS = [
+  DESCRIPTION_LABEL,
+  'Brand',
+  CODE_LABEL,
+  'Reference',
+  'Serial',
+  'Notes',
+  'Dimensions',
+];
+
 interface Counts {
   green: number;
   yellow: number;
@@ -545,21 +570,27 @@ interface VisibleSheet {
 }
 
 /**
- * The editable half of the editor: one string per field the API accepts as a correction. Everything
- * is a string because it comes from a spreadsheet cell and it is typed back into an input; the
- * payload drops the empty ones instead of guessing a null.
+ * What the dialog edits, and what a correction is measured against.
+ *
+ * `draft` is what the user sees; `baseline` is the row as the file wrote it. A correction is the
+ * **difference** between the two, never the whole form: sending every field on every save would turn
+ * the file's own values into edits and make the import's "corrections applied" count meaningless.
+ * The baseline is the file's, not the saved correction's, so reopening a corrected row and saving it
+ * again re-sends the same edit instead of dropping it.
  */
-interface Draft {
-  source: string;
-  row: number;
+interface Baseline {
   label: string;
   code: string;
   subcategory: string;
-  brand: string;
-  reference: string;
-  serial: string;
-  notes: string;
-  dimensions: string;
+  /** Attribute label -> the value the row carries, with no correction applied. */
+  attributes: Record<string, string>;
+}
+
+/** The half the user types: the item's name, the group it goes under, and its attribute rows. */
+interface Draft {
+  label: string;
+  subcategory: string;
+  attributes: Attributes[];
 }
 
 /** The open editor: the item it corrects, the file's row to show, and the fields being typed. */
@@ -575,6 +606,7 @@ interface Editor {
   headers: string[];
   /** The file's values, keyed by that same header. An absent cell reads as empty. */
   values: Record<string, string>;
+  baseline: Baseline;
   draft: Draft;
 }
 
@@ -603,8 +635,53 @@ const corrections = ref<Record<string, ImportCorrection>>({});
 const editorOpen = ref(false);
 /** The open editor, `null` when there is none. A copy: the tree may be replaced under it. */
 const editor = ref<Editor | null>(null);
-/** The description is required: its error only shows once the user tried to save without one. */
-const editorTouched = ref(false);
+
+/**
+ * The attribute half of Configuration, read the same way the inventory reads it. The dialog is a
+ * form over an item, so an attribute the app can create must be an attribute the import can correct.
+ */
+const {
+  labels: attributeLabels,
+  lists: attributeLists,
+  types: attributeTypes,
+  load: loadCatalogue,
+  createValue: createAttributeValue,
+} = useAttributeCatalogue({
+  onRefreshError: (error) => feedback.error(error, 'No se pudieron recargar los atributos.'),
+});
+
+const auth = useAuthStore();
+// Adding a value to Configuration is an admin's write, and never while impersonating.
+const canManageConfiguration = computed(() => auth.canManageConfiguration);
+
+/**
+ * The copy of the form. The component defaults to the inventory's English; this dialog speaks
+ * Spanish, and the two fields it renames are the two whose meaning changes with `mode`.
+ */
+const editorCopy: Partial<ItemEditorCopy> = {
+  details: 'El item',
+  name: 'Descripción',
+  nameHint: 'Obligatoria: sin descripción la fila no se puede importar.',
+  parent: 'Subcategoría',
+  parentHint: 'El grupo bajo el que se creará en el árbol.',
+  parentEmpty: 'Sin grupo',
+  attributes: 'Atributos',
+};
+
+/** A row cannot be imported without a description: the field says so before the save button does. */
+const descriptionRule = (value: string) =>
+  value.trim().length > 0 || 'Escribe una descripción para poder importar la fila.';
+
+onMounted(() => {
+  // The form is built from Configuration; a failure is reported where it happens, not on open.
+  void (async () => {
+    try {
+      await loadCatalogue();
+    } catch (error) {
+      feedback.error(error, 'No se pudieron cargar los atributos.');
+    }
+  })();
+});
 
 const onlyRed = ref(false);
 const onlyYellow = ref(false);
@@ -811,30 +888,136 @@ function sortedCorrections(list: ImportCorrection[]): ImportCorrection[] {
 const correctionList = computed(() => sortedCorrections(Object.values(corrections.value)));
 
 /**
- * The draft starts from what the server already answered for the row — so a corrected row reopens
- * with its correction — and falls back to the file only for the subcategory, which the item does
- * not carry: the API reports where the row was placed, not the cell the file wrote.
+ * The item's name as the file gives it: its own description cell, never `label`, which the API fills
+ * with a display fallback (the code) for a row that has none — editing that would write a code as a
+ * name.
  */
-function draftOf(item: ImportItem): Draft {
-  const saved = corrections.value[correctionKey(item.source, item.row)];
-  return {
-    source: item.source ?? '',
-    row: item.row,
-    label: saved?.label ?? descriptionFromRaw(item) ?? item.label,
-    code: saved?.code ?? item.code ?? '',
-    subcategory: saved?.subcategory ?? subcategoryFromRaw(item),
-    brand: saved?.brand ?? item.brand ?? '',
-    reference: saved?.reference ?? item.reference ?? '',
-    serial: saved?.serial ?? item.serial ?? '',
-    notes: saved?.notes ?? item.notes ?? '',
-    dimensions: saved?.dimensions ?? item.dimensions ?? '',
-  };
+function fileLabelOf(item: ImportItem): string {
+  return descriptionFromRaw(item) ?? item.label;
 }
+
+/**
+ * The attribute labels the dialog shows. Configuration's own labels come first, in its order; the
+ * seven fields the importer derives are added even when Configuration does not define them, because
+ * a value the import writes into an attribute the form cannot reach is a value nobody can fix.
+ * `Description` is left out on purpose: the name field above **is** the row's description.
+ */
+function attributeLabelsFor(item: ImportItem, saved: Record<string, string>): string[] {
+  const labels: string[] = [];
+  const seen = new Set<string>([DESCRIPTION_LABEL]);
+  const add = (label: string) => {
+    if (!label || seen.has(label)) return;
+    seen.add(label);
+    labels.push(label);
+  };
+  for (const label of attributeLabels.value) add(label);
+  for (const label of DERIVED_LABELS) add(label);
+  // A correction can carry a label Configuration has stopped defining; it must still be visible.
+  for (const label of Object.keys(saved)) add(label);
+  return labels;
+}
+
+/** One attribute value: the field the importer derives it into, or the row's own cell of that name. */
+function valueFromRow(item: ImportItem, cells: Record<string, string>, label: string): string {
+  const derived = derivedValue(item, label);
+  if (derived) return derived;
+  const cell = cellForHeader(cells, label);
+  return cell || derived || '';
+}
+
+/** The seven the importer derives, keyed by the attribute label the item is created with. */
+function derivedValue(item: ImportItem, label: string): string | null {
+  switch (label) {
+    case 'Description':
+      return fileLabelOf(item);
+    case 'Code':
+      return item.code ?? '';
+    case 'Brand':
+      return item.brand ?? '';
+    case 'Reference':
+      return item.reference ?? '';
+    case 'Serial':
+      return item.serial ?? '';
+    case 'Notes':
+      return item.notes ?? '';
+    case 'Dimensions':
+      return item.dimensions ?? '';
+    default:
+      return null;
+  }
+}
+
+/** A cell by its header, tolerant of case and accents: a file writes `MARCA`, Configuration `Marca`. */
+function cellForHeader(cells: Record<string, string>, label: string): string {
+  if (label in cells) return cells[label] ?? '';
+  const wanted = fold(label);
+  for (const [header, value] of Object.entries(cells)) {
+    if (fold(header) === wanted) return value;
+  }
+  return '';
+}
+
+function fold(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/** The attribute rows of the row being edited, with whatever this session already corrected. */
+function attributeRowsOf(item: ImportItem, saved: Record<string, string> = {}): Attributes[] {
+  const cells = item.raw ?? {};
+  return attributeLabelsFor(item, saved).map((label) => ({
+    label,
+    value: saved[label] ?? valueFromRow(item, cells, label),
+  }));
+}
+
+/** The row as the file wrote it: the yardstick every correction is measured against. */
+function baselineOf(item: ImportItem): Baseline {
+  const baseline: Baseline = {
+    label: fileLabelOf(item),
+    code: item.code ?? '',
+    subcategory: subcategoryFromRaw(item),
+    attributes: {},
+  };
+  for (const row of attributeRowsOf(item)) baseline.attributes[row.label] = row.value;
+  return baseline;
+}
+
+/**
+ * The groups a row can be put under: every group the file already produces, plus this row's own so
+ * the select never shows a blank. A name the file never meant is still typeable — `mode="group"`
+ * lets the field carry a new subcategory, which is how one is named that the configuration lacks.
+ */
+const groupOptions = computed<{ label: string; value: string }[]>(() => {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const add = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    names.push(trimmed);
+  };
+  for (const sheet of preview.value?.sheets ?? []) {
+    for (const group of sheet.groups) add(group.name);
+  }
+  const current = editor.value;
+  if (current) {
+    add(current.draft.subcategory);
+    // A row the file does not place anywhere keeps the cell it was written in.
+    if (!current.draft.subcategory.trim()) add(current.baseline.subcategory);
+  }
+  return names.map((name) => ({ label: name, value: name }));
+});
 
 function openEditor(row: FlatRow): void {
   if (!isEditable(row)) return;
   const item = row.item;
   const key = correctionKey(item.source, item.row);
+  const saved = corrections.value[key];
+  const baseline = baselineOf(item);
   editor.value = {
     key,
     row: item.row,
@@ -844,16 +1027,19 @@ function openEditor(row: FlatRow): void {
     corrected: key in corrections.value,
     headers: fileHeadersOf(item),
     values: item.raw ?? {},
-    draft: draftOf(item),
+    baseline,
+    draft: {
+      label: saved?.label ?? baseline.label,
+      subcategory: saved?.subcategory ?? baseline.subcategory,
+      attributes: attributeRowsOf(item, saved?.attributes ?? {}),
+    },
   };
-  editorTouched.value = false;
   editorOpen.value = true;
 }
 
 function closeEditor(): void {
   editorOpen.value = false;
   editor.value = null;
-  editorTouched.value = false;
 }
 
 /**
@@ -897,18 +1083,23 @@ async function saveEditor(): Promise<void> {
   const current = editor.value;
   if (!current || saving.value) return;
 
-  const draft = current.draft;
   // The description is what makes a red row importable; an empty one is refused by the server, so
   // the editor refuses to send it first.
-  if (!draft.label.trim()) {
-    editorTouched.value = true;
+  if (!current.draft.label.trim()) return;
+
+  const next: Record<string, ImportCorrection> = { ...corrections.value };
+  const correction = correctionOf(current);
+  const alreadyCorrected = current.key in next;
+  if (correction) next[current.key] = correction;
+  // Nothing left to say: the row goes back to the file, which is the correction being dropped.
+  else delete next[current.key];
+
+  // Nothing said before and nothing to say now: the dialog has nothing to ask the server for, and a
+  // round trip that changes nothing would only report a correction nobody made.
+  if (!correction && !alreadyCorrected) {
+    closeEditor();
     return;
   }
-
-  const next: Record<string, ImportCorrection> = {
-    ...corrections.value,
-    [current.key]: correctionOf(draft),
-  };
 
   if (
     await applyCorrections(
@@ -919,31 +1110,58 @@ async function saveEditor(): Promise<void> {
     closeEditor();
 }
 
+/** The value of one attribute row, trimmed; an absent row reads as empty. */
+function attributeValue(rows: Attributes[], label: string): string {
+  return (rows.find((row) => row.label.trim() === label)?.value ?? '').trim();
+}
+
 /**
- * The correction a draft describes: trimmed, and with every empty field **left out**, because an
- * absent field keeps what the file says while an empty string would clear the cell.
+ * The attribute map of a correction: **only the rows the user changed**, keyed by Configuration's
+ * label. An untouched attribute is absent, so the file keeps its own value; a cleared one goes out
+ * as `""`, which is how the API removes it. Sending every row would turn the file into a correction
+ * of itself and the import's count of applied corrections would stop meaning anything.
+ *
+ * `Description` and `Code` never appear here: they have their own properties (`label` and `code`),
+ * and a second copy could only disagree with the one that decides.
  */
-function correctionOf(draft: Draft): ImportCorrection {
-  const correction: ImportCorrection = { row: draft.row };
-  const source = draft.source.trim();
+function changedAttributes(current: Editor): Record<string, string> {
+  const changed: Record<string, string> = {};
+  for (const row of current.draft.attributes) {
+    const label = row.label.trim();
+    if (!label || label === DESCRIPTION_LABEL || label === CODE_LABEL) continue;
+    const value = (row.value ?? '').trim();
+    if (value === (current.baseline.attributes[label] ?? '').trim()) continue;
+    changed[label] = value;
+  }
+  return changed;
+}
+
+/**
+ * The correction a draft describes: the difference from the file, and nothing else. `null` when the
+ * user changed nothing — a correction that says nothing is not a correction, and counting it as one
+ * would make the import report edits nobody made.
+ */
+function correctionOf(current: Editor): ImportCorrection | null {
+  const correction: ImportCorrection = { row: current.row };
+  const source = current.source.trim();
   if (source) correction.source = source;
 
-  const fields = [
-    'label',
-    'code',
-    'subcategory',
-    'brand',
-    'reference',
-    'serial',
-    'notes',
-    'dimensions',
-  ] as const;
-  for (const field of fields) {
-    const value = draft[field].trim();
-    if (value) correction[field] = value;
-  }
+  const label = current.draft.label.trim();
+  if (label !== current.baseline.label.trim()) correction.label = label;
 
-  return correction;
+  const code = attributeValue(current.draft.attributes, CODE_LABEL);
+  if (code !== current.baseline.code.trim()) correction.code = code;
+
+  const subcategory = current.draft.subcategory.trim();
+  if (subcategory !== current.baseline.subcategory.trim()) correction.subcategory = subcategory;
+
+  const attributes = changedAttributes(current);
+  if (Object.keys(attributes).length > 0) correction.attributes = attributes;
+
+  // `row` and `source` identify the line; with nothing else there is nothing to apply.
+  return Object.keys(correction).some((key) => key !== 'row' && key !== 'source')
+    ? correction
+    : null;
 }
 
 /**

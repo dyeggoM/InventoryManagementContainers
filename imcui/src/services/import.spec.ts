@@ -556,4 +556,21 @@ describe('the file row and the corrections', () => {
     expect(correctionsOf(sent)).toEqual([{ source: 'BACKLINE', row: 57, label: 'Conga 11"' }]);
     expect(buildPreviewForm(workbook()).get('corrections')).toBeNull();
   });
+
+  it('carries the attribute patch, where an empty value is the removal and not an omission', () => {
+    const payload = toCorrectionPayload([
+      {
+        source: 'BACKLINE',
+        row: 57,
+        attributes: { Brand: 'DW', Reference: '', '  ': 'no name' },
+      },
+      // A correction with no attribute at all must not send an empty object: absent is the rule.
+      { source: 'BACKLINE', row: 58, label: 'Conga' },
+    ]);
+
+    expect(payload).toEqual([
+      { source: 'BACKLINE', row: 57, attributes: { Brand: 'DW', Reference: '' } },
+      { source: 'BACKLINE', row: 58, label: 'Conga' },
+    ]);
+  });
 });
