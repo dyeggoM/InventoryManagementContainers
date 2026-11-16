@@ -42,11 +42,14 @@ public sealed class ItemImporter
 
     /// <summary>What an import did, so the answer can be checked against the file.</summary>
     public sealed record ImportResult(int CreatedSheets, int CreatedGroups, int CreatedItems,
-        int SkippedRed, int SkippedYellow, int SkippedExisting, bool IncludeYellow);
+        int SkippedRed, int SkippedYellow, int SkippedExisting, bool IncludeYellow,
+        int Corrected = 0, IReadOnlyList<string>? CorrectionIssues = null);
 
     public sealed record ImportItem(string Label, string? Code, string? Brand, string? Reference,
         string? Serial, string? Notes, string? Dimensions, string Status, IReadOnlyList<string> Reasons, int Row,
-        string? Source = null);
+        string? Source = null, IReadOnlyDictionary<string, string?>? Raw = null);
+
+    public sealed record ImportCorrection(int Row, IReadOnlyDictionary<string, string?> Fields, string? Source = null);
 
     /// <summary>
     /// A group is what the file calls a SUB CATEGORIA, named the way the configuration names it: that
@@ -71,9 +74,11 @@ public sealed class ItemImporter
     public sealed record ImportIssue(string Sheet, int Row, string Level, string Message);
 
     public sealed record ImportPreview(IReadOnlyList<ImportSheet> Sheets, ImportSummary Summary,
-        IReadOnlyList<ImportIssue> Issues, IReadOnlyList<string> Normalizations);
+        IReadOnlyList<ImportIssue> Issues, IReadOnlyList<string> Normalizations,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? SourceHeaders = null);
 
-    private sealed record RawRow(int Row, string Sheet, Dictionary<string, string> Cells);
+    private sealed record RawRow(int Row, string Sheet, Dictionary<string, string> Cells,
+        IReadOnlyList<string?> Columns, IReadOnlyDictionary<string, string?>? Raw = null);
 
     /// <param name="format">
     /// Which reader to use. The caller knows the extension, so this is told, never guessed.
@@ -83,12 +88,15 @@ public sealed class ItemImporter
     /// for a workbook, whose sheets name themselves.
     /// </param>
     public async Task<ImportPreview> PreviewAsync(Stream stream, ImportFormat format = ImportFormat.Workbook,
-        string? sourceName = null, CancellationToken cancellationToken = default) =>
-        (await BuildAsync(stream, format, sourceName, cancellationToken)).Preview;
+        string? sourceName = null, CancellationToken cancellationToken = default,
+        IReadOnlyList<ImportCorrection>? corrections = null, IReadOnlyList<string>? correctionIssues = null) =>
+        (await BuildAsync(stream, format, sourceName, cancellationToken, corrections, correctionIssues)).Preview;
 
     /// <summary>The preview and the rows it is made of: one parse serves both calls.</summary>
-    private async Task<(ImportPreview Preview, List<(string Category, string Group, ImportItem Item)> Rows)> BuildAsync(
-        Stream stream, ImportFormat format, string? sourceName, CancellationToken cancellationToken)
+    private async Task<(ImportPreview Preview, List<(string Category, string Group, ImportItem Item)> Rows,
+        int Corrected)> BuildAsync(
+        Stream stream, ImportFormat format, string? sourceName, CancellationToken cancellationToken,
+        IReadOnlyList<ImportCorrection>? corrections, IReadOnlyList<string>? correctionIssues)
     {
         // .xls needs the code pages; .xlsx does not, but registering once is harmless and the
         // registration is idempotent.
@@ -108,7 +116,50 @@ public sealed class ItemImporter
         var seenCodes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var duplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (sheetName, rows) in ReadSource(stream, format, sourceName))
+        var sources = ReadSource(stream, format, sourceName);
+        var headers = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var correctionMessages = (correctionIssues ?? Array.Empty<string>()).ToList();
+        var selected = new Dictionary<(string Sheet, int Row), ImportCorrection>();
+        foreach (var correction in corrections ?? Array.Empty<ImportCorrection>())
+        {
+            var matches = sources.SelectMany(source => source.Rows)
+                .Where(row => row.Row == correction.Row &&
+                    (correction.Source is null || row.Sheet == correction.Source)).ToList();
+            if (matches.Count != 1)
+            {
+                correctionMessages.Add($"Fila {correction.Row}: {(matches.Count == 0 ? "no existe" : "es ambigua; indique source")}.");
+                continue;
+            }
+            selected[(matches[0].Sheet, matches[0].Row)] = correction;
+        }
+        // Decide code collisions across the whole workbook before judging any sheet. Otherwise an
+        // attempted repair could mark an unrelated, previously importable row red.
+        var fileCodes = sources.SelectMany(source =>
+        {
+            var index = source.Rows.FindIndex(row => HeaderMap(row.Cells).ContainsKey("description"));
+            if (index < 0) return Enumerable.Empty<(string Sheet, int Row, string? Code)>();
+            var header = HeaderMap(source.Rows[index].Cells);
+            return source.Rows.Skip(index + 1).Select(row =>
+                (row.Sheet, row.Row, Code: CleanOrNull(MapCells(row, header,
+                    source.Rows[index].Columns.Select(value => value ?? string.Empty).ToList()).Cells.GetValueOrDefault("code"))));
+        }).ToList();
+        foreach (var (key, correction) in selected.ToList())
+        {
+            if (!correction.Fields.TryGetValue("code", out var proposed)) continue;
+            var code = CleanOrNull(proposed);
+            if (code is null) continue;
+            if (fileCodes.Any(other => (other.Sheet, other.Row) != key &&
+                string.Equals(CleanOrNull(selected.TryGetValue((other.Sheet, other.Row), out var otherEdit) &&
+                    otherEdit.Fields.TryGetValue("code", out var changed) ? changed : other.Code),
+                    code, StringComparison.OrdinalIgnoreCase)))
+            {
+                selected.Remove(key);
+                correctionMessages.Add($"Fila {key.Row} ({key.Sheet}): corrección inválida; código repetido en el fichero.");
+            }
+        }
+        var applied = 0;
+
+        foreach (var (sheetName, rows) in sources)
         {
             if (rows.Count == 0) continue;
 
@@ -123,7 +174,28 @@ public sealed class ItemImporter
             }
 
             var header = HeaderMap(rows[headerIndex].Cells);
-            var data = rows.Skip(headerIndex + 1).Select(row => MapCells(row, header)).ToList();
+            var sourceHeader = rows[headerIndex].Columns.Select(value => value ?? string.Empty).ToList();
+            headers[sheetName] = sourceHeader;
+            var data = rows.Skip(headerIndex + 1).Select(row =>
+            {
+                var mapped = MapCells(row, header, sourceHeader);
+                if (!selected.TryGetValue((sheetName, row.Row), out var correction)) return mapped;
+                var cells = new Dictionary<string, string>(mapped.Cells, StringComparer.OrdinalIgnoreCase);
+                foreach (var (field, value) in correction.Fields)
+                {
+                    if (value is null) cells.Remove(field);
+                    else cells[field] = value;
+                }
+                var label = Clean(cells.GetValueOrDefault("description"));
+                var code = CleanOrNull(cells.GetValueOrDefault("code"));
+                if (label.Length == 0 || (code is not null && (!CodeShape.IsMatch(code) || takenCodes.Contains(code))))
+                {
+                    correctionMessages.Add($"Fila {row.Row} ({sheetName}): corrección inválida; se conserva la fila original.");
+                    return mapped;
+                }
+                applied++;
+                return mapped with { Cells = cells };
+            }).ToList();
             var (built, sections) = BuildSheet(sheetName, data, categories, brands, takenCodes,
                 seenCodes, duplicates, issues, normalizations);
             planned.AddRange(built);
@@ -153,6 +225,19 @@ public sealed class ItemImporter
                 }
                 : row).ToList();
         }
+
+        foreach (var message in correctionMessages)
+            issues.Add(new ImportIssue("*", 0, Yellow, message));
+
+        // Count only edits whose final verdict is importable; a failed repair remains a red row.
+        applied = planned.Count(row => row.Item.Status != Red &&
+            selected.ContainsKey((row.Item.Source!, row.Item.Row)) &&
+            !correctionMessages.Any(message => message.Contains($"Fila {row.Item.Row} ({row.Item.Source})")));
+
+        planned = planned.Select(row => row with
+        {
+            Item = row.Item with { Raw = row.Item.Status == Green ? null : row.Item.Raw }
+        }).ToList();
 
         // Rows are grouped by destination, not by source: two sheets that write the same subcategory
         // end up in one group under one category, which is the tree the application actually has.
@@ -200,11 +285,11 @@ public sealed class ItemImporter
                 "El CSV no tiene filas de datos: hace falta una cabecera con DESCRIPCION y al menos un elemento.");
         }
 
-        var preview = new ImportPreview(sheets, summary, issues, normalizations.ToList());
+        var preview = new ImportPreview(sheets, summary, issues, normalizations.ToList(), headers);
         var rowsToWrite = planned
             .Select(row => (Category: row.Placement.Category, Group: row.Placement.Group, Item: row.Item))
             .ToList();
-        return (preview, rowsToWrite);
+        return (preview, rowsToWrite, applied);
     }
 
     /// <summary>
@@ -217,9 +302,15 @@ public sealed class ItemImporter
     /// </summary>
     public async Task<ImportResult> ImportAsync(Stream stream, ImportFormat format = ImportFormat.Workbook,
         string? sourceName = null, bool includeYellow = true,
-        IReadOnlyCollection<string>? skipCodes = null, CancellationToken cancellationToken = default)
+        IReadOnlyCollection<string>? skipCodes = null, CancellationToken cancellationToken = default,
+        IReadOnlyList<ImportCorrection>? corrections = null, IReadOnlyList<string>? correctionIssues = null)
     {
-        var (preview, rows) = await BuildAsync(stream, format, sourceName, cancellationToken);
+        var (preview, rows, corrected) = await BuildAsync(stream, format, sourceName, cancellationToken,
+            corrections, correctionIssues);
+        var rejected = preview.Issues.Where(issue => issue.Message.Contains("corrección inválida") ||
+            issue.Message.Contains("es ambigua") || issue.Message.Contains("no existe") ||
+            issue.Message.Contains("JSON inválido")).Select(issue => issue.Message).ToList();
+
 
         var skip = new HashSet<string>(skipCodes ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var skippedRed = rows.Count(row => row.Item.Status == Red);
@@ -237,7 +328,7 @@ public sealed class ItemImporter
         var existingPairs = await ExistingPairsAsync(cancellationToken);
 
         if (wanted.Count == 0)
-            return new ImportResult(0, 0, 0, skippedRed, skippedYellow, 0, includeYellow);
+            return new ImportResult(0, 0, 0, skippedRed, skippedYellow, 0, includeYellow, corrected, rejected);
 
         var createdSheets = 0;
         var createdGroups = 0;
@@ -314,12 +405,13 @@ public sealed class ItemImporter
                 rows = preview.Summary.Rows,
                 createdSheets, createdGroups, createdItems,
                 skippedRed, skippedYellow, skippedExisting,
-                includeYellow
+                includeYellow, corrected
             }));
 
         await transaction.CommitAsync(cancellationToken);
 
-        return new ImportResult(createdSheets, createdGroups, createdItems, skippedRed, skippedYellow, skippedExisting, includeYellow);
+        return new ImportResult(createdSheets, createdGroups, createdItems, skippedRed, skippedYellow, skippedExisting,
+            includeYellow, corrected, rejected);
     }
 
     private static Item NewItem(string label, int? parentId, ImportItem? source = null)
@@ -397,7 +489,7 @@ public sealed class ItemImporter
                     Serial: CleanOrNull(row.Cells.GetValueOrDefault("serial")),
                     Notes: CleanOrNull(row.Cells.GetValueOrDefault("notes")),
                     Dimensions: CleanOrNull(row.Cells.GetValueOrDefault("dimensions")),
-                    Status: Red, Reasons: new[] { "Sin descripción." }, Row: row.Row, Source: name)));
+                    Status: Red, Reasons: new[] { "Sin descripción." }, Row: row.Row, Source: name, Raw: row.Raw)));
                 issues.Add(new ImportIssue(name, row.Row, Red, "Fila sin descripción: no se puede nombrar el elemento."));
                 continue;
             }
@@ -415,7 +507,7 @@ public sealed class ItemImporter
                 };
             }
 
-            built.Add((placement, judged with { Source = name }));
+            built.Add((placement, judged with { Source = name, Raw = row.Raw }));
         }
 
         return (built, skippedSections);
@@ -539,15 +631,16 @@ public sealed class ItemImporter
     private static RawRow? RawRowAt(int rowNumber, string sheet, IEnumerable<string?> values)
     {
         var cells = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var original = values.ToArray();
         var column = 0;
-        foreach (var value in values)
+        foreach (var value in original)
         {
             var text = value?.Trim() ?? string.Empty;
             if (text.Length > 0) cells[$"col{column}"] = text;
             column++;
         }
 
-        return cells.Count == 0 ? null : new RawRow(rowNumber, sheet, cells);
+        return cells.Count == 0 ? null : new RawRow(rowNumber, sheet, cells, original);
     }
 
     /// <summary>
@@ -612,7 +705,8 @@ public sealed class ItemImporter
         return map;
     }
 
-    private static RawRow MapCells(RawRow row, IReadOnlyDictionary<string, string> header)
+    private static RawRow MapCells(RawRow row, IReadOnlyDictionary<string, string> header,
+        IReadOnlyList<string> sourceHeader)
     {
         var cells = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (field, column) in header)
@@ -620,7 +714,11 @@ public sealed class ItemImporter
             if (row.Cells.TryGetValue(column, out var value)) cells[field] = value;
         }
 
-        return row with { Cells = cells };
+        var raw = new Dictionary<string, string?>(StringComparer.Ordinal);
+        for (var column = 0; column < sourceHeader.Count; column++)
+            if (sourceHeader[column].Length > 0 && !raw.ContainsKey(sourceHeader[column]))
+                raw[sourceHeader[column]] = column < row.Columns.Count ? row.Columns[column] : null;
+        return row with { Cells = cells, Raw = raw };
     }
 
     /// <summary>Trim, collapse inner runs of spaces and drop the BOM some exports carry.</summary>
