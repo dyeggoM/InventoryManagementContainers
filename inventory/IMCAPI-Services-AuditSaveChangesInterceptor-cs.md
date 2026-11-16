@@ -58,7 +58,7 @@ Indexed: **19 symbols** across **1 file** (19 C#, 0 Python, 0 JS/TS/Vue) · **42
 - `Services.AuditSaveChangesInterceptor.Prepare(DbContext? context, bool async, CancellationToken ct)` (IMCAPI/Services/AuditSaveChangesInterceptor.cs:55) → Services.AuditSaveChangesInterceptor.Serialize(EntityEntry entry, bool original)`(L128)`, Services.AuditSaveChangesInterceptor.RollbackAsync(DbContext? context, CancellationToken cancellationToken)`(L137)`, Services.AuditSaveChangesInterceptor.Rollback(DbContext? context)`(L138)`
 - `Services.AuditSaveChangesInterceptor.Serialize(EntityEntry entry, bool original)` (IMCAPI/Services/AuditSaveChangesInterceptor.cs:148) → Services.AuditSaveChangesInterceptor.Sensitive(string property, Type type)`(L146)`
 - `Services.AuditSaveChangesInterceptor.Persist(DbContext? context, bool async, CancellationToken ct)` (IMCAPI/Services/AuditSaveChangesInterceptor.cs:164) → Services.AuditSaveChangesInterceptor.Sensitive(string property, Type type)`(L174)`, Services.AuditSaveChangesInterceptor.InsertLog(DbContext context, AuditLog log, bool async, CancellationToken cancellationToken)`(L187)`
-- `Services.ItemImporter.ImportAsync(Stream stream, ImportFormat format, string? sourceName, bool includeYellow, …)` (IMCAPI/Services/ItemImporter.cs:306) → Services.AuditLogWriter.WriteAsync(string action, string? entity, string? entityId, string? actorUserId, …)`(L403)`
+- `Services.ItemImporter.ImportAsync(Stream stream, ImportFormat format, string? sourceName, bool includeYellow, …)` (IMCAPI/Services/ItemImporter.cs:339) → Services.AuditLogWriter.WriteAsync(string action, string? entity, string? entityId, string? actorUserId, …)`(L436)`
 
 ## Impact — who calls what
 

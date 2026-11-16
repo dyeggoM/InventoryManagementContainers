@@ -139,11 +139,47 @@ public sealed class ImportController : ControllerBase
                     continue;
                 }
                 var fields = new Dictionary<string, string?>(StringComparer.Ordinal);
+                var attributes = new Dictionary<string, string?>(StringComparer.Ordinal);
                 string? source = null;
                 var valid = true;
                 foreach (var property in entry.EnumerateObject())
                 {
                     if (property.Name == "row") continue;
+                    if (property.Name == "attributes")
+                    {
+                        if (property.Value.ValueKind != JsonValueKind.Object)
+                        {
+                            valid = false;
+                            continue;
+                        }
+                        if (property.Value.EnumerateObject().Count() > 40)
+                        {
+                            error = "Correction field 'attributes' exceeds 40 keys.";
+                            return false;
+                        }
+                        foreach (var attribute in property.Value.EnumerateObject())
+                        {
+                            if (attribute.Name.Length > 64)
+                            {
+                                error = $"Correction field 'attributes.{attribute.Name}' key exceeds 64 characters.";
+                                return false;
+                            }
+                            if (attribute.Value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+                            {
+                                valid = false;
+                                continue;
+                            }
+                            var attributeValue = attribute.Value.ValueKind == JsonValueKind.Null
+                                ? null : attribute.Value.GetString();
+                            if (attributeValue?.Length > 512)
+                            {
+                                error = $"Correction field 'attributes.{attribute.Name}' exceeds 512 characters.";
+                                return false;
+                            }
+                            attributes[attribute.Name] = attributeValue;
+                        }
+                        continue;
+                    }
                     if (property.Value.ValueKind != JsonValueKind.String && property.Value.ValueKind != JsonValueKind.Null)
                     {
                         valid = false;
@@ -161,7 +197,7 @@ public sealed class ImportController : ControllerBase
                         fields[property.Name == "label" ? "description" : property.Name] = value;
                     else valid = false;
                 }
-                if (valid) parsed.Add(new ItemImporter.ImportCorrection(number, fields, source));
+                if (valid) parsed.Add(new ItemImporter.ImportCorrection(number, fields, source, attributes));
                 else messages.Add($"Fila {number}: corrección inválida; se conserva la fila original.");
             }
         }

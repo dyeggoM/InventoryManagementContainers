@@ -244,4 +244,108 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
             Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain(fragment));
         }
     }
+
+    [Test]
+    public async Task ExtraAttribute_MergesWithFileAttributesOnImport()
+    {
+        var before = await PreviewWith();
+        var original = Items(before).First(item => item.GetProperty("status").GetString() == "green" &&
+            item.GetProperty("brand").GetString() is { Length: > 0 });
+        var label = Label(original);
+        var brand = original.GetProperty("brand").GetString();
+        var correction = JsonSerializer.Serialize(new[] { new {
+            row = original.GetProperty("row").GetInt32(), source = original.GetProperty("source").GetString(),
+            attributes = new Dictionary<string, string?> { ["Estado"] = "Bueno" }
+        } });
+        using var response = await Send("/api/import", correction);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        using var scope = Factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        var saved = await context.Items.SingleAsync(item => item.Label == label);
+        using var attributes = JsonDocument.Parse(saved.Attributes!);
+        Assert.Multiple(() => {
+            Assert.That(attributes.RootElement.GetProperty("Estado").GetString(), Is.EqualTo("Bueno"));
+            Assert.That(attributes.RootElement.GetProperty("Brand").GetString(), Is.EqualTo(brand));
+            Assert.That(attributes.RootElement.GetProperty("Description").GetString(), Is.EqualTo(label));
+        });
+    }
+
+    [Test]
+    public async Task AttributeDescription_RepairsMissingDescription()
+    {
+        var baseline = await PreviewWith();
+        var red = Items(baseline).Single(item => item.GetProperty("reasons").ToString().Contains("Sin descripción"));
+        var correction = JsonSerializer.Serialize(new[] { new {
+            row = red.GetProperty("row").GetInt32(), source = red.GetProperty("source").GetString(),
+            attributes = new Dictionary<string, string?> { ["Description"] = "BASE BOOM DW 5000", ["Brand"] = "DW" }
+        } });
+        var preview = await PreviewWith(correction);
+        var repaired = Items(preview).Single(item => Label(item) == "BASE BOOM DW 5000");
+        Assert.Multiple(() => {
+            Assert.That(repaired.GetProperty("status").GetString(), Is.EqualTo("green"));
+            Assert.That(repaired.GetProperty("attributes").GetProperty("Description").GetString(),
+                Is.EqualTo("BASE BOOM DW 5000"));
+            Assert.That(repaired.GetProperty("attributes").GetProperty("Brand").GetString(), Is.EqualTo("DW"));
+        });
+    }
+
+    [TestCase(null, true)]
+    [TestCase("", false)]
+    public async Task NullKeepsAndEmptyRemovesFileAttribute(string? replacement, bool retained)
+    {
+        var baseline = await PreviewWith();
+        var original = Items(baseline).First(item => item.GetProperty("status").GetString() == "green" &&
+            item.GetProperty("brand").GetString() is { Length: > 0 });
+        var correction = JsonSerializer.Serialize(new[] { new {
+            row = original.GetProperty("row").GetInt32(), source = original.GetProperty("source").GetString(),
+            attributes = new Dictionary<string, string?> { ["Brand"] = replacement }
+        } });
+        using var response = await Send("/api/import", correction);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        using var scope = Factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        var saved = await context.Items.SingleAsync(item => item.Label == Label(original));
+        using var attributes = JsonDocument.Parse(saved.Attributes!);
+        Assert.That(attributes.RootElement.TryGetProperty("Brand", out var brand), Is.EqualTo(retained));
+        if (retained) Assert.That(brand.GetString(), Is.EqualTo(original.GetProperty("brand").GetString()));
+    }
+
+    [Test]
+    public async Task ConflictingAttributeCode_ReportsIssueAndStoresExplicitCode()
+    {
+        var baseline = await PreviewWith();
+        var original = Items(baseline).First(item => item.GetProperty("status").GetString() == "green");
+        var correction = JsonSerializer.Serialize(new[] { new {
+            row = original.GetProperty("row").GetInt32(), source = original.GetProperty("source").GetString(),
+            code = "VALIDATED-42", attributes = new Dictionary<string, string?> { ["Code"] = "DIFFERENT-42" }
+        } });
+        var preview = await PreviewWith(correction);
+        Assert.That(preview.GetProperty("correctionIssues").ToString(), Does.Contain("attributes.Code"));
+        Assert.That(Items(preview).Single(item => Label(item) == Label(original)).GetProperty("code").GetString(),
+            Is.EqualTo("VALIDATED-42"));
+        using var response = await Send("/api/import", correction);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
+        using var scope = Factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+        var saved = await context.Items.SingleAsync(item => item.Label == Label(original));
+        using var attributes = JsonDocument.Parse(saved.Attributes!);
+        Assert.That(attributes.RootElement.GetProperty("Code").GetString(), Is.EqualTo("VALIDATED-42"));
+    }
+
+    [Test]
+    public async Task AttributeBounds_RejectOnBothRoutes()
+    {
+        foreach (var route in new[] { "/api/import/preview", "/api/import" })
+        foreach (var (attributes, field) in new[] {
+            (Enumerable.Range(0, 41).ToDictionary(i => $"Key{i}", _ => (string?)"x"), "attributes"),
+            (new Dictionary<string, string?> { [new string('K', 65)] = "x" }, "64 characters"),
+            (new Dictionary<string, string?> { ["Estado"] = new string('V', 513) }, "attributes.Estado")
+        })
+        {
+            using var response = await Send(route, JsonSerializer.Serialize(new[] { new { row = 3, attributes } }));
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+            Assert.That(problem.GetProperty("detail").GetString(), Does.Contain(field));
+        }
+    }
 }

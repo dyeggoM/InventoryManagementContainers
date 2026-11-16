@@ -47,9 +47,12 @@ public sealed class ItemImporter
 
     public sealed record ImportItem(string Label, string? Code, string? Brand, string? Reference,
         string? Serial, string? Notes, string? Dimensions, string Status, IReadOnlyList<string> Reasons, int Row,
-        string? Source = null, IReadOnlyDictionary<string, string?>? Raw = null);
+        string? Source = null, IReadOnlyDictionary<string, string?>? Raw = null,
+        IReadOnlyDictionary<string, string>? Attributes = null);
 
-    public sealed record ImportCorrection(int Row, IReadOnlyDictionary<string, string?> Fields, string? Source = null);
+    /// <summary>In Attributes, null leaves the file value unchanged; empty removes the attribute.</summary>
+    public sealed record ImportCorrection(int Row, IReadOnlyDictionary<string, string?> Fields,
+        string? Source = null, IReadOnlyDictionary<string, string?>? Attributes = null);
 
     /// <summary>
     /// A group is what the file calls a SUB CATEGORIA, named the way the configuration names it: that
@@ -81,7 +84,8 @@ public sealed class ItemImporter
     }
 
     private sealed record RawRow(int Row, string Sheet, Dictionary<string, string> Cells,
-        IReadOnlyList<string?> Columns, IReadOnlyDictionary<string, string?>? Raw = null);
+        IReadOnlyList<string?> Columns, IReadOnlyDictionary<string, string?>? Raw = null,
+        IReadOnlyDictionary<string, string>? Attributes = null);
 
     /// <param name="format">
     /// Which reader to use. The caller knows the extension, so this is told, never guessed.
@@ -189,6 +193,31 @@ public sealed class ItemImporter
                     if (value is null) cells.Remove(field);
                     else cells[field] = value;
                 }
+                var extra = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var (key, value) in correction.Attributes ?? new Dictionary<string, string?>())
+                {
+                    if (value is null) continue;
+                    var column = key.ToLowerInvariant() switch
+                    {
+                        "description" or "brand" or "code" or "reference" or "serial" or "notes" or "dimensions"
+                            => key.ToLowerInvariant(),
+                        _ => null
+                    };
+                    if (column == "code")
+                    {
+                        // The explicit code (or the file code) is what collision checks and storage use.
+                        if (!string.Equals(CleanOrNull(value), CleanOrNull(cells.GetValueOrDefault("code")),
+                            StringComparison.Ordinal))
+                            correctionMessages.Add($"Fila {row.Row} ({sheetName}): attributes.Code no coincide con code; prevalece code.");
+                        continue;
+                    }
+                    if (column is not null)
+                    {
+                        if (value.Length == 0) cells.Remove(column);
+                        else cells[column] = value;
+                    }
+                    else if (value.Length > 0) extra[key] = value;
+                }
                 var label = Clean(cells.GetValueOrDefault("description"));
                 var code = CleanOrNull(cells.GetValueOrDefault("code"));
                 if (label.Length == 0 || (code is not null && (!CodeShape.IsMatch(code) || takenCodes.Contains(code))))
@@ -197,7 +226,7 @@ public sealed class ItemImporter
                     return mapped;
                 }
                 applied++;
-                return mapped with { Cells = cells };
+                return mapped with { Cells = cells, Attributes = extra };
             }).ToList();
             var (built, sections) = BuildSheet(sheetName, data, categories, brands, takenCodes,
                 seenCodes, duplicates, issues, normalizations);
@@ -232,11 +261,15 @@ public sealed class ItemImporter
         // Count only edits whose final verdict is importable; a failed repair remains a red row.
         applied = planned.Count(row => row.Item.Status != Red &&
             selected.ContainsKey((row.Item.Source!, row.Item.Row)) &&
-            !correctionMessages.Any(message => message.Contains($"Fila {row.Item.Row} ({row.Item.Source})")));
+            !correctionMessages.Any(message => message.Contains($"Fila {row.Item.Row} ({row.Item.Source}): corrección inválida")));
 
         planned = planned.Select(row => row with
         {
-            Item = row.Item with { Raw = row.Item.Status == Green ? null : row.Item.Raw }
+            Item = row.Item with
+            {
+                Raw = row.Item.Status == Green ? null : row.Item.Raw,
+                Attributes = row.Item.Status == Red ? row.Item.Attributes : ItemAttributes(row.Item)
+            }
         }).ToList();
 
         // Rows are grouped by destination, not by source: two sheets that write the same subcategory
@@ -417,22 +450,7 @@ public sealed class ItemImporter
 
     private static Item NewItem(string label, int? parentId, ImportItem? source = null)
     {
-        var attributes = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (source is not null)
-        {
-            void Put(string key, string? value)
-            {
-                if (!string.IsNullOrWhiteSpace(value)) attributes[key] = value;
-            }
-
-            Put("Description", source.Label);
-            Put("Brand", source.Brand);
-            Put("Code", source.Code);
-            Put("Reference", source.Reference);
-            Put("Serial", source.Serial);
-            Put("Notes", source.Notes);
-            Put("Dimensions", source.Dimensions);
-        }
+        var attributes = source is null ? new Dictionary<string, string>(StringComparer.Ordinal) : ItemAttributes(source);
 
         return new Item
         {
@@ -442,6 +460,26 @@ public sealed class ItemImporter
             IsActive = true,
             Attributes = attributes.Count == 0 ? "{}" : JsonSerializer.Serialize(attributes)
         };
+    }
+
+    private static Dictionary<string, string> ItemAttributes(ImportItem source)
+    {
+        var attributes = new Dictionary<string, string>(StringComparer.Ordinal);
+        void Put(string key, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) attributes[key] = value;
+        }
+        Put("Description", source.Label);
+        Put("Brand", source.Brand);
+        Put("Code", source.Code);
+        Put("Reference", source.Reference);
+        Put("Serial", source.Serial);
+        Put("Notes", source.Notes);
+        Put("Dimensions", source.Dimensions);
+        foreach (var (key, value) in source.Attributes ?? new Dictionary<string, string>())
+            if (key is not ("Description" or "Brand" or "Code" or "Reference" or "Serial" or "Notes" or "Dimensions"))
+                attributes[key] = value;
+        return attributes;
     }
 
     private static bool Same(string? left, string? right) =>
@@ -490,7 +528,8 @@ public sealed class ItemImporter
                     Serial: CleanOrNull(row.Cells.GetValueOrDefault("serial")),
                     Notes: CleanOrNull(row.Cells.GetValueOrDefault("notes")),
                     Dimensions: CleanOrNull(row.Cells.GetValueOrDefault("dimensions")),
-                    Status: Red, Reasons: new[] { "Sin descripción." }, Row: row.Row, Source: name, Raw: row.Raw)));
+                    Status: Red, Reasons: new[] { "Sin descripción." }, Row: row.Row, Source: name, Raw: row.Raw,
+                    Attributes: row.Attributes)));
                 issues.Add(new ImportIssue(name, row.Row, Red, "Fila sin descripción: no se puede nombrar el elemento."));
                 continue;
             }
@@ -508,7 +547,7 @@ public sealed class ItemImporter
                 };
             }
 
-            built.Add((placement, judged with { Source = name, Raw = row.Raw }));
+            built.Add((placement, judged with { Source = name, Raw = row.Raw, Attributes = row.Attributes }));
         }
 
         return (built, skippedSections);
