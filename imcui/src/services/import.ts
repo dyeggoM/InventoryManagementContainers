@@ -44,6 +44,20 @@ export interface ImportItem {
   source?: string | null;
 }
 
+/**
+ * The API's recommendation about *where* a group went, when the name it read was not in the
+ * configuration and a similarity match was close enough to propose one. `name` on the group is
+ * already the proposed label: the rows really are placed there, so this is advice, never a rename.
+ */
+export interface ImportSuggestion {
+  /** The known subcategory the reader compares against. */
+  label: string;
+  /** The categoría that subcategory hangs from. */
+  category: string;
+  /** How close the match was, 0-100. */
+  percent: number;
+}
+
 export interface ImportGroup {
   name: string;
   status: ImportStatus;
@@ -53,6 +67,11 @@ export interface ImportGroup {
    * for a group the reader placed by name alone, which is the common case.
    */
   note?: string | null;
+  /**
+   * The similarity proposal behind a `note` that proposes something. Absent for most groups — the
+   * normal case — so the panel reads it through this optional field, never by parsing `note`.
+   */
+  suggestion?: ImportSuggestion | null;
   green: number;
   yellow: number;
   red: number;
@@ -177,10 +196,28 @@ function toGroup(raw: unknown, sheet: string, used: Set<string>): ImportGroup {
     status: toStatus(source.status),
     // Only a rule-decided placement carries one; absent and empty both read as "nothing to explain".
     note: toNullableText(source.note),
+    suggestion: toSuggestion(source.suggestion),
     green: toNumber(source.green),
     yellow: toNumber(source.yellow),
     red: toNumber(source.red),
     items: array(source.items).map((item) => toItem(item, sheet, used)),
+  };
+}
+
+/**
+ * A proposal with no label is not a recommendation the panel can show, and the API omits the whole
+ * object in the common case, so anything incomplete reads as "no suggestion" instead of a blank chip.
+ */
+function toSuggestion(value: unknown): ImportSuggestion | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = record(value);
+  const label = toNullableText(source.label);
+  if (!label) return null;
+  return {
+    label,
+    category: toNullableText(source.category) ?? '',
+    // Clamped to the range a percentage can mean, so a stray 9400 never becomes "9400%".
+    percent: Math.min(100, Math.max(0, Math.round(toNumber(source.percent)))),
   };
 }
 

@@ -32,19 +32,19 @@ Indexed: **10 symbols** across **1 file** (0 C#, 0 Python, 10 JS/TS/Vue) · **6 
 
 ## Call graph (resolved, in-project)
 
-- `configuration.flatten(nodes)` (imcui/src/pages/index/configuration.vue:152) → constantsService.flattenConstants(constants, parentPath, depth)`(L152)`
-- `inventory.loadConstants(resetRows)` (imcui/src/pages/index/inventory.vue:236) → constantsService.getByGroup(group)`(L239)`, constantsService.getAll()`(L241)`
-- `inventory.createAttributeValue(label, value)` (imcui/src/pages/index/inventory.vue:287) → constantsService.create(constant)`(L302)`
+- `configuration.flatten(nodes)` (imcui/src/pages/index/configuration.vue:157) → constantsService.flattenConstants(constants, parentPath, depth)`(L157)`
+- `inventory.loadConstants(resetRows)` (imcui/src/pages/index/inventory.vue:231) → constantsService.getByGroup(group)`(L234)`, constantsService.getAll()`(L236)`
+- `inventory.createAttributeValue(label, value)` (imcui/src/pages/index/inventory.vue:282) → constantsService.create(constant)`(L297)`
 - `constantsService.flattenConstants(constants, parentPath, depth)` (imcui/src/services/constants.ts:55) → constantsService.flattenConstants(constants, parentPath, depth)`(L78)`
 
 ## Impact — who calls what
 
 Changing a symbol means checking every symbol on its right-hand side.
 
-- `constantsService.flattenConstants(constants, parentPath, depth)` ← configuration.flatten(nodes)`(imcui/src/pages/index/configuration.vue:152)`, constantsService.flattenConstants(constants, parentPath, depth)`(imcui/src/services/constants.ts:78)`
-- `constantsService.getAll()` ← inventory.loadConstants(resetRows)`(imcui/src/pages/index/inventory.vue:241)`
-- `constantsService.getByGroup(group)` ← inventory.loadConstants(resetRows)`(imcui/src/pages/index/inventory.vue:239)`
-- `constantsService.create(constant)` ← inventory.createAttributeValue(label, value)`(imcui/src/pages/index/inventory.vue:302)`
+- `constantsService.flattenConstants(constants, parentPath, depth)` ← configuration.flatten(nodes)`(imcui/src/pages/index/configuration.vue:157)`, constantsService.flattenConstants(constants, parentPath, depth)`(imcui/src/services/constants.ts:78)`
+- `constantsService.getAll()` ← inventory.loadConstants(resetRows)`(imcui/src/pages/index/inventory.vue:236)`
+- `constantsService.getByGroup(group)` ← inventory.loadConstants(resetRows)`(imcui/src/pages/index/inventory.vue:234)`
+- `constantsService.create(constant)` ← inventory.createAttributeValue(label, value)`(imcui/src/pages/index/inventory.vue:297)`
 
 ## Framework / dynamic calls (unresolved)
 

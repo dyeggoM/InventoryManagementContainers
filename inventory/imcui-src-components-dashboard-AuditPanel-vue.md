@@ -17,28 +17,28 @@ Indexed: **18 symbols** across **1 file** (0 C#, 0 Python, 18 JS/TS/Vue) · **3 
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/AuditPanel.vue` — 328 lines, 18 symbols
+### `imcui/src/components/dashboard/AuditPanel.vue` — 320 lines, 18 symbols
 
 - `L1` **component** `AuditPanel` (SFC) — state: `rows, total, hasMore, page, pageSize, loading, pending, errorMessage, showDetail, selected, filters`
-- `L233` **function** `AuditPanel.load`() · ← 2
-- `L266` **function** `AuditPanel.apply`() · → 1 (AuditPanel.load) · ← 1
-- `L271` **function** `AuditPanel.clear`() · → 1 (AuditPanel.apply)
-- `L280` **function** `AuditPanel.goTo`(next) · → 1 (AuditPanel.load)
-- `L285` **function** `AuditPanel.openEntry`(entry)
-- `L290` **function** `AuditPanel.exportCsv`()
+- `L225` **function** `AuditPanel.load`() · ← 2
+- `L258` **function** `AuditPanel.apply`() · → 1 (AuditPanel.load) · ← 1
+- `L263` **function** `AuditPanel.clear`() · → 1 (AuditPanel.apply)
+- `L272` **function** `AuditPanel.goTo`(next) · → 1 (AuditPanel.load)
+- `L277` **function** `AuditPanel.openEntry`(entry)
+- `L282` **function** `AuditPanel.exportCsv`()
 
 ## Call graph (resolved, in-project)
 
-- `AuditPanel.apply()` (imcui/src/components/dashboard/AuditPanel.vue:266) → AuditPanel.load()`(L268)`
-- `AuditPanel.clear()` (imcui/src/components/dashboard/AuditPanel.vue:271) → AuditPanel.apply()`(L277)`
-- `AuditPanel.goTo(next)` (imcui/src/components/dashboard/AuditPanel.vue:280) → AuditPanel.load()`(L282)`
+- `AuditPanel.apply()` (imcui/src/components/dashboard/AuditPanel.vue:258) → AuditPanel.load()`(L260)`
+- `AuditPanel.clear()` (imcui/src/components/dashboard/AuditPanel.vue:263) → AuditPanel.apply()`(L269)`
+- `AuditPanel.goTo(next)` (imcui/src/components/dashboard/AuditPanel.vue:272) → AuditPanel.load()`(L274)`
 
 ## Impact — who calls what
 
 Changing a symbol means checking every symbol on its right-hand side.
 
-- `AuditPanel.load()` ← AuditPanel.apply()`(imcui/src/components/dashboard/AuditPanel.vue:268)`, AuditPanel.goTo(next)`(imcui/src/components/dashboard/AuditPanel.vue:282)`
-- `AuditPanel.apply()` ← AuditPanel.clear()`(imcui/src/components/dashboard/AuditPanel.vue:277)`
+- `AuditPanel.load()` ← AuditPanel.apply()`(imcui/src/components/dashboard/AuditPanel.vue:260)`, AuditPanel.goTo(next)`(imcui/src/components/dashboard/AuditPanel.vue:274)`
+- `AuditPanel.apply()` ← AuditPanel.clear()`(imcui/src/components/dashboard/AuditPanel.vue:269)`
 
 ## Framework / dynamic calls (unresolved)
 

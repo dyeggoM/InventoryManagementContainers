@@ -31,9 +31,9 @@ Indexed: **8 symbols** across **1 file** (0 C#, 0 Python, 8 JS/TS/Vue) · **7 re
 ## Call graph (resolved, in-project)
 
 - `FilePreviewDialog.load()` (imcui/src/components/FilePreviewDialog.vue:151) → attachmentsService.fetchFile(id)`(L164)`
-- `inventory.afterSave(id)` (imcui/src/pages/index/inventory.vue:219) → attachmentsService.upload(itemId, file, type)`(L227)`
-- `inventory.loadAttachments(id)` (imcui/src/pages/index/inventory.vue:328) → attachmentsService.getAllByItemId(id)`(L330)`
-- `inventory.removeAttachment(index)` (imcui/src/pages/index/inventory.vue:361) → attachmentsService.delete(id)`(L373)`
+- `inventory.afterSave(id)` (imcui/src/pages/index/inventory.vue:214) → attachmentsService.upload(itemId, file, type)`(L222)`
+- `inventory.loadAttachments(id)` (imcui/src/pages/index/inventory.vue:323) → attachmentsService.getAllByItemId(id)`(L325)`
+- `inventory.removeAttachment(index)` (imcui/src/pages/index/inventory.vue:356) → attachmentsService.delete(id)`(L368)`
 - `<module>` (imcui/src/services/attachment.spec.ts) → attachmentsService.fetchFile(id)`(L35)`
 
 ## Impact — who calls what
@@ -41,9 +41,9 @@ Indexed: **8 symbols** across **1 file** (0 C#, 0 Python, 8 JS/TS/Vue) · **7 re
 Changing a symbol means checking every symbol on its right-hand side.
 
 - `attachmentsService.fetchFile(id)` ← FilePreviewDialog.load()`(imcui/src/components/FilePreviewDialog.vue:164)`, <module>`(imcui/src/services/attachment.spec.ts:35)`
-- `attachmentsService.getAllByItemId(id)` ← inventory.loadAttachments(id)`(imcui/src/pages/index/inventory.vue:330)`
-- `attachmentsService.upload(itemId, file, type)` ← inventory.afterSave(id)`(imcui/src/pages/index/inventory.vue:227)`
-- `attachmentsService.delete(id)` ← inventory.removeAttachment(index)`(imcui/src/pages/index/inventory.vue:373)`
+- `attachmentsService.getAllByItemId(id)` ← inventory.loadAttachments(id)`(imcui/src/pages/index/inventory.vue:325)`
+- `attachmentsService.upload(itemId, file, type)` ← inventory.afterSave(id)`(imcui/src/pages/index/inventory.vue:222)`
+- `attachmentsService.delete(id)` ← inventory.removeAttachment(index)`(imcui/src/pages/index/inventory.vue:368)`
 
 ## Framework / dynamic calls (unresolved)
 

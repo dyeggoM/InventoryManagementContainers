@@ -26,7 +26,10 @@ public sealed class SubcategoryPlacement
     public SubcategoryPlacement(ApplicationContext context) => _context = context;
 
     /// <summary>Where a row would land: the category, the group under it, and why it landed there.</summary>
-    internal sealed record Placement(string Category, string Group, string? Note, bool Certain);
+    internal sealed record Placement(string Category, string Group, string? Note, bool Certain,
+        Suggestion? Suggestion = null);
+
+    internal sealed record Suggestion(string Label, string Category, int Percent);
 
     /// <summary>A configuration subcategory, with the category that owns it.</summary>
     internal sealed record CategoryValue(string Category, string Label, string Normalized);
@@ -122,8 +125,8 @@ public sealed class SubcategoryPlacement
     /// <summary>
     /// Decides where a row goes, in the order the evidence deserves: the configuration spells it that
     /// way, then the known misspellings, then the value is itself a category, then the file wrote a
-    /// shortened or extended form of a name the configuration has. What is left has no home and says
-    /// so instead of being guessed into one.
+    /// shortened or extended form of a name the configuration has. Similarity places what remains
+    /// under the proposed configured name, flagged for review rather than marked certain.
     /// </summary>
     internal static Placement Resolve(string? subcategory, string sheet, CategoryMap map,
         SortedSet<string> normalizations)
@@ -183,7 +186,96 @@ public sealed class SubcategoryPlacement
                 $"«{Clean(subcategory)}» encaja con varias subcategorías de «{category}»: se agrupa con su propio nombre.", false);
         }
 
+        // A whole-word rung found incompatible categories: similarity must not break that tie.
+        var suggestion = pool.Count == 0 ? SimilaritySuggestion(input, map) : null;
+        if (suggestion is not null)
+            return new Placement(suggestion.Category, suggestion.Label,
+                $"«{Clean(subcategory)}» no está en la configuración; se propone «{suggestion.Label}» ({suggestion.Category}) por similitud ({suggestion.Percent}%).",
+                false, suggestion);
+
         return new Placement(map.Fallback, Clean(subcategory),
             $"«{Clean(subcategory)}» no está en la configuración: se coloca en «{map.Fallback}» para revisarla.", false);
+    }
+
+    private static Suggestion? SimilaritySuggestion(string input, CategoryMap map)
+    {
+        CategoryValue? winner = null;
+        var best = 0d;
+        var second = 0d;
+        foreach (var candidate in map.Subs.Values)
+        {
+            if (!WordGuard(input, candidate.Normalized)) continue;
+            var score = JaroWinkler(input, candidate.Normalized);
+            if (score > best)
+            {
+                second = best;
+                best = score;
+                winner = candidate;
+            }
+            else if (score > second) second = score;
+        }
+
+        return winner is not null && best >= 0.80 && best - second >= 0.02
+            ? new Suggestion(winner.Label, winner.Category, (int)Math.Round(best * 100, MidpointRounding.AwayFromZero))
+            : null;
+    }
+
+    private static bool WordGuard(string input, string candidate)
+    {
+        // A one-token typo has no intact word to anchor to (TRIGER / TRIGGER). Four
+        // initial letters distinguish it from coincidental similarities (CASE / CRASH,
+        // BODEGA / BODYPACK). For compounds, a shared first word alone can still confuse a
+        // brand with a type (GUITARRA FENDER / GUITARRA ELECTRICA): anchor the next word too.
+        var inputWords = input.Split(' ');
+        var candidateWords = candidate.Split(' ');
+        if (inputWords.Length == 1 && candidateWords.Length == 1)
+            return SharedPrefix(input, candidate, 4);
+        if (ContainsWholeWords(input, candidate) || ContainsWholeWords(candidate, input)) return true;
+        return inputWords.Length > 1 && candidateWords.Length > 1
+            && inputWords[0] == candidateWords[0]
+            && SharedPrefix(inputWords[1], candidateWords[1], 4);
+    }
+
+    private static bool SharedPrefix(string left, string right, int length) =>
+        left.Length >= length && right.Length >= length
+        && string.CompareOrdinal(left, 0, right, 0, length) == 0;
+
+    private static bool ContainsWholeWords(string longer, string shorter) =>
+        longer.StartsWith(shorter + " ", StringComparison.Ordinal)
+        || longer.EndsWith(" " + shorter, StringComparison.Ordinal);
+
+    private static double JaroWinkler(string left, string right)
+    {
+        if (left == right) return 1;
+        var distance = Math.Max(0, Math.Max(left.Length, right.Length) / 2 - 1);
+        var leftMatches = new bool[left.Length];
+        var rightMatches = new bool[right.Length];
+        var matches = 0;
+        for (var i = 0; i < left.Length; i++)
+        {
+            for (var j = Math.Max(0, i - distance); j < Math.Min(right.Length, i + distance + 1); j++)
+            {
+                if (rightMatches[j] || left[i] != right[j]) continue;
+                leftMatches[i] = rightMatches[j] = true;
+                matches++;
+                break;
+            }
+        }
+        if (matches == 0) return 0;
+
+        var transpositions = 0;
+        var rightIndex = 0;
+        for (var i = 0; i < left.Length; i++)
+        {
+            if (!leftMatches[i]) continue;
+            while (!rightMatches[rightIndex]) rightIndex++;
+            if (left[i] != right[rightIndex]) transpositions++;
+            rightIndex++;
+        }
+        var jaro = (matches / (double)left.Length + matches / (double)right.Length
+            + (matches - transpositions / 2d) / matches) / 3;
+        var prefix = 0;
+        while (prefix < Math.Min(4, Math.Min(left.Length, right.Length)) && left[prefix] == right[prefix]) prefix++;
+        return jaro + prefix * 0.1 * (1 - jaro);
     }
 }

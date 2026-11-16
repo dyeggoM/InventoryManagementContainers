@@ -121,7 +121,7 @@ Indexed: **82 symbols** across **10 files** (82 C#, 0 Python, 0 JS/TS/Vue) · **
 - `L124` **method** `Controllers.ImportController.HumanList`(IReadOnlyList<string> values) → string — ".xlsx, .xls or .csv", so the message reads as a sentence when a third one arrives. · ← 2
 - `L128` **method** `Controllers.ImportController.Problem`(string title, string detail) → ProblemDetails · ← 8
 
-### `IMCAPI/Controllers/ItemController.cs` — 475 lines, 17 symbols
+### `IMCAPI/Controllers/ItemController.cs` — 460 lines, 17 symbols
 
 - `L24` **constructor** `Controllers.ItemController.#ctor`(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments, ApplicationContext context, IConfiguration configuration, AuditLogWriter audit, ArchiveRetention retention, ILogger<ItemController> log)
 - `L43` **method** `Controllers.ItemController.Post`(Item data) → Task<IActionResult> · → 10 (Controllers.BaseController.Post, Controllers.ItemController.AnalyzeParentChain, Controllers.ItemController.DepthExceeded, Controllers.ItemController.InvalidHierarchy)
@@ -133,11 +133,11 @@ Indexed: **82 symbols** across **10 files** (82 C#, 0 Python, 0 JS/TS/Vue) · **
 - `L168` **method** `Controllers.ItemController.ChildrenPreventDelete`(int count) → ObjectResult · ← 2
 - `L175` **method** `Controllers.ItemController.ApplyAttachmentCount`(ItemDTO node, Dictionary<int, int> counts) → void · → 2 (Controllers.ItemController.ApplyAttachmentCount) · ← 2
 - `L180` **method** `Controllers.ItemController.ApplyAttachmentCount`(ItemDTO node, Dictionary<int, int> counts, HashSet<int> visited) → void · → 2 (Controllers.ItemController.ApplyAttachmentCount) · ← 4
-- `L188` **type** `Controllers.ItemController.ArchivedAttachment` — One attachment exactly as the archive recorded it: enough to write the row again.
-- `L203` **method** `Controllers.ItemController.ReadArchivedAttachments`(string? json) → List<ArchivedAttachment> · ← 1
-- `L226` **method** `Controllers.ItemController.Delete`(int id) → Task<IActionResult> · → 2 (Controllers.ItemController.ChildrenPreventDelete)
+- `L191` **type** `Controllers.ItemController.ArchivedAttachment` — One attachment exactly as the archive recorded it: enough to write the row again.
+- `L203` **method** `Controllers.ItemController.ReadArchivedAttachments`(string? json) → List<ArchivedAttachment> — Reads the attachment list a deleted record left in the ledger. A row written by an older shape must not make the record unrecoverable, so a payload that cannot be read is treated as "no attachments" rather than as an error. · ← 1
+- `L226` **method** `Controllers.ItemController.Delete`(int id) → Task<IActionResult> — Deleting a record archives it and moves its files aside: they wait in media/trash until the archive row is purged, which is what makes a restore bring the attachments back. Destroying them here would leave the ledger naming files nobody can · → 2 (Controllers.ItemController.ChildrenPreventDelete)
 - `L264` **method** `Controllers.ItemController.GetArchive`(DateTimeOffset? from, DateTimeOffset? to, string? actor, string? label, int page = 1, int pageSize = 25, CancellationToken cancellationToken = default(CancellationToken)) → Task<IActionResult>
-- `L303` **method** `Controllers.ItemController.PurgeArchive`(int? olderThanDays, CancellationToken cancellationToken = default(CancellationToken)) → Task<IActionResult>
+- `L303` **method** `Controllers.ItemController.PurgeArchive`(int? olderThanDays, CancellationToken cancellationToken = default(CancellationToken)) → Task<IActionResult> — Removes archive rows older than the retention age and destroys the files those rows were holding in media/trash. It never touches a live record: only the ledger rows this purge deletes lose their files, which is exactly what a purge is for.
 - `L329` **method** `Controllers.ItemController.Activate`(int id, CancellationToken cancellationToken) → Task<IActionResult> · → 7 (Controllers.ItemController.AnalyzeParentChain, Controllers.ItemController.DepthExceeded, Controllers.ItemController.InvalidHierarchy, Controllers.ItemController.ReadArchivedAttachments)
 - `L426` **method** `Controllers.ItemController.Get`() → Task<IActionResult> · → 4 (Controllers.BaseController.Get, Controllers.ItemController.ApplyAttachmentCount)
 

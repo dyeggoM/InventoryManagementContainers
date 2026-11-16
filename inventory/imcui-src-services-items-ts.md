@@ -32,14 +32,14 @@ Indexed: **10 symbols** across **1 file** (0 C#, 0 Python, 10 JS/TS/Vue) · **2 
 
 ## Call graph (resolved, in-project)
 
-- `inventory.flatten(nodes)` (imcui/src/pages/index/inventory.vue:167) → itemsService.flattenItems(items, parentPath, depth)`(L167)`
+- `inventory.flatten(nodes)` (imcui/src/pages/index/inventory.vue:162) → itemsService.flattenItems(items, parentPath, depth)`(L162)`
 - `itemsService.flattenItems(items, parentPath, depth)` (imcui/src/services/items.ts:56) → itemsService.flattenItems(items, parentPath, depth)`(L75)`
 
 ## Impact — who calls what
 
 Changing a symbol means checking every symbol on its right-hand side.
 
-- `itemsService.flattenItems(items, parentPath, depth)` ← inventory.flatten(nodes)`(imcui/src/pages/index/inventory.vue:167)`, itemsService.flattenItems(items, parentPath, depth)`(imcui/src/services/items.ts:75)`
+- `itemsService.flattenItems(items, parentPath, depth)` ← inventory.flatten(nodes)`(imcui/src/pages/index/inventory.vue:162)`, itemsService.flattenItems(items, parentPath, depth)`(imcui/src/services/items.ts:75)`
 
 ## Framework / dynamic calls (unresolved)
 
