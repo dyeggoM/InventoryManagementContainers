@@ -17,30 +17,30 @@ Indexed: **23 symbols** across **1 file** (0 C#, 0 Python, 23 JS/TS/Vue) · **5 
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/ArchivePanel.vue` — 387 lines, 23 symbols
+### `imcui/src/components/dashboard/ArchivePanel.vue` — 389 lines, 23 symbols
 
 - `L1` **component** `ArchivePanel` (SFC) — state: `rows, total, hasMore, page, pageSize, loading, errorMessage, notice, busyId, showConfirm, restoring, pending, filters, pageCount, canGoNext`
-- `L288` **function** `ArchivePanel.load`() · ← 4
-- `L316` **function** `ArchivePanel.apply`() · → 1 (ArchivePanel.load) · ← 1
-- `L322` **function** `ArchivePanel.clear`() · → 1 (ArchivePanel.apply)
-- `L330` **function** `ArchivePanel.goTo`(next) · → 1 (ArchivePanel.load)
-- `L337` **function** `ArchivePanel.askRestore`(entry)
-- `L342` **function** `ArchivePanel.cancelRestore`()
-- `L347` **function** `ArchivePanel.confirmRestore`() · → 2 (ArchivePanel.load)
+- `L290` **function** `ArchivePanel.load`() · ← 4
+- `L318` **function** `ArchivePanel.apply`() · → 1 (ArchivePanel.load) · ← 1
+- `L324` **function** `ArchivePanel.clear`() · → 1 (ArchivePanel.apply)
+- `L332` **function** `ArchivePanel.goTo`(next) · → 1 (ArchivePanel.load)
+- `L339` **function** `ArchivePanel.askRestore`(entry)
+- `L344` **function** `ArchivePanel.cancelRestore`()
+- `L349` **function** `ArchivePanel.confirmRestore`() · → 2 (ArchivePanel.load)
 
 ## Call graph (resolved, in-project)
 
-- `ArchivePanel.apply()` (imcui/src/components/dashboard/ArchivePanel.vue:316) → ArchivePanel.load()`(L319)`
-- `ArchivePanel.clear()` (imcui/src/components/dashboard/ArchivePanel.vue:322) → ArchivePanel.apply()`(L327)`
-- `ArchivePanel.goTo(next)` (imcui/src/components/dashboard/ArchivePanel.vue:330) → ArchivePanel.load()`(L334)`
-- `ArchivePanel.confirmRestore()` (imcui/src/components/dashboard/ArchivePanel.vue:347) → ArchivePanel.load()`(L361)`
+- `ArchivePanel.apply()` (imcui/src/components/dashboard/ArchivePanel.vue:318) → ArchivePanel.load()`(L321)`
+- `ArchivePanel.clear()` (imcui/src/components/dashboard/ArchivePanel.vue:324) → ArchivePanel.apply()`(L329)`
+- `ArchivePanel.goTo(next)` (imcui/src/components/dashboard/ArchivePanel.vue:332) → ArchivePanel.load()`(L336)`
+- `ArchivePanel.confirmRestore()` (imcui/src/components/dashboard/ArchivePanel.vue:349) → ArchivePanel.load()`(L363)`
 
 ## Impact — who calls what
 
 Changing a symbol means checking every symbol on its right-hand side.
 
-- `ArchivePanel.load()` ← ArchivePanel.apply()`(imcui/src/components/dashboard/ArchivePanel.vue:319)`, ArchivePanel.goTo(next)`(imcui/src/components/dashboard/ArchivePanel.vue:334)`, ArchivePanel.confirmRestore()`(imcui/src/components/dashboard/ArchivePanel.vue:361)`
-- `ArchivePanel.apply()` ← ArchivePanel.clear()`(imcui/src/components/dashboard/ArchivePanel.vue:327)`
+- `ArchivePanel.load()` ← ArchivePanel.apply()`(imcui/src/components/dashboard/ArchivePanel.vue:321)`, ArchivePanel.goTo(next)`(imcui/src/components/dashboard/ArchivePanel.vue:336)`, ArchivePanel.confirmRestore()`(imcui/src/components/dashboard/ArchivePanel.vue:363)`
+- `ArchivePanel.apply()` ← ArchivePanel.clear()`(imcui/src/components/dashboard/ArchivePanel.vue:329)`
 
 ## Framework / dynamic calls (unresolved)
 

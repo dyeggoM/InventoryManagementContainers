@@ -33,8 +33,8 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **31
 
 ## Call graph (resolved, in-project)
 
-- `AuditPanel.load()` (imcui/src/components/dashboard/AuditPanel.vue:231) → auditService.search(query)`(L236)`
-- `AuditPanel.exportCsv()` (imcui/src/components/dashboard/AuditPanel.vue:288) → auditToCsv(entries)`(L289)`
+- `AuditPanel.load()` (imcui/src/components/dashboard/AuditPanel.vue:233) → auditService.search(query)`(L238)`
+- `AuditPanel.exportCsv()` (imcui/src/components/dashboard/AuditPanel.vue:290) → auditToCsv(entries)`(L291)`
 - `<module>` (imcui/src/services/audit.spec.ts) → buildAuditQuery(query)`(L17)`, auditToCsv(entries)`(L39)`, formatAuditPayload(value)`(L66)`
 - `buildAuditQuery(query)` (imcui/src/services/audit.ts:46) → buildAuditQuery.assign(key, value)`(L54)`
 - `auditService.search(query)` (imcui/src/services/audit.ts:97) → buildAuditQuery(query)`(L100)`, toEntry(raw)`(L103)`, totalOf(response)`(L114)`
@@ -45,11 +45,11 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **31
 Changing a symbol means checking every symbol on its right-hand side.
 
 - `buildAuditQuery(query)` ← <module>`(imcui/src/services/audit.spec.ts:17)`, auditService.search(query)`(imcui/src/services/audit.ts:100)`
-- `auditToCsv(entries)` ← AuditPanel.exportCsv()`(imcui/src/components/dashboard/AuditPanel.vue:289)`, <module>`(imcui/src/services/audit.spec.ts:39)`
+- `auditToCsv(entries)` ← AuditPanel.exportCsv()`(imcui/src/components/dashboard/AuditPanel.vue:291)`, <module>`(imcui/src/services/audit.spec.ts:39)`
 - `buildAuditQuery.assign(key, value)` ← buildAuditQuery(query)`(imcui/src/services/audit.ts:54)`
 - `toEntry(raw)` ← auditService.search(query)`(imcui/src/services/audit.ts:103)`
 - `totalOf(response)` ← auditService.search(query)`(imcui/src/services/audit.ts:114)`
-- `auditService.search(query)` ← AuditPanel.load()`(imcui/src/components/dashboard/AuditPanel.vue:236)`
+- `auditService.search(query)` ← AuditPanel.load()`(imcui/src/components/dashboard/AuditPanel.vue:238)`
 - `csvCell(value)` ← auditToCsv(entries)`(imcui/src/services/audit.ts:136)`
 - `formatAuditPayload(value)` ← <module>`(imcui/src/services/audit.spec.ts:66)`
 

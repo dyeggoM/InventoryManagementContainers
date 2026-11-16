@@ -116,14 +116,16 @@
       </template>
     </q-table>
 
-    <!-- Below `sm`: the six columns become one card, with Restaurar inside thumb reach. -->
+    <!-- Below `sm`: the six columns become one card, with Restaurar inside thumb reach.
+         `full-width` is load-bearing: a flex item of a column would take its min-content width, and
+         one long label pushes the Restaurar button off the right of the screen. -->
     <div v-else class="archive-cards column q-gutter-sm">
       <q-card
         v-for="entry in rows"
         :key="entry.archiveId"
         flat
         bordered
-        class="archive-card"
+        class="archive-card full-width"
       >
         <q-card-section class="q-py-sm">
           <div class="row items-center no-wrap">

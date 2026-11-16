@@ -36,11 +36,11 @@ Indexed: **14 symbols** across **1 file** (0 C#, 0 Python, 14 JS/TS/Vue) · **16
 
 ## Call graph (resolved, in-project)
 
-- `UsersPanel.load()` (imcui/src/components/dashboard/UsersPanel.vue:360) → usersService.list()`(L365)`
-- `UsersPanel.create()` (imcui/src/components/dashboard/UsersPanel.vue:386) → usersService.create(request)`(L395)`
-- `UsersPanel.submitReset()` (imcui/src/components/dashboard/UsersPanel.vue:422) → usersService.resetPassword(id, password)`(L428)`
-- `UsersPanel.changeRoles(user, roles)` (imcui/src/components/dashboard/UsersPanel.vue:463) → usersService.updateRoles(id, roles)`(L467)`
-- `UsersPanel.deactivate(user)` (imcui/src/components/dashboard/UsersPanel.vue:479) → usersService.deactivate(id)`(L483)`
+- `UsersPanel.load()` (imcui/src/components/dashboard/UsersPanel.vue:362) → usersService.list()`(L367)`
+- `UsersPanel.create()` (imcui/src/components/dashboard/UsersPanel.vue:388) → usersService.create(request)`(L397)`
+- `UsersPanel.submitReset()` (imcui/src/components/dashboard/UsersPanel.vue:424) → usersService.resetPassword(id, password)`(L430)`
+- `UsersPanel.changeRoles(user, roles)` (imcui/src/components/dashboard/UsersPanel.vue:465) → usersService.updateRoles(id, roles)`(L469)`
+- `UsersPanel.deactivate(user)` (imcui/src/components/dashboard/UsersPanel.vue:481) → usersService.deactivate(id)`(L485)`
 - `<module>` (imcui/src/services/users.spec.ts) → usersService.create(request)`(L52)`, usersService.resetPassword(id, password)`(L94)`, usersService.impersonate(role)`(L128)`
 - `usersService.list()` (imcui/src/services/users.ts:78) → toUser(raw)`(L81)`
 - `usersService.create(request)` (imcui/src/services/users.ts:84) → toUser(raw)`(L86)`, initialPasswordOf(raw)`(L86)`
@@ -53,12 +53,12 @@ Changing a symbol means checking every symbol on its right-hand side.
 
 - `toUser(raw)` ← usersService.list()`(imcui/src/services/users.ts:81)`, usersService.create(request)`(imcui/src/services/users.ts:86)`
 - `initialPasswordOf(raw)` ← usersService.create(request)`(imcui/src/services/users.ts:86)`, usersService.resetPassword(id, password)`(imcui/src/services/users.ts:105)`
-- `usersService.create(request)` ← UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:395)`, <module>`(imcui/src/services/users.spec.ts:52)`
-- `usersService.resetPassword(id, password)` ← UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:428)`, <module>`(imcui/src/services/users.spec.ts:94)`
+- `usersService.create(request)` ← UsersPanel.create()`(imcui/src/components/dashboard/UsersPanel.vue:397)`, <module>`(imcui/src/services/users.spec.ts:52)`
+- `usersService.resetPassword(id, password)` ← UsersPanel.submitReset()`(imcui/src/components/dashboard/UsersPanel.vue:430)`, <module>`(imcui/src/services/users.spec.ts:94)`
 - `usersService.impersonate(role)` ← <module>`(imcui/src/services/users.spec.ts:128)`, impersonate(role)`(imcui/src/stores/auth-store.ts:245)`
-- `usersService.list()` ← UsersPanel.load()`(imcui/src/components/dashboard/UsersPanel.vue:365)`
-- `usersService.updateRoles(id, roles)` ← UsersPanel.changeRoles(user, roles)`(imcui/src/components/dashboard/UsersPanel.vue:467)`
-- `usersService.deactivate(id)` ← UsersPanel.deactivate(user)`(imcui/src/components/dashboard/UsersPanel.vue:483)`
+- `usersService.list()` ← UsersPanel.load()`(imcui/src/components/dashboard/UsersPanel.vue:367)`
+- `usersService.updateRoles(id, roles)` ← UsersPanel.changeRoles(user, roles)`(imcui/src/components/dashboard/UsersPanel.vue:469)`
+- `usersService.deactivate(id)` ← UsersPanel.deactivate(user)`(imcui/src/components/dashboard/UsersPanel.vue:485)`
 
 ## Framework / dynamic calls (unresolved)
 

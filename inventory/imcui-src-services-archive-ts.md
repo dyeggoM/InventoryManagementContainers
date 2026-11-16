@@ -33,8 +33,8 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **36
 
 ## Call graph (resolved, in-project)
 
-- `ArchivePanel.load()` (imcui/src/components/dashboard/ArchivePanel.vue:288) → archiveService.list(query)`(L292)`
-- `ArchivePanel.confirmRestore()` (imcui/src/components/dashboard/ArchivePanel.vue:347) → archiveService.restore(itemId)`(L356)`
+- `ArchivePanel.load()` (imcui/src/components/dashboard/ArchivePanel.vue:290) → archiveService.list(query)`(L294)`
+- `ArchivePanel.confirmRestore()` (imcui/src/components/dashboard/ArchivePanel.vue:349) → archiveService.restore(itemId)`(L358)`
 - `<module>` (imcui/src/services/archive.spec.ts) → buildArchiveQuery(query)`(L55)`, archiveService.list(query)`(L82)`, archiveService.restore(itemId)`(L153)`
 - `buildArchiveQuery(query)` (imcui/src/services/archive.ts:63) → buildArchiveQuery.assign(key, value)`(L71)`
 - `toEntry(raw)` (imcui/src/services/archive.ts:83) → toEntry.number(value)`(L92)`, toEntry.text(value)`(L97)`
@@ -45,8 +45,8 @@ Indexed: **11 symbols** across **1 file** (0 C#, 0 Python, 11 JS/TS/Vue) · **36
 Changing a symbol means checking every symbol on its right-hand side.
 
 - `buildArchiveQuery(query)` ← <module>`(imcui/src/services/archive.spec.ts:55)`, archiveService.list(query)`(imcui/src/services/archive.ts:117)`
-- `archiveService.list(query)` ← ArchivePanel.load()`(imcui/src/components/dashboard/ArchivePanel.vue:292)`, <module>`(imcui/src/services/archive.spec.ts:82)`
-- `archiveService.restore(itemId)` ← ArchivePanel.confirmRestore()`(imcui/src/components/dashboard/ArchivePanel.vue:356)`, <module>`(imcui/src/services/archive.spec.ts:153)`
+- `archiveService.list(query)` ← ArchivePanel.load()`(imcui/src/components/dashboard/ArchivePanel.vue:294)`, <module>`(imcui/src/services/archive.spec.ts:82)`
+- `archiveService.restore(itemId)` ← ArchivePanel.confirmRestore()`(imcui/src/components/dashboard/ArchivePanel.vue:358)`, <module>`(imcui/src/services/archive.spec.ts:153)`
 - `buildArchiveQuery.assign(key, value)` ← buildArchiveQuery(query)`(imcui/src/services/archive.ts:71)`
 - `toEntry(raw)` ← archiveService.list(query)`(imcui/src/services/archive.ts:120)`
 - `toEntry.number(value)` ← toEntry(raw)`(imcui/src/services/archive.ts:92)`

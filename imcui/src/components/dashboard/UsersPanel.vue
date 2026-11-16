@@ -117,9 +117,11 @@
       </template>
     </q-table>
 
-    <!-- Below `sm` the five columns do not fit: the same row, as a card with its actions in reach. -->
+    <!-- Below `sm` the five columns do not fit: the same row, as a card with its actions in reach.
+         `full-width` is load-bearing: a flex item of a column takes its min-content width, so one
+         long address would push the card — and its actions — past the right of the screen. -->
     <div v-else class="users-cards column q-gutter-sm">
-      <q-card v-for="user in users" :key="user.id" flat bordered class="user-card">
+      <q-card v-for="user in users" :key="user.id" flat bordered class="user-card full-width">
         <q-card-section class="q-py-sm">
           <div class="text-body2 text-weight-medium ellipsis">{{ user.email }}</div>
           <div class="row items-center q-gutter-xs q-mt-xs">

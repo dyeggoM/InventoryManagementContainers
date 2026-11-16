@@ -29,7 +29,15 @@
         <q-tab v-if="auth.isSuperadmin" name="audit" icon="history" label="Auditoría" />
         <q-tab v-if="auth.isSuperadmin" name="archive" icon="restore_from_trash" label="Archivo" />
         <!-- The import writes the tree, so it is an admin screen: an operador and a lector read. -->
-        <q-tab v-if="canImport" name="import" icon="upload_file" label="Importar desde Excel" />
+        <!-- On a phone the five tabs only fit with the short label; the full name stays in the
+             accessible label, so a screen reader hears the same thing on both sizes. -->
+        <q-tab
+          v-if="canImport"
+          name="import"
+          icon="upload_file"
+          :label="$q.screen.lt.sm ? 'Importar' : 'Importar desde Excel'"
+          aria-label="Importar desde Excel"
+        />
         <q-tab v-if="canImpersonate" name="impersonation" icon="switch_account" label="Suplantación" />
       </q-tabs>
 
@@ -87,5 +95,30 @@ const subtitle = computed(() =>
 <style scoped>
 .imc-dashboard {
   max-width: 1200px;
+}
+
+/*
+ * A 390px phone fits the five tabs only if each one is narrower than Quasar's default: 6px of
+ * padding a side instead of 16, and a 12px label instead of 14, which leaves ~336px of the 356
+ * available — enough that a 360px phone still fits too. Anything narrower than that falls back to
+ * the arrows Quasar already draws when the bar overflows, so nothing becomes unreachable: it scrolls.
+ */
+@media (max-width: 599.99px) {
+  .imc-dashboard :deep(.q-tabs .q-tab) {
+    padding: 0 6px;
+  }
+
+  .imc-dashboard :deep(.q-tabs .q-tab__label) {
+    font-size: 12px;
+    line-height: 1.15;
+  }
+
+  /* A dense round button measures 34px: fine for a mouse, below what a thumb hits reliably. 44px is
+     the size the inventory screens already give a row, and it is mobile-only, so the desktop table
+     keeps its tighter action column. */
+  .imc-dashboard :deep(.q-btn--dense.q-btn--round) {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 </style>

@@ -17,12 +17,12 @@ Indexed: **4 symbols** across **1 file** (4 C#, 0 Python, 0 JS/TS/Vue) · **2 re
 
 ## Symbols by file
 
-### `IMCAPI/Services/ArchiveRetentionSweeper.cs` — 87 lines, 4 symbols
+### `IMCAPI/Services/ArchiveRetentionSweeper.cs` — 0 lines, 4 symbols
 
-- `L13` **type** `Services.ArchiveRetentionSweeper` : BackgroundService — The clock half of the retention policy: every day, the ledger loses the rows older than the configured age. Without it the retention is a document — the purge endpoint only runs when somebody calls it, so an archive that nobody prunes keeps
+- `L1` **type** `Services.ArchiveRetentionSweeper`
 - `L23` **constructor** `Services.ArchiveRetentionSweeper.#ctor`(IServiceScopeFactory scopes, IConfiguration configuration, ILogger<ArchiveRetentionSweeper> logger)
 - `L31` **method** `Services.ArchiveRetentionSweeper.ExecuteAsync`(CancellationToken stoppingToken) → Task · → 1 (Services.ArchiveRetentionSweeper.SweepOnceAsync)
-- `L59` **method** `Services.ArchiveRetentionSweeper.SweepOnceAsync`(CancellationToken cancellationToken = default(CancellationToken)) → Task<int> — One pass. Public so a test can ask for it instead of waiting a day for the timer. · ← 2
+- `L59` **method** `Services.ArchiveRetentionSweeper.SweepOnceAsync`(CancellationToken cancellationToken = default(CancellationToken)) → Task<int> · ← 2
 
 ## Call graph (resolved, in-project)
 

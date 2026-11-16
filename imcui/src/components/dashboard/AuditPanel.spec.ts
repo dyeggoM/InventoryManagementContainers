@@ -212,6 +212,9 @@ describe('AuditPanel', () => {
 
     const card = wrapper.find('.audit-card');
     expect(card.exists()).toBe(true);
+    // The card list is a flex column: without `full-width` the card takes its min-content width and
+    // one long entity id takes the row — and the eye icon — off the right of a 390px screen.
+    expect(card.classes()).toContain('full-width');
     expect(card.text()).toContain('Update · Item');
     expect(card.text()).toContain('#7');
     expect(card.text()).toContain('root@imc.test');

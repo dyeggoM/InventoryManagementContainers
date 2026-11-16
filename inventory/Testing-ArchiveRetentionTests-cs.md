@@ -17,9 +17,9 @@ Indexed: **9 symbols** across **1 file** (9 C#, 0 Python, 0 JS/TS/Vue) · **9 re
 
 ## Symbols by file
 
-### `Testing/ArchiveRetentionTests.cs` — 173 lines, 9 symbols
+### `Testing/ArchiveRetentionTests.cs` — 113 lines, 9 symbols
 
-- `L18` **type** `ArchiveRetentionTests` : ApiTestBase — The archive is a ledger that only grows: these tests pin the two things that keep it usable — a page does not count the whole table, and an explicit, configured purge can drop what has expired.
+- `L17` **type** `ArchiveRetentionTests` : ApiTestBase — The archive is a ledger that only grows: these tests pin the two things that keep it usable — a page does not count the whole table, and an explicit, configured purge can drop what has expired.
 - `L21` **method** `ArchiveRetentionTests.ArchivePage_CountsOnceAndEveryPageSaysWhetherAnotherExists`() → Task · → 3 (ArchiveRetentionTests.AddArchiveRow, ArchiveRetentionTests.GetArchive)
 - `L45` **method** `ArchiveRetentionTests.Purge_RemovesOnlyTheRowsOlderThanTheCutoff_AndIsAudited`() → Task · → 2 (ArchiveRetentionTests.AddArchiveRow)
 - `L68` **method** `ArchiveRetentionTests.Purge_WithNoQueryValueUsesTheOneMonthDefault`() → Task · → 2 (ArchiveRetentionTests.AddArchiveRow)
@@ -27,7 +27,7 @@ Indexed: **9 symbols** across **1 file** (9 C#, 0 Python, 0 JS/TS/Vue) · **9 re
 - `L119` **method** `ArchiveRetentionTests.TheAgeResolvesInTheDocumentedOrder`() → void
 - `L135` **method** `ArchiveRetentionTests.Purge_IsSuperadminOnly`() → Task
 - `L150` **method** `ArchiveRetentionTests.GetArchive`(int page, int pageSize) → Task<JsonElement> · ← 2
-- `L158` **method** `ArchiveRetentionTests.AddArchiveRow`(string label, DateTime deletedAtUtc) → Task — Writes a ledger row straight to the database: the API only archives by deleting an item. · ← 7
+- `L158` **method** `ArchiveRetentionTests.AddArchiveRow`(string label, DateTime deletedAtUtc) → Task · ← 7
 
 ## Call graph (resolved, in-project)
 

@@ -17,15 +17,15 @@ Indexed: **7 symbols** across **1 file** (7 C#, 0 Python, 0 JS/TS/Vue) · **8 re
 
 ## Symbols by file
 
-### `IMCAPI/Services/ArchiveRetention.cs` — 104 lines, 7 symbols
+### `IMCAPI/Services/ArchiveRetention.cs` — 0 lines, 7 symbols
 
-- `L15` **type** `Services.ArchiveRetention` — The retention policy for the delete ledger, in one place so the endpoint and the daily sweep cannot drift apart: a row deleted more than days ago is gone, and its files with it — the archive exists to undo a mistake, not to keep the worksho
+- `L1` **type** `Services.ArchiveRetention`
+- `L1` **type** `Services.ArchiveRetention.AttachmentSnapshot`
+- `L1` **type** `Services.ArchiveRetention.PurgeResult`
 - `L24` **constructor** `Services.ArchiveRetention.#ctor`(ApplicationContext context, AttachmentStorage attachments, AuditLogWriter audit)
-- `L36` **method** `Services.ArchiveRetention.ResolveDays`(int? requested, IConfiguration configuration) → int — The age to purge, in days. An explicit request wins; otherwise the environment, then the configuration, then . Zero or less means "not automatically" — the purge endpoint can still be asked for a specific age. · ← 5
-- `L50` **method** `Services.ArchiveRetention.PurgeAsync`(DateTime cutoffUtc, int ageDays, string actor, CancellationToken cancellationToken = default(CancellationToken)) → Task<PurgeResult> — Deletes the ledger rows older than the cutoff and the files they were the last owner of. Never touches a live record: only a purged row loses its files, which is what a purge is for. · → 1 (Services.ArchiveRetention.ReadAttachmentPaths) · ← 2
-- `L79` **type** `Services.ArchiveRetention.PurgeResult`
-- `L85` **method** `Services.ArchiveRetention.ReadAttachmentPaths`(string? json) → IEnumerable<string?> — The paths stored in a ledger row's attachment snapshot. Anything that is not the expected JSON is treated as "no attachments": a purge must not fail because an old row is malformed. · ← 1
-- `L103` **type** `Services.ArchiveRetention.AttachmentSnapshot`
+- `L36` **method** `Services.ArchiveRetention.ResolveDays`(int? requested, IConfiguration configuration) → int · ← 5
+- `L50` **method** `Services.ArchiveRetention.PurgeAsync`(DateTime cutoffUtc, int ageDays, string actor, CancellationToken cancellationToken = default(CancellationToken)) → Task<PurgeResult> · → 1 (Services.ArchiveRetention.ReadAttachmentPaths) · ← 2
+- `L85` **method** `Services.ArchiveRetention.ReadAttachmentPaths`(string? json) → IEnumerable<string?> · ← 1
 
 ## Call graph (resolved, in-project)
 
