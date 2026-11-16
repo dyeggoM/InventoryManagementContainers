@@ -679,26 +679,26 @@ Module documents (what a module is, and its impact lines): `AI_INVENTORY.md` →
 - `imcui/src/components/dashboard/ImportPanel.spec.ts:336` · **checkbox** function checkbox(wrapper, label) · `← 12` · `→ 3` · `≈8 lines`
 - `imcui/src/components/dashboard/ImportPanel.spec.ts:344` · **chip** function chip(wrapper, label) · `← 12` · `→ 5` · `≈8 lines`
 - `imcui/src/components/dashboard/ImportPanel.spec.ts:352` · **itemRows** function itemRows(wrapper) · `← 39` · `→ 1` · `≈5 lines`
-- `imcui/src/components/dashboard/ImportPanel.spec.ts:357` · **analyse** function analyse(wrapper, file = ...) · `← 64` · `→ 7` · `≈600 lines`
-- `imcui/src/components/dashboard/ImportPanel.vue:1` · **ImportPanel** SFC ImportPanel · `← 0` · `→ 3` · `≈346 lines`
+- `imcui/src/components/dashboard/ImportPanel.spec.ts:357` · **analyse** function analyse(wrapper, file = ...) · `← 64` · `→ 7` · `≈972 lines`
+- `imcui/src/components/dashboard/ImportPanel.vue:1` · **ImportPanel** SFC ImportPanel · `← 0` · `→ 3` · `≈381 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:422` · **emptyCounts** function emptyCounts() · `← 5` · `→ 0` · `≈4 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:438` · **matchesStatus** function matchesStatus(status) · `← 3` · `→ 0` · `≈6 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:444` · **matchesCode** function matchesCode(item) · `← 3` · `→ 0` · `≈5 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:449` · **matchesText** function matchesText(row) · `← 3` · `→ 5` · `≈8 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:463` · **skippedSectionsOf** function skippedSectionsOf(sheetName) · `← 1` · `→ 1` · `≈5 lines`
-- `imcui/src/components/dashboard/ImportPanel.vue:510` · **statusOf** function statusOf(counts) · `← 2` · `→ 0` · `≈6 lines`
-- `imcui/src/components/dashboard/ImportPanel.vue:516` · **statusColour** function statusColour(counts) · `← 0` · `→ 2` · `≈4 lines`
+- `imcui/src/components/dashboard/ImportPanel.vue:510` · **statusOf** function statusOf(counts) · `← 2` · `→ 0` · `≈2 lines`
+- `imcui/src/components/dashboard/ImportPanel.vue:516` · **statusColour** function statusColour(counts) · `← 0` · `→ 2` · `≈3 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:520` · **statusColourOf** function statusColourOf(status) · `← 1` · `→ 0` · `≈4 lines`
-- `imcui/src/components/dashboard/ImportPanel.vue:524` · **statusLabel** function statusLabel(counts) · `← 0` · `→ 1` · `≈8 lines`
+- `imcui/src/components/dashboard/ImportPanel.vue:524` · **statusLabel** function statusLabel(counts) · `← 0` · `→ 1` · `≈6 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:532` · **suggestionLabel** function suggestionLabel(suggestion) · `← 0` · `→ 0` · `≈4 lines`
-- `imcui/src/components/dashboard/ImportPanel.vue:536` · **isSkipped** function isSkipped(row) · `← 6` · `→ 1` · `≈4 lines`
+- `imcui/src/components/dashboard/ImportPanel.vue:536` · **isSkipped** function isSkipped(row) · `← 6` · `→ 1` · `≈3 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:540` · **setIncluded** function setIncluded(row, included) · `← 0` · `→ 2` · `≈7 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:571` · **toggleCodeFilter** function toggleCodeFilter(which) · `← 0` · `→ 0` · `≈6 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:588` · **formatSize** function formatSize(bytes) · `← 0` · `→ 2` · `≈6 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:594` · **onFile** function onFile(value) · `← 0` · `→ 0` · `≈11 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:605` · **analyse** function analyse() · `← 0` · `→ 3` · `≈24 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:629` · **runImport** function runImport() · `← 0` · `→ 5` · `≈33 lines`
-- `imcui/src/components/dashboard/ImportPanel.vue:662` · **reset** function reset() · `← 0` · `→ 0` · `≈149 lines`
+- `imcui/src/components/dashboard/ImportPanel.vue:662` · **reset** function reset() · `← 0` · `→ 0` · `≈722 lines`
 - `imcui/src/components/dashboard/UsersPanel.spec.ts:30` · **makeToken** function makeToken(claims) · `← 1` · `→ 1` · `≈1 lines`
 - `imcui/src/components/dashboard/UsersPanel.spec.ts:52` · **onInput** onInput(event) · `← 0` · `→ 1` · `≈41 lines`
 - `imcui/src/components/dashboard/UsersPanel.spec.ts:93` · **onClick** onClick(event) · `← 0` · `→ 1` · `≈15 lines`
@@ -878,14 +878,14 @@ Module documents (what a module is, and its impact lines): `AI_INVENTORY.md` →
 - `imcui/src/services/import.spec.ts:15` · **captureFetch** function captureFetch(body = ..., status = ...) · `← 12` · `→ 5` · `≈12 lines`
 - `imcui/src/services/import.spec.ts:27` · **form** function form(call) · `← 4` · `→ 0` · `≈6 lines`
 - `imcui/src/services/import.spec.ts:33` · **workbook** function workbook() · `← 21` · `→ 0` · `≈7 lines`
-- `imcui/src/services/import.spec.ts:40` · **previewAnswer** function previewAnswer() · `← 3` · `→ 0` · `≈350 lines`
-- `imcui/src/services/import.ts:137` · **toStatus** function toStatus(value) · `← 3` · `→ 4` · `≈5 lines`
+- `imcui/src/services/import.spec.ts:40` · **previewAnswer** function previewAnswer() · `← 3` · `→ 0` · `≈520 lines`
+- `imcui/src/services/import.ts:137` · **toStatus** function toStatus(value) · `← 3` · `→ 4` · `≈4 lines`
 - `imcui/src/services/import.ts:142` · **toNumber** function toNumber(value) · `← 23` · `→ 4` · `≈6 lines`
-- `imcui/src/services/import.ts:148` · **toNullableText** function toNullableText(value) · `← 10` · `→ 2` · `≈5 lines`
+- `imcui/src/services/import.ts:148` · **toNullableText** function toNullableText(value) · `← 10` · `→ 2` · `≈1 lines`
 - `imcui/src/services/import.ts:153` · **toReasons** function toReasons(value) · `← 1` · `→ 5` · `≈5 lines`
 - `imcui/src/services/import.ts:158` · **record** function record(value) · `← 8` · `→ 0` · `≈4 lines`
 - `imcui/src/services/import.ts:162` · **array** function array(value) · `← 5` · `→ 1` · `≈4 lines`
-- `imcui/src/services/import.ts:166` · **toItem** function toItem(raw, sheet, used) · `← 1` · `→ 15` · `≈26 lines`
+- `imcui/src/services/import.ts:166` · **toItem** function toItem(raw, sheet, used) · `← 1` · `→ 15` · `≈1 lines`
 - `imcui/src/services/import.ts:192` · **toGroup** function toGroup(raw, sheet, used) · `← 1` · `→ 12` · `≈19 lines`
 - `imcui/src/services/import.ts:211` · **toSuggestion** function toSuggestion(value) · `← 1` · `→ 8` · `≈13 lines`
 - `imcui/src/services/import.ts:224` · **toSheet** function toSheet(raw) · `← 0` · `→ 11` · `≈16 lines`
@@ -896,7 +896,7 @@ Module documents (what a module is, and its impact lines): `AI_INVENTORY.md` →
 - `imcui/src/services/import.ts:289` · **fileForm** function fileForm(file) · `← 2` · `→ 1` · `≈7 lines`
 - `imcui/src/services/import.ts:296` · **buildImportForm** function buildImportForm(file, request = ...) · `← 10` · `→ 8` · `≈18 lines`
 - `imcui/src/services/import.ts:314` · **preview** preview(file) · `← 7` · `→ 3` · `≈5 lines`
-- `imcui/src/services/import.ts:319` · **run** run(file, request = ...) · `← 7` · `→ 3` · `≈4 lines`
+- `imcui/src/services/import.ts:319` · **run** run(file, request = ...) · `← 7` · `→ 3` · `≈222 lines`
 - `imcui/src/services/items.ts:36` · **getAll** getAll() · `← 0` · `→ 1` · `≈4 lines`
 - `imcui/src/services/items.ts:40` · **getById** getById(id) · `← 0` · `→ 1` · `≈4 lines`
 - `imcui/src/services/items.ts:44` · **create** create(item) · `← 0` · `→ 1` · `≈4 lines`
@@ -990,21 +990,22 @@ Module documents (what a module is, and its impact lines): `AI_INVENTORY.md` →
 
 ## Longest first — read these before changing them
 
-- `≈600 lines` · `imcui/src/components/dashboard/ImportPanel.spec.ts:357` · **analyse** · `← 64` callers
+- `≈972 lines` · `imcui/src/components/dashboard/ImportPanel.spec.ts:357` · **analyse** · `← 64` callers
+- `≈722 lines` · `imcui/src/components/dashboard/ImportPanel.vue:662` · **reset** · `← 0` callers
+- `≈520 lines` · `imcui/src/services/import.spec.ts:40` · **previewAnswer** · `← 3` callers
 - `≈395 lines` · `imcui/src/components/TreeMasterDetail.vue:1` · **TreeMasterDetail** · `← 0` callers
-- `≈350 lines` · `imcui/src/services/import.spec.ts:40` · **previewAnswer** · `← 3` callers
-- `≈346 lines` · `imcui/src/components/dashboard/ImportPanel.vue:1` · **ImportPanel** · `← 0` callers
+- `≈381 lines` · `imcui/src/components/dashboard/ImportPanel.vue:1` · **ImportPanel** · `← 0` callers
 - `≈340 lines` · `imcui/src/stores/auth-store.spec.ts:227` · **impersonationAnswer** · `← 17` callers
 - `≈316 lines` · `imcui/src/components/dashboard/UsersPanel.vue:1` · **UsersPanel** · `← 0` callers
 - `≈301 lines` · `IMCAPI/Program.cs:9` · **Main** · `← 0` callers
 - `≈242 lines` · `imcui/src/components/dashboard/ArchivePanel.vue:1` · **ArchivePanel** · `← 0` callers
 - `≈241 lines` · `imcui/src/components/AttributeEditor.vue:1` · **AttributeEditor** · `← 0` callers
 - `≈226 lines` · `imcui/src/components/dashboard/ArchivePanel.spec.ts:228` · **restoreButton** · `← 8` callers
+- `≈222 lines` · `imcui/src/services/import.ts:319` · **run** · `← 7` callers
 - `≈207 lines` · `IMCAPI/Services/ItemImporter.cs:99` · **BuildAsync** · `← 2` callers
 - `≈193 lines` · `imcui/src/components/dashboard/AuditPanel.vue:1` · **AuditPanel** · `← 0` callers
 - `≈188 lines` · `imcui/src/components/FilePreviewDialog.spec.ts:113` · **open** · `← 9` callers
 - `≈164 lines` · `imcui/src/stores/auth-store.spec.ts:44` · **postedBody** · `← 2` callers
-- `≈149 lines` · `imcui/src/components/dashboard/ImportPanel.vue:662` · **reset** · `← 0` callers
 - `≈137 lines` · `imcui/src/components/dashboard/ImpersonationPanel.spec.ts:140` · **chooseRole** · `← 4` callers
 - `≈135 lines` · `imcui/src/services/archive.spec.ts:38` · **captureFetch** · `← 10` callers
 - `≈133 lines` · `imcui/src/components/AttributeEditor.spec.ts:174` · **typeIntoValueList** · `← 12` callers
@@ -1014,7 +1015,6 @@ Module documents (what a module is, and its impact lines): `AI_INVENTORY.md` →
 - `≈116 lines` · `imcui/src/components/TreeMasterDetail.vue:475` · **requestClose** · `← 0` callers
 - `≈112 lines` · `IMCAPI/Services/ItemImporter.cs:306` · **ImportAsync** · `← 1` callers
 - `≈111 lines` · `imcui/src/services/users.spec.ts:28` · **bodyOf** · `← 5` callers
-- `≈107 lines` · `imcui/src/components/AttachmentEditor.spec.ts:106` · **onUpdate:modelValue** · `← 0` callers
 
 ## Regenerate
 

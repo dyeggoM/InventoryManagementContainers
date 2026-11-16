@@ -79,3 +79,12 @@ python3 <skill>/scripts/ai_inventory.py --root .
 - C#: no `new`-constructor, property-access or field/event edges; reflection/`dynamic` unresolved. A call through an interface resolves to the **interface member** (the contract), not to every implementation — search the symbol by name to find the classes that implement it.
 - JS/TS: member calls on unknown receivers, computed access, barrel re-exports and dynamic `require` stay unresolved. Object-literal methods are indexed; `<script>` blocks only — template expressions (e.g. `@click="fn"`) are not.
 - Purposes come from doc comments in the source; blank means the code has none. Do not treat a blank purpose as 'unknown' behaviour — read the file.
+- analyzer warning: error: js: analyzer exited 1: node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module '@babel/parser'
+Require stack:
+- /home/lilith/.hermes/skills/software-development/code-inventory/analyzers/js/analyze.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at defaultResolve

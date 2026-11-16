@@ -11,7 +11,7 @@
         icon="refresh"
         label="Reanalizar"
         :loading="analysing"
-        :disable="!file || importing"
+        :disable="!file || importing || saving"
         @click="analyse"
       />
       <q-btn
@@ -21,7 +21,7 @@
         no-caps
         icon="close"
         label="Limpiar"
-        :disable="analysing || importing"
+        :disable="analysing || importing || saving"
         @click="reset"
       />
     </div>
@@ -39,7 +39,7 @@
           accept=".xlsx,.xls,.csv"
           label="Inventario (.xlsx, .xls o .csv)"
           hint="Una categoría por grupo raíz. El archivo se lee completo antes de escribir nada."
-          :disable="analysing || importing"
+          :disable="analysing || importing || saving"
           @update:model-value="onFile"
         >
           <template v-slot:prepend><q-icon name="upload_file" /></template>
@@ -58,7 +58,7 @@
           icon="analytics"
           label="Analizar"
           :loading="analysing"
-          :disable="!file || importing"
+          :disable="!file || importing || saving"
           @click="analyse"
         />
       </div>
@@ -72,6 +72,16 @@
     <q-banner v-else-if="notice" dense class="bg-blue-1 text-blue-10 q-mt-md">
       <template v-slot:avatar><q-icon name="info" /></template>
       {{ notice }}
+    </q-banner>
+
+    <!-- A refused correction must not vanish: a red row that stays red looks like a button that
+         did nothing. The server says which line it refused and why. -->
+    <q-banner v-if="correctionIssues.length" dense class="corrections-warning q-mt-md">
+      <template v-slot:avatar><q-icon name="report_problem" /></template>
+      <div class="text-caption text-weight-medium">El servidor no aplicó estas correcciones</div>
+      <ul class="corrections-list">
+        <li v-for="issue in correctionIssues" :key="issue">{{ issue }}</li>
+      </ul>
     </q-banner>
 
     <q-card v-if="result" flat bordered class="result-card q-mt-md">
@@ -217,20 +227,32 @@
               {{ group.note }}
             </div>
 
-            <!-- One row of markup, two layouts: a line above `sm`, a card below it. -->
+            <!-- One row of markup, two layouts: a line above `sm`, a card below it. A red or yellow
+                 row can be corrected before importing, so tapping it opens the editor; a green row
+                 is already importable and opens nothing. -->
             <div
               v-for="row in group.rows"
               :key="row.item.key"
               class="import-item"
-              :class="$q.screen.lt.sm ? 'import-card' : 'import-row'"
+              :class="[
+                $q.screen.lt.sm ? 'import-card' : 'import-row',
+                isEditable(row) ? 'import-item--editable' : '',
+              ]"
+              :role="isEditable(row) ? 'button' : undefined"
+              :tabindex="isEditable(row) ? 0 : undefined"
+              :aria-label="isEditable(row) ? `Corregir la fila ${row.item.row}` : undefined"
+              @click="openEditor(row)"
+              @keydown.enter.prevent="openEditor(row)"
+              @keydown.space.prevent="openEditor(row)"
             >
               <div class="item-main row items-center no-wrap q-gutter-x-sm">
                 <q-checkbox
                   v-if="row.item.status === 'yellow'"
                   dense
                   :model-value="!isSkipped(row)"
-                  :disable="!row.item.code || importing"
+                  :disable="!row.item.code || importing || saving"
                   :aria-label="`Importar ${row.item.label}`"
+                  @click.stop
                   @update:model-value="(value: boolean | null) => setIncluded(row, value === true)"
                 >
                   <!-- The API keys the exclusion on the code: a row without one cannot be unticked
@@ -245,6 +267,15 @@
                   {{ STATUS_LABELS[row.item.status] }}
                 </q-badge>
                 <span class="item-label text-body2">{{ row.item.label || '(sin nombre)' }}</span>
+                <!-- What the user touched, so the tree says which rows no longer say what the file
+                     says. The chip is the mark; the undo button is the way back. -->
+                <q-chip
+                  v-if="isCorrected(row.item)"
+                  dense
+                  icon="edit"
+                  label="Corregido"
+                  class="corrected-chip bg-blue-grey-1 text-blue-grey-9"
+                />
                 <span
                   class="item-code text-caption"
                   :class="row.item.code ? 'text-grey-8' : 'text-grey-5'"
@@ -256,6 +287,24 @@
                 </span>
                 <q-space />
                 <span class="item-row text-caption text-grey-6">fila {{ row.item.row }}</span>
+                <q-btn
+                  v-if="isCorrected(row.item)"
+                  flat
+                  dense
+                  round
+                  icon="undo"
+                  class="undo-correction"
+                  :aria-label="`Deshacer la corrección de la fila ${row.item.row}`"
+                  :disable="saving || importing"
+                  @click.stop="undoCorrection(row.item)"
+                />
+                <q-icon
+                  v-else-if="isEditable(row)"
+                  name="edit"
+                  size="16px"
+                  class="edit-hint text-grey-7"
+                  aria-hidden="true"
+                />
               </div>
 
               <ul
@@ -305,11 +354,118 @@
           :class="$q.screen.lt.sm ? 'full-width' : ''"
           :label="importLabel"
           :loading="importing"
-          :disable="importCount === 0 || importing || analysing"
+          :disable="importCount === 0 || importing || analysing || saving"
           @click="runImport"
         />
       </div>
     </template>
+
+    <!-- The row editor. Two halves: what the file says on top (its own header row and the row
+         itself, in the file's column order), and what would be imported below, editable. Only a
+         red or yellow row reaches it. Full screen below `sm`, where a spreadsheet row does not fit
+         a phone and is scrolled sideways instead. -->
+    <q-dialog
+      v-model="editorOpen"
+      :maximized="$q.screen.lt.sm"
+      transition-show="slide-up"
+      transition-hide="slide-down"
+    >
+      <q-card v-if="editor" class="editor-card column no-wrap">
+        <q-card-section class="editor-head row items-center no-wrap q-gutter-x-sm q-py-sm">
+          <q-icon name="edit_note" size="22px" class="text-grey-7" />
+          <div class="editor-heading column">
+            <span class="text-subtitle1 text-weight-medium">Corregir la fila {{ editor.row }}</span>
+            <span class="text-caption text-grey-7">
+              <span v-if="editor.source">{{ editor.source }} ·</span>
+              se importará en {{ editor.category }} › {{ editor.group }}
+            </span>
+          </div>
+          <q-space />
+          <q-btn flat dense round icon="close" aria-label="Cerrar el editor" @click="closeEditor" />
+        </q-card-section>
+
+        <div class="editor-divider" />
+
+        <q-card-section class="editor-body">
+          <div class="editor-label text-caption text-grey-7">El archivo dice</div>
+          <div class="file-sheet-scroll">
+            <table class="file-sheet">
+              <thead>
+                <tr>
+                  <th v-for="header in editor.headers" :key="header" class="file-header">
+                    {{ header }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td v-for="header in editor.headers" :key="header" class="file-cell">
+                    {{ editor.values[header] ?? '' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="editor-label text-caption text-grey-7 q-mt-md">
+            Lo que se importará · editable
+          </div>
+          <div class="editor-form">
+            <q-input
+              v-model="editor.draft.label"
+              dense
+              outlined
+              label="Descripción"
+              hint="Obligatoria: sin descripción la fila no se puede importar."
+              :error="editorTouched && !editor.draft.label.trim()"
+              error-message="Escribe una descripción para poder importar la fila."
+              class="editor-description"
+            />
+            <q-input v-model="editor.draft.code" dense outlined label="Código" />
+            <q-input
+              v-model="editor.draft.subcategory"
+              dense
+              outlined
+              label="Subcategoría"
+              hint="El nombre con el que se colocará en el árbol."
+            />
+            <q-input v-model="editor.draft.brand" dense outlined label="Marca" />
+            <q-input v-model="editor.draft.reference" dense outlined label="Referencia" />
+            <q-input v-model="editor.draft.serial" dense outlined label="Serial" />
+            <q-input v-model="editor.draft.notes" dense outlined label="Notas" />
+            <q-input v-model="editor.draft.dimensions" dense outlined label="Dimensiones" />
+          </div>
+        </q-card-section>
+
+        <div class="editor-divider" />
+
+        <q-card-section class="editor-actions row items-center q-gutter-x-sm q-py-sm">
+          <q-btn
+            v-if="editor.corrected"
+            flat
+            dense
+            no-caps
+            icon="undo"
+            label="Deshacer"
+            class="undo-editor"
+            :disable="saving"
+            @click="undoEditor"
+          />
+          <q-space />
+          <q-btn flat no-caps label="Cancelar" @click="closeEditor" />
+          <q-btn
+            unelevated
+            no-caps
+            color="primary"
+            label="Guardar y revisar"
+            class="save-correction"
+            :loading="saving"
+            :disable="!editor.draft.label.trim() || saving"
+            @click="saveEditor"
+          />
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </div>
 </template>
 
@@ -318,9 +474,13 @@ import { computed, ref } from 'vue';
 import { getErrorMessage } from '@services/api';
 import {
   importService,
+  subcategoryFromRaw,
+  descriptionFromRaw,
+  type ImportCorrection,
   type ImportItem,
   type ImportOutcome,
   type ImportPreview,
+  type ImportRequest,
   type ImportStatus,
   type ImportSuggestion,
 } from '@services/import';
@@ -332,6 +492,11 @@ import { useFeedback } from '../../composables/useFeedback';
  * Preview and import are two calls on purpose (see `ImportController`). The preview writes nothing
  * and is the only thing that decides colours; the import is the user's decision, and it sends the
  * green rows, the yellow rows still ticked, and the codes of the yellow rows that were unticked.
+ *
+ * A red or yellow row can be corrected before it is imported. The editor shows the file's own row
+ * on top and the item as it would be imported below; saving posts a new preview that carries every
+ * correction made so far, so the tree stays the server's answer and never a local guess. The same
+ * list rides along on the import, because the write must be the sum of what the user fixed.
  */
 
 const emit = defineEmits<{ imported: [ImportOutcome] }>();
@@ -379,6 +544,40 @@ interface VisibleSheet {
   groups: VisibleGroup[];
 }
 
+/**
+ * The editable half of the editor: one string per field the API accepts as a correction. Everything
+ * is a string because it comes from a spreadsheet cell and it is typed back into an input; the
+ * payload drops the empty ones instead of guessing a null.
+ */
+interface Draft {
+  source: string;
+  row: number;
+  label: string;
+  code: string;
+  subcategory: string;
+  brand: string;
+  reference: string;
+  serial: string;
+  notes: string;
+  dimensions: string;
+}
+
+/** The open editor: the item it corrects, the file's row to show, and the fields being typed. */
+interface Editor {
+  key: string;
+  row: number;
+  source: string;
+  category: string;
+  group: string;
+  /** Whether this row already carries a correction, which is what the undo button keys on. */
+  corrected: boolean;
+  /** The file's header row for this item's sheet, in the file's column order. */
+  headers: string[];
+  /** The file's values, keyed by that same header. An absent cell reads as empty. */
+  values: Record<string, string>;
+  draft: Draft;
+}
+
 const file = ref<File | null>(null);
 const preview = ref<ImportPreview | null>(null);
 const result = ref<ImportOutcome | null>(null);
@@ -386,11 +585,26 @@ const result = ref<ImportOutcome | null>(null);
 const lastSkipped = ref(0);
 const analysing = ref(false);
 const importing = ref(false);
+/** A preview is being re-run with a correction; the editor and the tree both wait for it. */
+const saving = ref(false);
 const errorMessage = ref<string | null>(null);
 const notice = ref<string | null>(null);
 
 /** The item keys the user unticked. Checked is the default; this is the exception list. */
 const skippedKeys = ref<string[]>([]);
+
+/**
+ * Every correction made in this session, keyed by `source|row` — the pair the API needs, because a
+ * row number alone repeats across the file's sheets. The value is the correction itself, which is
+ * what both the next preview and the import send.
+ */
+const corrections = ref<Record<string, ImportCorrection>>({});
+
+const editorOpen = ref(false);
+/** The open editor, `null` when there is none. A copy: the tree may be replaced under it. */
+const editor = ref<Editor | null>(null);
+/** The description is required: its error only shows once the user tried to save without one. */
+const editorTouched = ref(false);
 
 const onlyRed = ref(false);
 const onlyYellow = ref(false);
@@ -418,6 +632,17 @@ const rows = computed<FlatRow[]>(() => {
 });
 
 const summary = computed(() => preview.value?.summary ?? null);
+
+/**
+ * Every correction the server refused, from the preview and from the import, without repeating one
+ * that both said. A refused correction that nobody renders looks like a button that did nothing.
+ */
+const correctionIssues = computed<string[]>(() => {
+  const issues = new Set<string>();
+  for (const issue of preview.value?.correctionIssues ?? []) issues.add(issue);
+  for (const issue of result.value?.correctionIssues ?? []) issues.add(issue);
+  return [...issues];
+});
 
 function emptyCounts(): Counts {
   return { green: 0, yellow: 0, red: 0 };
@@ -544,6 +769,214 @@ function setIncluded(row: FlatRow, included: boolean): void {
   skippedKeys.value = [...keys];
 }
 
+/* --------------------------------------------------------------------------------------------
+ * Correcting a row
+ *
+ * The server decides; the panel asks. Saving posts a new preview with every correction made so far
+ * and re-renders the tree it answers with, so a red row that becomes importable is green because
+ * the server said so, not because the panel hoped it would. `source|row` is the identity: the same
+ * line number exists in more than one sheet, and a correction without its sheet is ambiguous.
+ * ------------------------------------------------------------------------------------------ */
+
+/** The identity of a row across the file, and the key of its correction. */
+function correctionKey(source: string | null | undefined, row: number): string {
+  return `${(source ?? '').trim()}|${row}`;
+}
+
+/** A green row is already importable: it has nothing to correct, so it opens nothing. */
+function isEditable(row: FlatRow): boolean {
+  return row.item.status !== 'green';
+}
+
+function isCorrected(item: ImportItem): boolean {
+  return correctionKey(item.source, item.row) in corrections.value;
+}
+
+/** The file's header row for this item, in the file's own column order. */
+function fileHeadersOf(item: ImportItem): string[] {
+  const declared = preview.value?.sourceHeaders?.[item.source ?? ''] ?? [];
+  const headers = declared.length > 0 ? declared : Object.keys(item.raw ?? {});
+  // An unnamed column has no label to print; its value still has its place in the file's order.
+  return headers.filter((header) => header.trim().length > 0);
+}
+
+/** The corrections, in a stable order, so two identical payloads look identical. */
+function sortedCorrections(list: ImportCorrection[]): ImportCorrection[] {
+  return [...list].sort(
+    (left, right) => (left.source ?? '').localeCompare(right.source ?? '') || left.row - right.row,
+  );
+}
+
+/** Every correction made so far, ordered: what the next preview and the import both send. */
+const correctionList = computed(() => sortedCorrections(Object.values(corrections.value)));
+
+/**
+ * The draft starts from what the server already answered for the row — so a corrected row reopens
+ * with its correction — and falls back to the file only for the subcategory, which the item does
+ * not carry: the API reports where the row was placed, not the cell the file wrote.
+ */
+function draftOf(item: ImportItem): Draft {
+  const saved = corrections.value[correctionKey(item.source, item.row)];
+  return {
+    source: item.source ?? '',
+    row: item.row,
+    label: saved?.label ?? descriptionFromRaw(item) ?? item.label,
+    code: saved?.code ?? item.code ?? '',
+    subcategory: saved?.subcategory ?? subcategoryFromRaw(item),
+    brand: saved?.brand ?? item.brand ?? '',
+    reference: saved?.reference ?? item.reference ?? '',
+    serial: saved?.serial ?? item.serial ?? '',
+    notes: saved?.notes ?? item.notes ?? '',
+    dimensions: saved?.dimensions ?? item.dimensions ?? '',
+  };
+}
+
+function openEditor(row: FlatRow): void {
+  if (!isEditable(row)) return;
+  const item = row.item;
+  const key = correctionKey(item.source, item.row);
+  editor.value = {
+    key,
+    row: item.row,
+    source: item.source ?? '',
+    category: row.sheet,
+    group: row.group,
+    corrected: key in corrections.value,
+    headers: fileHeadersOf(item),
+    values: item.raw ?? {},
+    draft: draftOf(item),
+  };
+  editorTouched.value = false;
+  editorOpen.value = true;
+}
+
+function closeEditor(): void {
+  editorOpen.value = false;
+  editor.value = null;
+  editorTouched.value = false;
+}
+
+/**
+ * Re-runs the preview with exactly this list of corrections and keeps the server's answer. Returns
+ * whether it landed: the editor only closes on a real answer.
+ */
+async function applyCorrections(list: ImportCorrection[], message: string): Promise<boolean> {
+  const picked = file.value;
+  if (!picked) return false;
+
+  saving.value = true;
+  errorMessage.value = null;
+  try {
+    const ordered = sortedCorrections(list);
+    preview.value = await importService.preview(picked, ordered);
+
+    const next: Record<string, ImportCorrection> = {};
+    for (const correction of ordered) {
+      next[correctionKey(correction.source, correction.row)] = correction;
+    }
+    corrections.value = next;
+
+    // A corrected subcategory can move a row to another category, which changes its key: a stale
+    // skipped key would keep a row unticked in a group that no longer holds it.
+    const live = new Set(rows.value.map((row) => row.item.key));
+    skippedKeys.value = skippedKeys.value.filter((key) => live.has(key));
+
+    feedback.success(message);
+    return true;
+  } catch (error) {
+    errorMessage.value = getErrorMessage(error);
+    feedback.error(error, 'No se pudo revisar la corrección.');
+    return false;
+  } finally {
+    saving.value = false;
+  }
+}
+
+/** Saves the row being edited: one correction, plus the ones already made in this session. */
+async function saveEditor(): Promise<void> {
+  const current = editor.value;
+  if (!current || saving.value) return;
+
+  const draft = current.draft;
+  // The description is what makes a red row importable; an empty one is refused by the server, so
+  // the editor refuses to send it first.
+  if (!draft.label.trim()) {
+    editorTouched.value = true;
+    return;
+  }
+
+  const next: Record<string, ImportCorrection> = {
+    ...corrections.value,
+    [current.key]: correctionOf(draft),
+  };
+
+  if (
+    await applyCorrections(
+      Object.values(next),
+      'Corrección guardada: la fila se vuelve a analizar.',
+    )
+  )
+    closeEditor();
+}
+
+/**
+ * The correction a draft describes: trimmed, and with every empty field **left out**, because an
+ * absent field keeps what the file says while an empty string would clear the cell.
+ */
+function correctionOf(draft: Draft): ImportCorrection {
+  const correction: ImportCorrection = { row: draft.row };
+  const source = draft.source.trim();
+  if (source) correction.source = source;
+
+  const fields = [
+    'label',
+    'code',
+    'subcategory',
+    'brand',
+    'reference',
+    'serial',
+    'notes',
+    'dimensions',
+  ] as const;
+  for (const field of fields) {
+    const value = draft[field].trim();
+    if (value) correction[field] = value;
+  }
+
+  return correction;
+}
+
+/**
+ * Back to the file's value, one button, no confirmation: the correction is dropped and the preview
+ * is asked again without it, so the tree cannot keep showing an edit the server no longer has.
+ */
+async function undoCorrection(item: ImportItem): Promise<void> {
+  const key = correctionKey(item.source, item.row);
+  if (saving.value || !(key in corrections.value)) return;
+
+  const next = { ...corrections.value };
+  delete next[key];
+
+  if (editor.value?.key === key) closeEditor();
+  await applyCorrections(
+    Object.values(next),
+    'Se deshizo la corrección: la fila vuelve a como está en el archivo.',
+  );
+}
+
+/** The editor's own undo: the same correction, dropped, with the editor closing behind it. */
+async function undoEditor(): Promise<void> {
+  const current = editor.value;
+  if (!current) return;
+  closeEditor();
+  const next = { ...corrections.value };
+  if (current.key in next) delete next[current.key];
+  await applyCorrections(
+    Object.values(next),
+    'Se deshizo la corrección: la fila vuelve a como está en el archivo.',
+  );
+}
+
 const yellowSelected = computed(
   () => rows.value.filter((row) => row.item.status === 'yellow' && !isSkipped(row)).length,
 );
@@ -582,6 +1015,7 @@ const resultFacts = computed<{ label: string; value: number }[]>(() => {
     { label: 'Amarillos omitidos', value: outcome.skippedYellow },
     { label: 'Ya existían', value: outcome.skippedExisting },
     { label: 'Destildados aquí', value: lastSkipped.value },
+    { label: 'Correcciones aplicadas', value: outcome.corrected },
   ];
 });
 
@@ -598,6 +1032,9 @@ function onFile(value: unknown): void {
   result.value = null;
   lastSkipped.value = 0;
   skippedKeys.value = [];
+  // A different file has different rows: a correction keyed to the old one would point at nothing.
+  corrections.value = {};
+  closeEditor();
   errorMessage.value = null;
   notice.value = null;
 }
@@ -610,8 +1047,11 @@ async function analyse(): Promise<void> {
   errorMessage.value = null;
   notice.value = null;
   result.value = null;
+  closeEditor();
   try {
-    preview.value = await importService.preview(picked);
+    // Re-analysing the same file keeps what the user fixed: the tree is the sum of their edits, so
+    // the corrections go out with the file every time.
+    preview.value = await importService.preview(picked, correctionList.value);
     skippedKeys.value = [];
     if (preview.value.summary.rows === 0) {
       notice.value =
@@ -635,12 +1075,17 @@ async function runImport(): Promise<void> {
   notice.value = null;
   try {
     const codes = skipCodes.value;
-    const outcome = await importService.run(picked, {
+    const request: ImportRequest = {
       // No yellow row still ticked means the whole class is left out, which is what the API's own
       // `skippedYellow` was built to report.
       includeYellow: yellowSelected.value > 0,
       skipCodes: codes,
-    });
+    };
+    // The write must be the sum of what the user fixed: without this the import would recreate the
+    // rows the file describes and quietly drop every correction the tree is showing.
+    if (correctionList.value.length > 0) request.corrections = correctionList.value;
+
+    const outcome = await importService.run(picked, request);
     result.value = outcome;
     lastSkipped.value = codes.length;
     feedback.success(
@@ -665,6 +1110,8 @@ function reset(): void {
   result.value = null;
   lastSkipped.value = 0;
   skippedKeys.value = [];
+  corrections.value = {};
+  closeEditor();
   errorMessage.value = null;
   notice.value = null;
   search.value = '';
@@ -806,5 +1253,131 @@ function reset(): void {
 
 .import-card + .import-actions {
   border-top: none;
+}
+
+/* A red or yellow row opens the editor, so it has to look tappable: a pointer cursor, a hint of a
+   surface on hover, and a ring for the keyboard, which is the only affordance a card cannot fake. */
+.import-item--editable {
+  cursor: pointer;
+}
+
+.import-item--editable:hover,
+.import-item--editable:focus-visible {
+  background: var(--imc-surface-raised, rgba(0, 0, 0, 0.03));
+}
+
+.import-item--editable:focus-visible {
+  outline: 2px solid var(--q-primary, #1976d2);
+  outline-offset: -2px;
+}
+
+.corrected-chip {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* The refused corrections: the warning pair from the theme tokens, so it reads the same in both
+   modes and never disappears into the page. */
+.corrections-warning {
+  background: var(--imc-warning-bg);
+  color: var(--imc-warning-text);
+}
+
+.corrections-list {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  font-size: 0.75rem;
+}
+
+/* The editor. A sheet on top, a form below, both inside one scrolling body: the header and the
+   actions stay put so the row's identity and the way out are always on screen. The height is
+   explicit because the dialog's own inner box has no height to inherit on a desktop. */
+.editor-card {
+  width: 100%;
+  max-width: 860px;
+  height: calc(100vh - 48px);
+  max-height: 760px;
+}
+
+/* Below `sm` the dialog is maximized: the card takes the whole screen and only the body scrolls. */
+@media (max-width: 599px) {
+  .editor-card {
+    height: 100vh;
+    max-height: 100vh;
+  }
+}
+
+.editor-head {
+  min-height: 52px;
+}
+
+.editor-heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.editor-divider {
+  border-top: 1px solid var(--imc-border, rgba(0, 0, 0, 0.12));
+}
+
+.editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+.editor-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* A spreadsheet row is allowed to be wider than a phone: the table keeps its column widths and the
+   block scrolls sideways instead of squeezing every cell into 390px. */
+.file-sheet-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--imc-border, rgba(0, 0, 0, 0.12));
+  border-radius: 4px;
+}
+
+.file-sheet {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.file-header,
+.file-cell {
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--imc-hairline, rgba(0, 0, 0, 0.08));
+}
+
+.file-header {
+  background: var(--imc-surface-raised, rgba(0, 0, 0, 0.04));
+  color: var(--imc-text-muted, rgba(0, 0, 0, 0.6));
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.file-cell {
+  background: var(--imc-surface);
+  color: var(--imc-text-body, rgba(0, 0, 0, 0.87));
+}
+
+.editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+}
+
+.editor-actions {
+  background: var(--imc-surface);
 }
 </style>
