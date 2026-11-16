@@ -9,9 +9,10 @@ What is deliberately not built yet, in the order it is worth doing.
   las relaciones existentes.
 - [x] **Las filas de `ItemsArchive` no caducan** — `done` (2026-11-11). `POST /api/item/archive/purge`
   (superadmin) borra las filas más antiguas que la retención, configurable con
-  `Archive:Retention:Days` / `ARCHIVE_RETENTION_DAYS` y **desactivada por defecto a propósito**: nada se
-  borra salvo que alguien la configure o pase `olderThanDays`. Deja fila `ArchivePurge` en la auditoría.
-  Sigue en pie la decisión de plazo: el mecanismo está, el número es tuyo.
+  `Archive:Retention:Days` / `ARCHIVE_RETENTION_DAYS`. Deja fila `ArchivePurge` en la auditoría.
+  **Plazo decidido: un mes (30 días por defecto)**, y desde 2026-11-15 lo aplica también un barrido
+  diario (`ArchiveRetentionSweeper`), no solo el endpoint: sin él la retención era un documento.
+  Poner `0` desactiva el barrido y deja el endpoint como única vía.
 - **Las filas de `ItemsArchive` no caducan (tamaño, no antigüedad)**: no hay límite por número de filas
   ni por tamaño de `AttachmentsJson`. Si el volumen crece más rápido que el calendario, la purga por
   fecha no basta.
@@ -237,11 +238,13 @@ entering by a different door.
 
 Lo que salió del refactor de legibilidad (2026-11-15), en orden de daño:
 
-- [ ] **(j) `ApiFactory` escribe variables de entorno del proceso en su constructor** — `todo` · dueño:
-  openai-coder. Cada factoría las reescribe, así que hoy no rompe nada; pero un test que cree una
-  segunda factoría deja `ConnectionStrings__DefaultConnection` apuntando a una base ya borrada hasta
-  la siguiente construcción. Es la causa documentada del `imc.db` suelto que ya apareció una vez.
-- [ ] **(k) Tres avisos pequeños** — `todo` · dueño: opencode-coder. `Preview()` de
+- [x] **(j) `ApiFactory` escribe variables de entorno del proceso en su constructor** — `done`
+  (2026-11-15 · code-orchestrator). Ahora cada host recibe su configuración con `UseSetting`, no por el
+  entorno del proceso: dos factorías ya no comparten base, y un test lo fija (se comprobó que falla con
+  el código anterior). La causa documentada del `imc.db` suelto que apareció una vez queda cerrada.
+  Nota para el siguiente: `ConfigureAppConfiguration` no sirve para estos valores, porque la API los
+  lee en `Main` antes de construir el host; tienen que ir en `UseSetting`.
+- [x] **(k) Tres avisos pequeños** — `done` (2026-11-15 · code-orchestrator). `Preview()` de
   `ItemImportPlacementTests` tenía una rama muerta que enmascararía un cambio de forma;
   `Preview_RequiresAnAdminAndASpreadsheet` promete dos cosas y comprueba una; y
   `TrashOperations_RefuseAPathThatEscapesTheMediaRoot` hace `Assert.Ignore` después de crear un

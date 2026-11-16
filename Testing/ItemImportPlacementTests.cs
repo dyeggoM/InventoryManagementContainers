@@ -90,6 +90,28 @@ public sealed class ItemImportPlacementTests : ApiTestBase
     }
 
     [Test]
+    [Order(1)]
+    public async Task AnAccentedSubcategoryFindsTheConfigurationEntryThatHasNoAccent()
+    {
+        // This has to be an integration test, not a unit one: the API runs with
+        // InvariantGlobalization, so Unicode normalization folds in the test project and is a no-op
+        // there — measured, after the ladder matched in a unit test while the running API parked
+        // SILLA BATERÍA in Other. The fold is a table now, and this is the test that proves it.
+        var tree = Tree(await Preview("import-accents.csv", Csv));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tree.ContainsKey("Other"), Is.False, "nothing here belongs in the catch-all");
+            Assert.That(tree["Hardware"].ContainsKey("SILLA BATERIA"), Is.True,
+                "SILLA BATERÍA is the same shelf as SILLA BATERIA");
+            Assert.That(tree["Hardware"].ContainsKey("PEDAL DOBLE BATERIA"), Is.True,
+                "and the accented pedal is the configured pedal");
+            Assert.That(tree["Hardware"].ContainsKey("BASE TECLADO SENCILLA"), Is.True,
+                "the file's TECALDO is still corrected to the configured label");
+        });
+    }
+
+    [Test]
     [Order(2)]
     public async Task Import_WritesTheConfigurationTree_NotTheSheetNames()
     {

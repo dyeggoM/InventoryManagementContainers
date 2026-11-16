@@ -59,6 +59,11 @@ public static class ApiServices
         // Attachment bytes live on disk; only a compressed preview stays in the row.
         builder.Services.AddSingleton<AttachmentStorage>();
         builder.Services.AddScoped<ItemImporter>();
+        builder.Services.AddScoped<ArchiveRetention>();
+        // The clock half of the retention policy: the endpoint purges when asked, this runs daily.
+        // Registered by its own type first so a test can ask for one pass instead of waiting a day.
+        builder.Services.AddSingleton<ArchiveRetentionSweeper>();
+        builder.Services.AddHostedService(provider => provider.GetRequiredService<ArchiveRetentionSweeper>());
         builder.Services.AddScoped<SubcategoryPlacement>();
     }
 }

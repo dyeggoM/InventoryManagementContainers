@@ -17,7 +17,7 @@ Indexed: **21 symbols** across **8 files** (21 C#, 0 Python, 0 JS/TS/Vue) · **9
 
 ## Symbols by file
 
-### `IMCAPI/Startup/ApiServices.cs` — 64 lines, 2 symbols
+### `IMCAPI/Startup/ApiServices.cs` — 69 lines, 2 symbols
 
 - `L10` **type** `Startup.ApiServices`
 - `L12` **method** `Startup.ApiServices.AddApiServices`(WebApplicationBuilder builder) → void
