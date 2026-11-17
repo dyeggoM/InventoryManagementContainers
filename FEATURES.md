@@ -66,6 +66,9 @@ A drum kit is not six unrelated drums: it is one set with six pieces, and the in
   being parts of it. The distinction is in the vocabulary and in the code.
 - **Attaching pieces** is `POST /api/item/{id}/children` — all or nothing, cycle-checked, and limited to
   items without a parent so nothing is moved out of another set in silence.
+- **Attaching is moving, and the answer says so.** `POST /api/item/{id}/children` returns
+  `{"moved":N,"reparented":[{"id":…,"from":…}]}`, with `from` null when the piece was loose, so a client can
+  tell the user that a piece left another set instead of quietly taking it.
 - **Detaching** returns the piece to the inventory as a top-level item. Pieces are never deleted by a move.
 - The tree keeps every item visible: a set groups, it does not filter.
 - Implemented in `IMCAPI/Controllers/ItemController.cs:123`, `imcui/src/pages/index/inventory.vue`,
@@ -87,6 +90,10 @@ The inventory is split by organization, and the three of them live in the same d
   field types and attachment types. Every organization reads them; only `superadmin` writes them.
 - **An import names its destination**: one organization per file, possibly a different one from the session,
   and the result is recorded in both organizations' audit trails.
+- **Hierarchy writes are serialized.** Creating, re-parenting, attaching and deleting an item take one
+  write lock on the database, so two people rearranging sets at the same time cannot build a cycle or
+  exceed the depth limit. The lock is per database, not per organization: with the current workshop that
+  is invisible, and it is the thing to watch before a large concurrent import.
 - Implemented in `IMCAPI/Services/TenantScope.cs`, `IMCAPI/DB/OrganizationConfiguration.cs`, the global
   filters in `IMCAPI/DB/ApplicationContext.cs`, `IMCAPI/Controllers/OrganizationController.cs` and
   `Authentication: switch-organization` in `IMCAPI/Controllers/AuthController.cs`.

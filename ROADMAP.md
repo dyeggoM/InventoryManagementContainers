@@ -12,6 +12,37 @@ What is deliberately not built yet, in the order it is worth doing.
 - [ ] **Que el import proponga conjuntos** — `todo`. Capa 3: cuando un fichero trae una fila de encabezado
   antes de un bloque, marcarla en amarillo como «esto parece un conjunto» y que el usuario confirme. Nunca
   agrupar solo, porque cada categoría trae el set de una forma distinta.
+- [x] **Una sola puerta para las escrituras de jerarquía** — `done`. `Post`, `Put`, `MoveChildren`, `Delete`,
+  `DetachChild` y `Activate` pasan por el mismo cerrojo; el importador tiene su propia transacción y ahora
+  respeta la profundidad máxima. El test transversal enumera las seis rutas y falla si alguna se salta el
+  envoltorio. Queda como deuda solo el *coste* (abajo) y la puerta "antes del handler" si algún día hay más
+  escritores.
+- [x] **Los cinco `low` que deja la auditoría de conjuntos** — `done`. Cerrados en `feat/item-sets`: `GET`
+  serializado con cota, `Activate` respeta `AlreadyLooping`, `DetachChild`/`Activate` bajo el cerrojo con
+  reintento, el importador rechaza filas por encima de la profundidad máxima, y el rechequeo del `409` no filtra
+  por organización. **El `catch` de la FK no casaba nunca**: filtraba por el código extendido 787 cuando una FK
+  `RESTRICT` devuelve 19/1811, así que el `409` era código muerto; ahora mira el 19 y decide por el número de
+  hijos.
+- [ ] **Notas que sobreviven de esa auditoría** — `todo`, `Later`. Todos preexistentes salvo donde se dice,
+  y todos con la misma rama de arriba como dueña:
+  - `GET /api/item` corta el cuerpo cuando el árbol es profundo: `ItemDTO` serializa la cadena de padres
+    hasta 512 y `System.Text.Json` corta en 32, y cuando la respuesta ya empezó el `try/catch` no salva nada
+    (`200` con medio JSON). Se arregla con un `MaxDepth` explícito o sin serializar `Parent`.
+  - `Activate` se traga el `AlreadyLooping` que `Post` y `Put` ya distinguen: restaura bajo una cadena rota.
+  - `DetachChild` y `Activate` no reintentan: con otro proceso escribiendo responden `500` a los ~30 s.
+  - El importador escribe `ParentId` sin comprobar profundidad: con `MaxDepth` bajo crea árboles que la API
+    rechazaría.
+  - El rechequeo del `409` filtra por organización y la FK no: un hijo de otra organización (solo por corrupción)
+    convierte el borrado en `500`.
+- [ ] **Ventana de 21–30 s en el cerrojo** — `todo`, `Later`, con decisión pendiente. El presupuesto de espera es
+  ~21 s (10 intentos de 2 s + back-off): un cerrojo externo más largo (una copia o un `checkpoint` mediano)
+  devuelve `500 database is locked`, honesto y sin escritura a medias, cuando antes esperaba. Por encima de 30 s
+  el proveedor habría fallado igual. Si en producción las copias duran más, o se suben los intentos o el borde
+  pasa a `503` con `Retry-After`, que es lo que un cliente sabe reintentar.
+- [ ] **Coste del cerrojo bajo carga** — `todo`, `Later`. Es por base de datos, no por organización: dos
+  peticiones sobre ítems distintos se serializan y quien llega último paga la cola (medido: 367 ms frente a
+  31 ms en solitario, mismo caudal total). Relevante solo con varios escritores a la vez o un import grande;
+  entonces toca medirlo otra vez y decidir si vale la pena un cerrojo por organización.
 - [ ] **Reconciliación del catálogo con identidad persistente** — `todo`, `Next`. Sustituye el sembrado de
   una sola pasada por `SeedKey` (columna nullable, única por organización) más un registro de claves ya
   aplicadas, para poder distinguir «fila nueva en el seed» de «el taller la borró» — `BaseRepository.Delete`
