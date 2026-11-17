@@ -16,6 +16,7 @@ public sealed class ApiFactory : WebApplicationFactory<IMCAPI.Program>
         Path.Combine(Path.GetTempPath(), "imc-api-tests", Guid.NewGuid().ToString("N"));
 
     private readonly int? _authPermitLimit;
+    private readonly int? _maxDepth;
 
     /// <param name="authPermitLimit">
     /// How many `/api/auth` calls one address may make per window. Left null the suite is effectively
@@ -28,9 +29,10 @@ public sealed class ApiFactory : WebApplicationFactory<IMCAPI.Program>
     /// stray database appeared next to the test binary and the second run refused to start with
     /// "exactly one superadmin must exist; found 2".
     /// </summary>
-    public ApiFactory(int? authPermitLimit = null)
+    public ApiFactory(int? authPermitLimit = null, int? maxDepth = null)
     {
         _authPermitLimit = authPermitLimit;
+        _maxDepth = maxDepth;
         Directory.CreateDirectory(MediaRoot);
     }
 
@@ -58,6 +60,7 @@ public sealed class ApiFactory : WebApplicationFactory<IMCAPI.Program>
         // during startup needs.
         foreach (var (key, value) in Settings())
             builder.UseSetting(key, value);
+        if (_maxDepth is int depth) builder.UseSetting("Items:MaxDepth", depth.ToString());
     }
 
     private Dictionary<string, string> Settings() => new()

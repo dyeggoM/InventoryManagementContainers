@@ -34,7 +34,24 @@ edit.
 unseeded database alone and the startup seed fills it, so a fresh database and an existing one reach the
 same place without provisional rows to clean up.
 
-**Tests:** 284 API tests (12 new: atomic moves, cycles, another organization's ids, detach of a piece that
+**Fixed — the hierarchy survives concurrency.** Creating, re-parenting, attaching and deleting an item now take
+one write lock, so two people rearranging sets cannot build a cycle or push the tree past its depth limit; a
+move validates and writes under the same lock, and a delete counts its children there. A delete that loses the
+race answers `409 Item has children` instead of surfacing a database foreign-key error as a `500`. Every known
+write path is listed in a test that fails if a new one skips the lock; `DetachChild`, `Activate` and the
+importer are in it too, and the importer now refuses rows that would exceed the maximum depth instead of
+silently building a tree the API would reject.
+
+**Fixed — restoring an item no longer hides a broken hierarchy.** `POST` and `PUT` already refused a parent
+chain that contains a cycle; the restore path now answers the same `400` instead of bringing an item back under
+a node the tree does not paint. And `GET /api/item` serializes with a depth tied to the tree limit, so a deep
+tree returns valid JSON instead of a `200` with half a body.
+
+**Changed — the busy-timeout comment stopped promising what it did not do.** The 500 ms pragma never bounded
+the wait: the SQLite provider retries internally for 30 s. Contention is now bounded per attempt by the
+connection timeout and covered by an explicit retry, and the code says that instead of implying otherwise.
+
+**Tests:** 302 API tests (12 new: atomic moves, cycles, another organization's ids, detach of a piece that
 is not under that parent, `lector` `403`, the two kinds in every organization) and 274 UI tests (19 new:
 the picker offers only roots, the set's creation writes its kind, pieces and count come from the reloaded
 tree). `typecheck`, `lint:check` and `build` green.
