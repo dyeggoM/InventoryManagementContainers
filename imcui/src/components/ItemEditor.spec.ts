@@ -192,6 +192,23 @@ describe('ItemEditor', () => {
     expect(wrapper.findAll('.attribute-row')[0]!.text()).toContain('Brand');
   });
 
+  it('renders the actions the host puts in the details header', () => {
+    const wrapper = mount(ItemEditor, {
+      props: {
+        label: 'Base',
+        parent: null as string | number | null,
+        attributes: rowsFixture(),
+        attributeLabels: labels,
+      },
+      slots: { 'details-actions': '<button class="host-action">Add child item</button>' },
+      global: { stubs },
+    });
+
+    // The inventory keeps its "Add child item" button there; the dialog puts nothing in it.
+    expect(wrapper.find('.host-action').exists()).toBe(true);
+    expect(wrapper.findAll('.imc-section')[0]!.text()).toContain('Add child item');
+  });
+
   it('passes the choice lists and the types it is given to the attribute editor', () => {
     const wrapper = mount(ItemEditor, {
       props: {
