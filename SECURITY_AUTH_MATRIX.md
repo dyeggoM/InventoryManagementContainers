@@ -62,8 +62,10 @@ a valid target. Password reset is restricted to `superadmin`.
 | 37 | `GET /api/organization` | `Controllers/OrganizationController.cs:8` | — (nueva) | `REQUIERE_AUTH`; devuelve las organizaciones activas. La autorización vive en el cambio de organización, no en la enumeración: un token prestado la lee y no puede usarla |
 | 38 | `POST /api/auth/switch-organization` | `Controllers/AuthController.cs:134` | — (nueva) | `REQUIERE_AUTH (admin)`; niega un token suplantado (`403`), valida que el destino sea una organización activa, rota el refresh y deja `OrganizationSwitch` en las dos organizaciones. Los roles son globales: cambiar también permite escribir, que es lo que una tabla de pertenencia sustituirá |
 | 39 | `POST /api/import` (con `organizationId`) | `Controllers/ImportController.cs:81` | — (nueva) | `REQUIERE_AUTH (admin)`; el campo `organizationId` es **obligatorio** y puede ser distinto del token: se valida contra una organización activa, y la importación escribe en destino y deja `ItemImport` en las dos organizaciones |
+| 40 | `POST /api/item/{id}/children` | `Controllers/ItemController.cs:123` | — (nueva) | `REQUIERE_AUTH (escritura)`; adjunta piezas a un conjunto en una sola llamada. Todo o nada: un id de otra organización, repetido o que cierre un ciclo devuelve `400` y no mueve ninguno; el padre de otra organización es `404`, nunca `403` |
+| 41 | `DELETE /api/item/{id}/children/{childId}` | `Controllers/ItemController.cs:156` | — (nueva) | `REQUIERE_AUTH (escritura)`; desengancha una pieza sin borrarla: vuelve a ser un ítem raíz. `404` si la pieza no cuelga de ese padre, porque un `204` que no cambió nada es una mentira |
 
-Resumen: **31 rutas requieren autenticación** y 8 pueden responder sin credencial (las 5 del catálogo
+Resumen: **33 rutas requieren autenticación** y 8 pueden responder sin credencial (las 5 del catálogo
 original más `login`, `refresh` y `logout`, que existen para poder autenticarse). Desde `feat/organizations`
 la organización activa sale del claim `org` del token y nunca del cuerpo: un `TenantId` enviado por el cliente
 no se lee en ninguna ruta, y una petición sin claim ve el vocabulario compartido (`TenantId = 0`) y nada más. `logs` pasa de

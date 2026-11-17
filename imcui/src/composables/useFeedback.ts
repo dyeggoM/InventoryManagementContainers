@@ -1,4 +1,4 @@
-import { useQuasar } from 'quasar';
+import { useQuasar, type QDialogOptions } from 'quasar';
 import { getErrorMessage } from '../services/api';
 
 /**
@@ -49,6 +49,34 @@ export function useFeedback() {
     });
   }
 
+  /**
+   * Asks for one short answer, for the decisions that do not deserve a form of their own (the name
+   * of a new set). Resolves the trimmed answer, or null when the user cancels or leaves it empty.
+   */
+  function prompt(title: string, label: string, message?: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (value: string | null) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+      const options: QDialogOptions = {
+        title,
+        prompt: { model: '', type: 'text', label },
+        cancel: { label: 'Cancel', flat: true },
+        ok: { label: 'Create', color: 'primary', unelevated: true },
+        persistent: true,
+      };
+      if (message) options.message = message;
+      $q.dialog(options)
+        .onOk((value: string) => done((value ?? '').trim() || null))
+        .onCancel(() => done(null))
+        .onDismiss(() => done(null));
+    });
+  }
+
   /** Resolves true when the user chooses to throw unsaved edits away. */
   function confirmDiscard(message = 'Your edits were not saved.'): Promise<boolean> {
     return new Promise((resolve) => {
@@ -72,5 +100,5 @@ export function useFeedback() {
     });
   }
 
-  return { success, error, info, confirmDelete, confirmDiscard };
+  return { success, error, info, prompt, confirmDelete, confirmDiscard };
 }

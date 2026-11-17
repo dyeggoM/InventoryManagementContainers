@@ -6,6 +6,39 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — feat/item-sets
+
+**Added — a set is an item with pieces under it.** A drum kit is one record with its kick, snare and toms
+hanging off it, so the inventory shows *DRUM SET MAPEX ARMORY · 3* instead of three unrelated drums. The
+tree already allowed parent and child; what was missing was a way to say what an item *is*, and a way to
+attach pieces without editing them one at a time.
+
+**Added — the vocabulary of kinds.** `Constants` group `Type` gains **`Set`** and **`Accessory`** beside the
+existing `Instrument`, `Component`, `Part` and `SubPart`. `Part` is part of the equipment and `Accessory` is
+not — a strap or a case hangs off the guitar without being one of its parts — and the distinction is
+deliberate in the code, not decoration.
+
+**Added — `POST /api/item/{id}/children` and `DELETE /api/item/{id}/children/{childId}`.** A set takes its
+pieces in one call. The move is all-or-nothing: an id from another organization, a repeated id or one that
+would close a cycle answers `400` and moves none; another organization's parent is `404` and not `403`, so
+its existence is not observable. Detaching does not delete: the piece becomes a top-level item again, which
+is why it never leaves the inventory.
+
+**Changed — the inventory gives a set its own affordance.** *New set* creates the item with `Type = Set`
+in the same request and opens it; the set's detail gains a **Pieces** section that lists its children and
+offers *Add pieces*, which only proposes items without a parent — attaching one that already belongs to a
+set would silently move it out of that set. Moving a piece records the actor that did it, like any other
+edit.
+
+**Changed — the vocabulary no longer needs a migration that guesses.** The `Type` migration leaves an
+unseeded database alone and the startup seed fills it, so a fresh database and an existing one reach the
+same place without provisional rows to clean up.
+
+**Tests:** 284 API tests (12 new: atomic moves, cycles, another organization's ids, detach of a piece that
+is not under that parent, `lector` `403`, the two kinds in every organization) and 274 UI tests (19 new:
+the picker offers only roots, the set's creation writes its kind, pieces and count come from the reloaded
+tree). `typecheck`, `lint:check` and `build` green.
+
 ## Pending — feat/organizations
 
 **Added — the inventory is split by organization, on one database.** `Persona`, `Live Room` and `Alquimia`

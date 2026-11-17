@@ -39,6 +39,8 @@ VALUES
 (602, 'Type','', 'Component', '', 0, 6, 'system', 1, '2026-08-23 00:00:00'),
 (603, 'Type','', 'Part', '', 0, 6, 'system', 1, '2026-08-23 00:00:00'),
 (604, 'Type','', 'SubPart', '', 0, 6, 'system', 1, '2026-08-23 00:00:00'),
+(605, 'Type','', 'Set', '', 0, 6, 'system', 1, '2026-08-23 00:00:00'),
+(606, 'Type','', 'Accessory', '', 0, 6, 'system', 1, '2026-08-23 00:00:00'),
 (701, 'Attribute','', 'Brand', 'Label', 0, 7, 'system', 1, '2026-08-23 00:00:00'),
 (702, 'Attribute','', 'Category', 'Label', 0, 7, 'system', 1, '2026-08-23 00:00:00'),
 (703, 'Attribute','', 'Classification', 'Label', 0, 7, 'system', 1, '2026-08-23 00:00:00'),

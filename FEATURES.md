@@ -53,6 +53,24 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   back at level thirteen.
 - Empty states everywhere: no records yet, nothing matches, and “Select an item to edit it”.
 
+## Sets and their pieces
+
+A drum kit is not six unrelated drums: it is one set with six pieces, and the inventory says so.
+
+- **A set is an item with items under it.** No second table and no second screen — the same tree, one
+  level deeper, which is why a set is created, renamed, archived and restored like everything else.
+- **What an item is** is an attribute, `Type`, with `Set`, `Accessory`, `Instrument`, `Component`, `Part`
+  and `SubPart`. A set is marked as one; it is not *assumed* from having children, because a category has
+  children too and is not a set.
+- **`Part` is not `Accessory`.** A guitar's strap, its case and its strings hang off the guitar without
+  being parts of it. The distinction is in the vocabulary and in the code.
+- **Attaching pieces** is `POST /api/item/{id}/children` — all or nothing, cycle-checked, and limited to
+  items without a parent so nothing is moved out of another set in silence.
+- **Detaching** returns the piece to the inventory as a top-level item. Pieces are never deleted by a move.
+- The tree keeps every item visible: a set groups, it does not filter.
+- Implemented in `IMCAPI/Controllers/ItemController.cs:123`, `imcui/src/pages/index/inventory.vue`,
+  `imcui/src/components/SetPieces.vue` and `imcui/src/services/items.ts`.
+
 ## Organizations
 
 The inventory is split by organization, and the three of them live in the same database.

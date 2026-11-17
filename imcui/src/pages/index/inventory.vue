@@ -15,8 +15,10 @@
     :readonly="!canWrite"
     entity-label="Item"
     :entry-label="treeItem.label"
+    secondary-action-label="New set"
     @select="selectData"
     @create="createEntry"
+    @secondary-action="createSet"
     @submit="submitDialog"
     @reset="resetTreeItem"
     @delete="deleteTreeItem"
@@ -48,6 +50,21 @@
       </template>
     </item-editor>
 
+    <!--
+      A set's pieces are its children: the tree already counts them, this is where they are chosen.
+      Shown only for a set, because on any other item a child is a sub-item and the action for that
+      is "Add child item" in the details header.
+    -->
+    <set-pieces
+      v-if="isSet && treeItem.id > 0"
+      :pieces="pieces"
+      :candidates="candidates"
+      :readonly="!canWrite"
+      :busy="piecesBusy"
+      @add="attachPieces"
+      @remove="removePiece"
+    />
+
     <div class="imc-section">
       <div class="imc-section__title">Attachments</div>
       <attachment-editor
@@ -65,6 +82,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import TreeMasterDetail from '../../components/TreeMasterDetail.vue';
 import ItemEditor from '../../components/ItemEditor.vue';
+import SetPieces from '../../components/SetPieces.vue';
 import AttachmentEditor, { type AttachmentRow } from '../../components/AttachmentEditor.vue';
 import { useTreeEditor } from '../../composables/useTreeEditor';
 import { useAttributeCatalogue } from '../../composables/useAttributeCatalogue';
@@ -220,6 +238,99 @@ const {
   },
 });
 
+/** The attribute value that makes an item a set; its values come from the `Type` group. */
+const SET_TYPE = 'Set';
+
+/** The Type attribute of the record in the form, which is what tells a set from any other item. */
+const isSet = computed(
+  () => attributeValue(treeItem.value.attributes, 'Type').trim().toLowerCase() === 'set',
+);
+
+/**
+ * The pieces come from the tree and not from the form's copy of the node: attaching one reloads the
+ * tree, and reading it there is what keeps this list, the count badge and the form from disagreeing.
+ */
+const pieces = computed(() => {
+  const id = treeItem.value.id;
+  if (id <= 0) return [];
+  return itemsService.findItem(tree.value, id)?.children ?? [];
+});
+
+/** The items this set may take: the tree's roots, minus the set itself. */
+const candidates = computed(() => itemsService.rootCandidates(tree.value, treeItem.value.id));
+
+const piecesBusy = ref(false);
+
+/**
+ * A set is created as one. Until now it took "new item" and then finding `Type` among the
+ * attributes; here the name is the only question, the attribute is written with the record, and the
+ * new node opens selected so its pieces are one tap away.
+ */
+async function createSet() {
+  const label = await feedback.prompt(
+    'New set',
+    'Set name',
+    `It is created with the attribute Type = ${SET_TYPE}. Add its pieces once it is open.`,
+  );
+  if (!label) return;
+
+  try {
+    const created = await itemsService.create({
+      ...blank(),
+      label,
+      attributes: JSON.stringify({ Type: SET_TYPE }),
+    });
+    await loadData();
+    // The list and the panels are the server's answer, so the new node is found there, not here.
+    const node =
+      (created?.id ? itemsService.findItem(tree.value, created.id) : undefined) ??
+      tree.value.find((candidate) => candidate.label === label);
+    if (!node) {
+      feedback.error('The set was created but the tree did not return it; reload to see it.');
+      return;
+    }
+    selected.value = node.id;
+    await selectData(node.id);
+    feedback.success('Set created');
+  } catch (error) {
+    feedback.error(error, 'Could not create the set');
+  }
+}
+
+/** Attaches the picked items in one call, then reloads so the tree's count follows. */
+async function attachPieces(ids: number[]) {
+  const setId = treeItem.value.id;
+  if (setId <= 0 || ids.length === 0) return;
+
+  piecesBusy.value = true;
+  try {
+    const result = await itemsService.attachChildren(setId, ids);
+    feedback.success(`${result.moved} ${result.moved === 1 ? 'piece' : 'pieces'} added`);
+    await loadData();
+  } catch (error) {
+    feedback.error(error, 'Could not add the pieces');
+  } finally {
+    piecesBusy.value = false;
+  }
+}
+
+/** Detaches one piece: it leaves the set and stays in the inventory. */
+async function removePiece(childId: number) {
+  const setId = treeItem.value.id;
+  if (setId <= 0 || childId <= 0) return;
+
+  piecesBusy.value = true;
+  try {
+    await itemsService.detachChild(setId, childId);
+    feedback.success('Piece removed from the set');
+    await loadData();
+  } catch (error) {
+    feedback.error(error, 'Could not remove the piece');
+  } finally {
+    piecesBusy.value = false;
+  }
+}
+
 /**
  * Reads what the form is built from: the attribute catalogue — shared with the import's row
  * correction, which edits an item with the same fields — and the attachment types, which only this
@@ -254,16 +365,28 @@ async function loadAttachments(id: number) {
   }
 }
 
-function parseAttributes(raw: string | null | undefined): Record<string, string> {
+/** The stored attributes as a map, or null when the stored value is not a JSON object. */
+function readAttributes(raw: string | null | undefined): Record<string, string> | null {
   if (!raw) return {};
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : null;
   } catch {
-    // Rows written before the serializer existed can hold invalid JSON; the form must still open.
-    feedback.error('This item has malformed attributes; they were reset in the form.');
-    return {};
+    return null;
   }
+}
+
+/** One attribute of a record, for the decisions this page makes outside the form (is it a set?). */
+function attributeValue(raw: string | null | undefined, label: string): string {
+  return readAttributes(raw)?.[label] ?? '';
+}
+
+function parseAttributes(raw: string | null | undefined): Record<string, string> {
+  const parsed = readAttributes(raw);
+  if (parsed) return parsed;
+  // Rows written before the serializer existed can hold invalid JSON; the form must still open.
+  feedback.error('This item has malformed attributes; they were reset in the form.');
+  return {};
 }
 
 function addAttachment() {
