@@ -2,6 +2,23 @@
 
 What is deliberately not built yet, in the order it is worth doing.
 
+### Conjuntos y sus piezas (`feat/item-sets`) — `in progress`
+
+- [x] **`Type` con `Set` y `Accessory`** — `done`. Vocabulario en `Constants`; `Part` ≠ `Accessory`.
+- [x] **Adjuntar piezas en bloque** — `done`. `POST`/`DELETE /api/item/{id}/children`, atómico, con guarda
+  de ciclos y `404` para lo de otra organización.
+- [x] **Sección Pieces y «New set»** — `done`. El set nace con su atributo y sus piezas se eligen de una
+  lista que solo ofrece ítems sin padre.
+- [ ] **Que el import proponga conjuntos** — `todo`. Capa 3: cuando un fichero trae una fila de encabezado
+  antes de un bloque, marcarla en amarillo como «esto parece un conjunto» y que el usuario confirme. Nunca
+  agrupar solo, porque cada categoría trae el set de una forma distinta.
+- [ ] **Reconciliación del catálogo con identidad persistente** — `todo`, `Next`. Sustituye el sembrado de
+  una sola pasada por `SeedKey` (columna nullable, única por organización) más un registro de claves ya
+  aplicadas, para poder distinguir «fila nueva en el seed» de «el taller la borró» — `BaseRepository.Delete`
+  llega a borrado físico, así que `(Group, Label)` no sirve como identidad. Con eso, añadir una etiqueta al
+  vocabulario pasa a costar una línea en `seed.sql`. Va en rama propia: toca el arranque y el esquema de la
+  tabla más central.
+
 ### Inventarios por organización (`feat/organizations`) — `in progress`
 
 - [x] **Una base con columna de organización** — `done`. `TenantId` en `Items`, `Constants`, `Attachments`,

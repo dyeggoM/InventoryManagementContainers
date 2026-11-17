@@ -12,7 +12,7 @@
     <q-splitter v-if="$q.screen.gt.sm" v-model="splitter">
       <template v-slot:before>
         <div ref="treePane" class="q-pa-md tree-pane imc-pane" :style="paneStyle">
-          <div class="row items-center no-wrap q-gutter-sm q-mb-md">
+          <div class="row items-center q-gutter-sm q-mb-md">
             <q-input
               v-if="tree.length > 0"
               v-model="query"
@@ -34,6 +34,15 @@
               :label="`New ${entityLabel.toLowerCase()}`"
               color="primary"
               @click="emit('create')"
+            />
+            <q-btn
+              v-if="!readonly && secondaryActionLabel"
+              outline
+              no-caps
+              icon="inventory_2"
+              :label="secondaryActionLabel"
+              color="primary"
+              @click="emit('secondary-action')"
             />
           </div>
 
@@ -249,17 +258,32 @@
       </template>
 
       <q-page-sticky v-if="!readonly" position="bottom-right" :offset="[16, 16]">
-        <q-btn
-          round
-          unelevated
-          no-caps
-          icon="add"
-          :label="`New ${entityLabel.toLowerCase()}`"
-          color="primary"
-          class="imc-fab"
-          aria-label="New item"
-          @click="emit('create')"
-        />
+        <div class="column items-end q-gutter-sm">
+          <!-- The second create action, compact: a phone's width is the list's, not the buttons'. -->
+          <q-btn
+            v-if="secondaryActionLabel"
+            round
+            unelevated
+            icon="inventory_2"
+            color="primary"
+            class="imc-fab-mini"
+            :aria-label="secondaryActionLabel"
+            @click="emit('secondary-action')"
+          >
+            <q-tooltip>{{ secondaryActionLabel }}</q-tooltip>
+          </q-btn>
+          <q-btn
+            round
+            unelevated
+            no-caps
+            icon="add"
+            :label="`New ${entityLabel.toLowerCase()}`"
+            color="primary"
+            class="imc-fab"
+            aria-label="New item"
+            @click="emit('create')"
+          />
+        </div>
       </q-page-sticky>
     </div>
 
@@ -370,8 +394,14 @@ const props = withDefaults(
      * create, duplicate, delete and save affordance is hidden, and the pages disable their fields.
      */
     readonly?: boolean;
+    /**
+     * A second create action beside the first, for a record the page can create in one step: the
+     * inventory opens "New set" here, because a set is created with its Type attribute already set.
+     * Left empty (the configuration page), only the one create button exists.
+     */
+    secondaryActionLabel?: string;
   }>(),
-  { entityLabel: 'Item', entryLabel: '', dirty: false, readonly: false },
+  { entityLabel: 'Item', entryLabel: '', dirty: false, readonly: false, secondaryActionLabel: '' },
 );
 
 const emit = defineEmits<{
@@ -382,6 +412,8 @@ const emit = defineEmits<{
   delete: [];
   duplicate: [];
   close: [];
+  /** The second create action was pressed; see `secondaryActionLabel`. */
+  'secondary-action': [];
 }>();
 
 const selected = defineModel<number>('selected', { required: true });
@@ -552,6 +584,13 @@ async function requestClose() {
 .imc-fab {
   padding-left: 18px;
   padding-right: 22px;
+}
+
+/* The compact twin of the FAB: same colour, small enough that both sit in the corner at 390px. */
+.imc-fab-mini {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
 }
 
 .tree-pane :deep(.q-tree__arrow) {

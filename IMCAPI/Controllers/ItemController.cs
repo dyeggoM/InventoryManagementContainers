@@ -118,6 +118,55 @@ public class ItemController : BaseController<Item>
         return await base.Put(id, data);
     }
 
+    public sealed record MoveChildrenRequest(int[]? Ids);
+
+    [HttpPost("{id:int}/children")]
+    [Authorize(Policy = "RequiereEscritura")]
+    public async Task<IActionResult> MoveChildren(int id, [FromBody] MoveChildrenRequest request)
+    {
+        if (!await _context.Items.AnyAsync(item => item.Id == id)) return NotFound();
+        if (request.Ids is null || request.Ids.Length == 0)
+            return InvalidHierarchy("Supply at least one child id.");
+
+        var children = await _context.Items.Where(item => request.Ids.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id);
+        var visited = new HashSet<int>();
+        foreach (var childId in request.Ids)
+        {
+            if (childId == id || !visited.Add(childId) || !children.ContainsKey(childId))
+                return InvalidHierarchy($"Child item {childId} does not exist, is repeated, or is the parent.");
+
+            var hierarchy = await AnalyzeParentChain(childId, id);
+            if (hierarchy.Cycle)
+                return InvalidHierarchy($"Child item {childId} would create a cycle.");
+            var attemptedLevel = hierarchy.ParentLevel + await GetSubtreeHeight(childId);
+            if (attemptedLevel > _maxDepth)
+                return DepthExceeded(attemptedLevel);
+        }
+
+        foreach (var child in children.Values)
+        {
+            child.ParentId = id;
+            child.UpdatedAt = DateTime.UtcNow;
+        }
+        await _context.SaveChangesAsync();
+        return Ok(new { moved = children.Count });
+    }
+
+    [HttpDelete("{id:int}/children/{childId:int}")]
+    [Authorize(Policy = "RequiereEscritura")]
+    public async Task<IActionResult> DetachChild(int id, int childId)
+    {
+        if (!await _context.Items.AnyAsync(item => item.Id == id)) return NotFound();
+        var child = await _context.Items.SingleOrDefaultAsync(item => item.Id == childId && item.ParentId == id);
+        if (child is null) return NotFound();
+
+        child.ParentId = null;
+        child.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
     private async Task<(bool Cycle, bool ParentExists, int ParentLevel)> AnalyzeParentChain(int itemId, int proposedParentId)
     {
         var visited = new HashSet<int>();
