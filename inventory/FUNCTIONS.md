@@ -686,7 +686,7 @@ Module documents (what a module is, and its impact lines): `AI_INVENTORY.md` →
 - `imcui/src/components/dashboard/ImportPanel.spec.ts:336` · **checkbox** function checkbox(wrapper, label) · `← 12` · `→ 3` · `≈8 lines`
 - `imcui/src/components/dashboard/ImportPanel.spec.ts:344` · **chip** function chip(wrapper, label) · `← 12` · `→ 5` · `≈8 lines`
 - `imcui/src/components/dashboard/ImportPanel.spec.ts:352` · **itemRows** function itemRows(wrapper) · `← 39` · `→ 1` · `≈5 lines`
-- `imcui/src/components/dashboard/ImportPanel.spec.ts:357` · **analyse** function analyse(wrapper, file = ...) · `← 64` · `→ 7` · `≈1170 lines`
+- `imcui/src/components/dashboard/ImportPanel.spec.ts:357` · **analyse** function analyse(wrapper, file = ...) · `← 64` · `→ 7` · `≈1176 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:1` · **ImportPanel** SFC ImportPanel · `← 0` · `→ 3` · `≈381 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:422` · **emptyCounts** function emptyCounts() · `← 5` · `→ 0` · `≈4 lines`
 - `imcui/src/components/dashboard/ImportPanel.vue:438` · **matchesStatus** function matchesStatus(status) · `← 3` · `→ 0` · `≈6 lines`
@@ -997,7 +997,7 @@ Module documents (what a module is, and its impact lines): `AI_INVENTORY.md` →
 
 ## Longest first — read these before changing them
 
-- `≈1170 lines` · `imcui/src/components/dashboard/ImportPanel.spec.ts:357` · **analyse** · `← 64` callers
+- `≈1176 lines` · `imcui/src/components/dashboard/ImportPanel.spec.ts:357` · **analyse** · `← 64` callers
 - `≈940 lines` · `imcui/src/components/dashboard/ImportPanel.vue:662` · **reset** · `← 0` callers
 - `≈537 lines` · `imcui/src/services/import.spec.ts:40` · **previewAnswer** · `← 3` callers
 - `≈395 lines` · `imcui/src/components/TreeMasterDetail.vue:1` · **TreeMasterDetail** · `← 0` callers
