@@ -1,3 +1,6 @@
+using System.Data;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using IMCAPI.DB;
 using IMCAPI.DB.Entities;
 using IMCAPI.DB.Repositories;
@@ -5,6 +8,7 @@ using IMCAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
 
 namespace IMCAPI.Controllers;
 
@@ -47,6 +51,8 @@ public class ItemController : BaseController<Item>
         if (data.ParentId is int parentId)
         {
             var hierarchy = await AnalyzeParentChain(0, parentId);
+            if (hierarchy.AlreadyLooping)
+                return InvalidHierarchy("The parent hierarchy already contains a cycle.");
             if (hierarchy.Cycle)
                 return InvalidHierarchy("The parent assignment creates a cycle.");
             if (!hierarchy.ParentExists)
@@ -73,7 +79,10 @@ public class ItemController : BaseController<Item>
 
     [HttpPut("{id:int}")]
     [Authorize(Policy = "RequiereEscritura")]
-    public override async Task<IActionResult> Put(int id, Item data)
+    public override Task<IActionResult> Put(int id, Item data) =>
+        WithHierarchyWriteLock(() => PutLocked(id, data));
+
+    private async Task<IActionResult> PutLocked(int id, Item data)
     {
         if (id != data.Id) return BadRequest();
         var existing = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.Id == id && item.TenantId == _context.CurrentTenantId);
@@ -83,10 +92,12 @@ public class ItemController : BaseController<Item>
         if (data.Attachments is { Count: > 0 })
             return BadRequest("Attachments cannot be added through item PUT; use /api/attachment.");
         data.IsActive = existing.IsActive;
-        var subtreeHeight = await GetSubtreeHeight(id);
+        var subtreeHeight = GetSubtreeHeight(id, await LoadChildrenByParent(), new Dictionary<int, int>(), new HashSet<int>());
         if (data.ParentId is int proposedParentId)
         {
             var hierarchy = await AnalyzeParentChain(id, proposedParentId);
+            if (hierarchy.AlreadyLooping)
+                return InvalidHierarchy("The parent hierarchy already contains a cycle.");
             if (hierarchy.Cycle)
                 return InvalidHierarchy("The parent assignment creates a cycle.");
             if (!hierarchy.ParentExists)
@@ -101,20 +112,6 @@ public class ItemController : BaseController<Item>
             return DepthExceeded(subtreeHeight);
         }
 
-        if (data.Attachments is { Count: > 0 })
-        {
-            foreach (var attachment in data.Attachments)
-            {
-                if (attachment.ItemId == 0)
-                {
-                    attachment.ItemId = id;
-                }
-
-                var error = await _attachments.ApplyUploadAsync(attachment);
-                if (error is not null) return BadRequest(error);
-            }
-        }
-
         return await base.Put(id, data);
     }
 
@@ -122,7 +119,10 @@ public class ItemController : BaseController<Item>
 
     [HttpPost("{id:int}/children")]
     [Authorize(Policy = "RequiereEscritura")]
-    public async Task<IActionResult> MoveChildren(int id, [FromBody] MoveChildrenRequest request)
+    public Task<IActionResult> MoveChildren(int id, [FromBody] MoveChildrenRequest request) =>
+        WithHierarchyWriteLock(() => MoveChildrenLocked(id, request));
+
+    private async Task<IActionResult> MoveChildrenLocked(int id, MoveChildrenRequest request)
     {
         if (!await _context.Items.AnyAsync(item => item.Id == id)) return NotFound();
         if (request.Ids is null || request.Ids.Length == 0)
@@ -130,6 +130,8 @@ public class ItemController : BaseController<Item>
 
         var children = await _context.Items.Where(item => request.Ids.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id);
+        var childrenByParent = await LoadChildrenByParent();
+        var heights = new Dictionary<int, int>();
         var visited = new HashSet<int>();
         foreach (var childId in request.Ids)
         {
@@ -137,20 +139,28 @@ public class ItemController : BaseController<Item>
                 return InvalidHierarchy($"Child item {childId} does not exist, is repeated, or is the parent.");
 
             var hierarchy = await AnalyzeParentChain(childId, id);
+            if (hierarchy.AlreadyLooping)
+                return InvalidHierarchy("The parent hierarchy already contains a cycle.");
             if (hierarchy.Cycle)
                 return InvalidHierarchy($"Child item {childId} would create a cycle.");
-            var attemptedLevel = hierarchy.ParentLevel + await GetSubtreeHeight(childId);
+            var attemptedLevel = hierarchy.ParentLevel + GetSubtreeHeight(childId, childrenByParent, heights, new HashSet<int>());
             if (attemptedLevel > _maxDepth)
                 return DepthExceeded(attemptedLevel);
         }
 
+        // Attaching is a move: report where every piece came from, including roots.
+        var reparented = request.Ids.Select(childId => new { id = childId, @from = children[childId].ParentId }).ToArray();
         foreach (var child in children.Values)
         {
             child.ParentId = id;
             child.UpdatedAt = DateTime.UtcNow;
         }
         await _context.SaveChangesAsync();
-        return Ok(new { moved = children.Count });
+        // The API's global JSON options omit nulls; roots must explicitly report "from": null.
+        return new JsonResult(new { moved = children.Count, reparented }, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never
+        });
     }
 
     [HttpDelete("{id:int}/children/{childId:int}")]
@@ -167,46 +177,78 @@ public class ItemController : BaseController<Item>
         return NoContent();
     }
 
-    private async Task<(bool Cycle, bool ParentExists, int ParentLevel)> AnalyzeParentChain(int itemId, int proposedParentId)
+    private async Task<(bool Cycle, bool AlreadyLooping, bool ParentExists, int ParentLevel)> AnalyzeParentChain(int itemId, int proposedParentId)
     {
         var visited = new HashSet<int>();
         var currentId = proposedParentId;
         var parentLevel = 0;
         while (visited.Add(currentId))
         {
-            if (itemId != 0 && currentId == itemId) return (true, true, parentLevel);
+            if (itemId != 0 && currentId == itemId) return (true, false, true, parentLevel);
             var parent = await _context.Items.IgnoreQueryFilters().AsNoTracking()
                 .Where(item => item.Id == currentId && item.TenantId == _context.CurrentTenantId)
                 .Select(item => new { item.ParentId })
                 .SingleOrDefaultAsync();
-            if (parent is null) return (false, false, parentLevel);
+            if (parent is null) return (false, false, false, parentLevel);
             parentLevel++;
-            if (parent.ParentId is not int nextId) return (false, true, parentLevel);
+            if (parent.ParentId is not int nextId) return (false, false, true, parentLevel);
             currentId = nextId;
         }
-        return (true, true, parentLevel);
+        return (false, true, true, parentLevel);
     }
 
-    private async Task<int> GetSubtreeHeight(int rootId)
+    private async Task<Dictionary<int, int[]>> LoadChildrenByParent()
     {
-        var items = await _context.Items.IgnoreQueryFilters().AsNoTracking().Where(item => item.TenantId == _context.CurrentTenantId)
+        var items = await _context.Items.AsNoTracking()
             .Select(item => new { item.Id, item.ParentId }).ToListAsync();
-        var childrenByParent = items.Where(item => item.ParentId is not null)
+        return items.Where(item => item.ParentId is not null)
             .GroupBy(item => item.ParentId!.Value)
             .ToDictionary(group => group.Key, group => group.Select(item => item.Id).ToArray());
-        var pending = new Queue<(int Id, int Depth)>();
-        var visited = new HashSet<int> { rootId };
-        pending.Enqueue((rootId, 1));
-        var height = 1;
-        while (pending.TryDequeue(out var current))
-        {
-            height = Math.Max(height, current.Depth);
-            if (!childrenByParent.TryGetValue(current.Id, out var children)) continue;
-            foreach (var childId in children)
-                if (visited.Add(childId)) pending.Enqueue((childId, current.Depth + 1));
-        }
-        return height;
     }
+
+    private static int GetSubtreeHeight(int rootId, Dictionary<int, int[]> childrenByParent,
+        Dictionary<int, int> heights, HashSet<int> visiting)
+    {
+        if (heights.TryGetValue(rootId, out var cached)) return cached;
+        if (!visiting.Add(rootId)) return 0; // Historical corrupt cycles cannot recurse forever.
+        var height = 1;
+        if (childrenByParent.TryGetValue(rootId, out var children))
+            foreach (var childId in children)
+                height = Math.Max(height, 1 + GetSubtreeHeight(childId, childrenByParent, heights, visiting));
+        visiting.Remove(rootId);
+        return heights[rootId] = height;
+    }
+
+    private async Task<IActionResult> WithHierarchyWriteLock(Func<Task<IActionResult>> action)
+    {
+        // SQLite begins serializable transactions IMMEDIATE: the writer lock precedes all hierarchy reads.
+        for (var attempt = 0; ; attempt++)
+        {
+            await _context.Database.OpenConnectionAsync();
+            try
+            {
+                await _context.Database.ExecuteSqlRawAsync("PRAGMA busy_timeout = 500");
+                await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+                var result = await action();
+                if (result is not ObjectResult { StatusCode: >= 500 })
+                    await tx.CommitAsync();
+                return result;
+            }
+            catch (Exception ex) when (IsSqliteBusy(ex) && attempt < 5)
+            {
+                _context.ChangeTracker.Clear();
+                await Task.Delay(25 * (attempt + 1));
+            }
+            finally
+            {
+                await _context.Database.CloseConnectionAsync();
+            }
+        }
+    }
+
+    private static bool IsSqliteBusy(Exception ex) =>
+        ex is SqliteException sqlite && sqlite.SqliteErrorCode is 5 or 6
+        || ex.InnerException is not null && IsSqliteBusy(ex.InnerException);
 
     private BadRequestObjectResult InvalidHierarchy(string detail) => BadRequest(new ProblemDetails
     {

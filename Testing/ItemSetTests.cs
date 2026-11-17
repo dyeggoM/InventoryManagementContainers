@@ -44,6 +44,108 @@ public sealed class ItemSetTests : ApiTestBase
         return (row.ParentId, row.IsActive, row.TenantId, row.Attributes, row.UpdatedBy, row.UpdatedAt);
     }
 
+    private async Task<(int? A, int? B)> SelectParents(int a, int b)
+    {
+        await using var connection = new SqliteConnection($"Data Source={Factory.DatabasePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id, ParentId FROM Items WHERE Id IN ($a, $b) ORDER BY Id";
+        command.Parameters.AddWithValue("$a", a);
+        command.Parameters.AddWithValue("$b", b);
+        await using var rows = await command.ExecuteReaderAsync();
+        int? aParent = null, bParent = null;
+        var found = 0;
+        while (await rows.ReadAsync())
+        {
+            var parent = rows.IsDBNull(1) ? (int?)null : rows.GetInt32(1);
+            if (rows.GetInt32(0) == a) aParent = parent;
+            else bParent = parent;
+            found++;
+        }
+        Assert.That(found, Is.EqualTo(2));
+        return (aParent, bParent);
+    }
+
+    [Test]
+    public async Task ConcurrentCrossMovesCannotCreateCycle()
+    {
+        for (var iteration = 1; iteration <= 12; iteration++)
+        {
+            var a = await CreateItem($"CONCURRENT A {iteration}");
+            var b = await CreateItem($"CONCURRENT B {iteration}");
+            var responses = await Task.WhenAll(Move(a, b), Move(b, a));
+            var statuses = responses.Select(response => (int)response.StatusCode).Order().ToArray();
+            var (aParent, bParent) = await SelectParents(a, b);
+            TestContext.Out.WriteLine($"round {iteration}: HTTP {JsonSerializer.Serialize(statuses)}; " +
+                $"SELECT Id,ParentId FROM Items WHERE Id IN ({a},{b}): " +
+                JsonSerializer.Serialize(new[] { new { id = a, parentId = aParent }, new { id = b, parentId = bParent } }));
+            Assert.That(statuses, Is.EqualTo(new[] { 200, 400 }), $"round {iteration}");
+            Assert.That(aParent == b && bParent == a, Is.False, $"round {iteration}: cycle persisted");
+            Assert.That((aParent == b) != (bParent == a), Is.True, $"round {iteration}: exactly one move must persist");
+        }
+    }
+
+    [Test]
+    public async Task ConcurrentPutAndMoveCannotCreateCycle()
+    {
+        for (var iteration = 1; iteration <= 10; iteration++)
+        {
+            var a = await CreateItem($"PUT RACE A {iteration}");
+            var b = await CreateItem($"PUT RACE B {iteration}");
+            var responses = await Task.WhenAll(
+                Client.PutAsJsonAsync($"/api/item/{a}", new { id = a, label = "PUT RACE A", icon = "", parentId = b, attributes = "{}" }),
+                Move(a, b));
+            var statuses = responses.Select(response => (int)response.StatusCode).Order().ToArray();
+            var (aParent, bParent) = await SelectParents(a, b);
+            TestContext.Out.WriteLine($"PUT/MOVE round {iteration}: HTTP {JsonSerializer.Serialize(statuses)}; " +
+                $"SELECT Id,ParentId FROM Items WHERE Id IN ({a},{b}): " +
+                JsonSerializer.Serialize(new[] { new { id = a, parentId = aParent }, new { id = b, parentId = bParent } }));
+            Assert.That(statuses.Count(status => status == 400), Is.EqualTo(1), $"round {iteration}");
+            Assert.That(statuses.Count(status => status is 200 or 204), Is.EqualTo(1), $"round {iteration}");
+            Assert.That((aParent == b) != (bParent == a), Is.True, $"round {iteration}: exactly one move must persist");
+        }
+    }
+
+    [Test]
+    public async Task ReparentResponseNamesOldParentAndRoot()
+    {
+        var oldSet = await CreateItem("OLD SET");
+        var newSet = await CreateItem("NEW SET");
+        var attached = await CreateItem("ATTACHED", oldSet);
+        var root = await CreateItem("ROOT PIECE");
+        var moved = await Move(newSet, attached, root);
+        Assert.That(moved.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var json = await moved.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.That(json.GetProperty("moved").GetInt32(), Is.EqualTo(2));
+        var origins = json.GetProperty("reparented").EnumerateArray().ToArray();
+        Assert.That(origins[0].GetProperty("id").GetInt32(), Is.EqualTo(attached));
+        Assert.That(origins[0].GetProperty("from").GetInt32(), Is.EqualTo(oldSet));
+        Assert.That(origins[1].GetProperty("id").GetInt32(), Is.EqualTo(root));
+        Assert.That(origins[1].GetProperty("from").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That((await Row(attached)).ParentId, Is.EqualTo(newSet));
+        Assert.That((await Row(root)).ParentId, Is.EqualTo(newSet));
+    }
+
+    [Test]
+    public async Task ExistingParentLoopIsReportedAsCorruptInsteadOfBlamingNewChild()
+    {
+        var a = await CreateItem("LOOP A");
+        var b = await CreateItem("LOOP B");
+        var fresh = await CreateItem("FRESH ROOT");
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Items SET ParentId = {b} WHERE Id = {a}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Items SET ParentId = {a} WHERE Id = {b}");
+        }
+        var refused = await Move(a, fresh);
+        Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        var detail = await refused.Content.ReadAsStringAsync();
+        Assert.That(detail, Does.Contain("already contains a cycle"));
+        Assert.That(detail, Does.Not.Contain($"Child item {fresh} would create a cycle"));
+        Assert.That((await Row(fresh)).ParentId, Is.Null);
+    }
+
     [Test]
     public async Task MoveThreeAndDetachOne_ReadsBackTreeAndKeepsAllPieces()
     {
@@ -145,6 +247,25 @@ public sealed class ItemSetTests : ApiTestBase
         Assert.That(await refused.Content.ReadAsStringAsync(), Does.Contain("maximum allowed depth"));
         Assert.That((await Row(set)).ParentId, Is.Null);
         Assert.That((await Row(piece)).ParentId, Is.EqualTo(set));
+    }
+
+    [Test]
+    public async Task InactiveDescendantsDoNotInflateMoveHeight()
+    {
+        var parent = await CreateItem("ACTIVE ROOT");
+        for (var level = 1; level < 11; level++)
+            parent = await CreateItem($"ACTIVE LEVEL {level}", parent);
+        var piece = await CreateItem("PIECE WITH INACTIVE CHILD");
+        var inactive = await CreateItem("INACTIVE DESCENDANT", piece);
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Items SET IsActive = 0 WHERE Id = {inactive}");
+        }
+        var moved = await Move(parent, piece);
+        Assert.That(moved.StatusCode, Is.EqualTo(HttpStatusCode.OK), await moved.Content.ReadAsStringAsync());
+        Assert.That((await Row(piece)).ParentId, Is.EqualTo(parent));
+        Assert.That((await Row(inactive)).IsActive, Is.False);
     }
 
     [Test]

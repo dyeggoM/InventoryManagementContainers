@@ -35,6 +35,10 @@ public sealed class OrganizationAuditTests : ApiTestBase
         using var check = Factory.Services.CreateScope();
         var db = check.ServiceProvider.GetRequiredService<ApplicationContext>();
         var rowsBefore = await db.Attachments.IgnoreQueryFilters().CountAsync(row => row.ItemId == id);
+        var itemBefore = await db.Items.IgnoreQueryFilters().AsNoTracking()
+            .Where(row => row.Id == id)
+            .Select(row => new { row.Label, row.Attributes, row.ParentId, row.UpdatedAt,
+                row.UpdatedBy, row.IsActive, row.TenantId }).SingleAsync();
         TestContext.Out.WriteLine("directory before " + directory + ": " + JsonSerializer.Serialize(before));
 
         var response = await Client.PutAsJsonAsync($"/api/item/{id}", new
@@ -49,18 +53,21 @@ public sealed class OrganizationAuditTests : ApiTestBase
         });
         var after = Listing(directory);
         var rowsAfter = await db.Attachments.IgnoreQueryFilters().CountAsync(row => row.ItemId == id);
-        var label = await db.Items.IgnoreQueryFilters().Where(row => row.Id == id).Select(row => row.Label).SingleAsync();
+        var itemAfter = await db.Items.IgnoreQueryFilters().AsNoTracking()
+            .Where(row => row.Id == id)
+            .Select(row => new { row.Label, row.Attributes, row.ParentId, row.UpdatedAt,
+                row.UpdatedBy, row.IsActive, row.TenantId }).SingleAsync();
         TestContext.Out.WriteLine("directory after " + directory + ": " + JsonSerializer.Serialize(after));
         TestContext.Out.WriteLine("item-put-attachment " + JsonSerializer.Serialize(new
         {
-            status = (int)response.StatusCode, rowsBefore, rowsAfter, label
+            status = (int)response.StatusCode, rowsBefore, rowsAfter, label = itemAfter.Label
         }));
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("/api/attachment"));
         Assert.That(before, Is.Empty);
         Assert.That(after, Is.EqualTo(before));
         Assert.That(rowsAfter, Is.EqualTo(rowsBefore).And.EqualTo(0));
-        Assert.That(label, Is.EqualTo("ITEM PUT NO ORPHANS"));
+        Assert.That(itemAfter, Is.EqualTo(itemBefore));
     }
 
     [Test]
