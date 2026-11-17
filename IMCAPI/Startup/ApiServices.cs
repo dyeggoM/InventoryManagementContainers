@@ -15,6 +15,12 @@ public static class ApiServices
         {
             options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
             options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+            // System.Text.Json stops at 64 containers by default, and a legal item tree does not fit:
+            // the response died halfway through the body (200, chunked, half a document). The bound
+            // that matters is the one the write routes enforce, so the serializer's depth follows
+            // it; 64 is kept as the floor so no other payload loses room it had before.
+            var maxDepth = ItemHierarchyLimits.ResolveMaxDepth(builder.Configuration);
+            options.JsonSerializerOptions.MaxDepth = Math.Max(64, ItemHierarchyLimits.JsonDepthFor(maxDepth));
         });
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(c =>

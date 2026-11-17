@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Options;
 
 namespace IMCAPI.Controllers;
 
@@ -24,10 +25,12 @@ public class ItemController : BaseController<Item>
     private readonly IConfiguration _configuration;
     private readonly ArchiveRetention _retention;
     private readonly ILogger<ItemController> _log;
+    private readonly IOptions<JsonOptions> _json;
 
     public ItemController(IRepository<Item> repository, ILogger<BaseController<Item>> logger, AttachmentStorage attachments,
         ApplicationContext context, IConfiguration configuration, AuditLogWriter audit,
-        ArchiveRetention retention, ILogger<ItemController> log)
+        ArchiveRetention retention, ILogger<ItemController> log,
+        IOptions<JsonOptions> json)
         : base(repository, logger)
     {
         _attachments = attachments;
@@ -36,12 +39,9 @@ public class ItemController : BaseController<Item>
         _configuration = configuration;
         _retention = retention;
         _log = log;
-        var environmentMaxDepth = Environment.GetEnvironmentVariable("ITEMS_MAX_DEPTH");
-        _maxDepth = int.TryParse(environmentMaxDepth, out var parsedEnvironmentDepth) && parsedEnvironmentDepth > 0
-            ? parsedEnvironmentDepth
-            : int.TryParse(configuration["Items:MaxDepth"], out var configuredDepth) && configuredDepth > 0
-                ? configuredDepth
-                : 12;
+        _json = json;
+        // Same resolution as the importer and the serializer's depth: one bound, three readers.
+        _maxDepth = ItemHierarchyLimits.ResolveMaxDepth(configuration);
     }
 
     [HttpPost]
@@ -169,7 +169,10 @@ public class ItemController : BaseController<Item>
 
     [HttpDelete("{id:int}/children/{childId:int}")]
     [Authorize(Policy = "RequiereEscritura")]
-    public async Task<IActionResult> DetachChild(int id, int childId)
+    public Task<IActionResult> DetachChild(int id, int childId) =>
+        WithHierarchyWriteLock(() => DetachChildLocked(id, childId));
+
+    private async Task<IActionResult> DetachChildLocked(int id, int childId)
     {
         if (!await _context.Items.AnyAsync(item => item.Id == id)) return NotFound();
         var child = await _context.Items.SingleOrDefaultAsync(item => item.Id == childId && item.ParentId == id);
@@ -231,29 +234,59 @@ public class ItemController : BaseController<Item>
     private async Task<IActionResult> WithHierarchyWriteLock(Func<Task<IActionResult>> action)
     {
         // SQLite begins serializable transactions IMMEDIATE: the writer lock precedes all hierarchy reads.
-        for (var attempt = 0; ; attempt++)
+        //
+        // This used to run `PRAGMA busy_timeout = 500` and promise a 500 ms wait. It promised nothing:
+        // that pragma is SQLite's busy handler, and it is not what a `BEGIN IMMEDIATE` waits on. The
+        // provider (Microsoft.Data.Sqlite) retries the statement itself, bounded by
+        // SqliteConnection.DefaultTimeout — 30 s by default. Measured: an external writer held the lock
+        // for 4 s while the pragma said 500 ms, and BEGIN IMMEDIATE came back after 4020 ms; the audit's
+        // 11.8 s wait is the same thing on a 12 s hold. The knob that actually bounds it is the
+        // connection's default timeout, so that is what is set here (and restored when the lock is
+        // released), one second per attempt; the retry loop below is what covers a longer contention
+        // instead of turning it into a 500 after half a minute.
+        var sqlite = _context.Database.GetDbConnection() as SqliteConnection;
+        var previousConnectionTimeout = sqlite?.DefaultTimeout;
+        if (sqlite is not null) sqlite.DefaultTimeout = HierarchyLockAttemptSeconds;
+        var previousCommandTimeout = _context.Database.GetCommandTimeout();
+        _context.Database.SetCommandTimeout(HierarchyLockAttemptSeconds);
+        try
         {
-            await _context.Database.OpenConnectionAsync();
-            try
+            for (var attempt = 0; ; attempt++)
             {
-                await _context.Database.ExecuteSqlRawAsync("PRAGMA busy_timeout = 500");
-                await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
-                var result = await action();
-                if (result is not ObjectResult { StatusCode: >= 500 })
-                    await tx.CommitAsync();
-                return result;
-            }
-            catch (Exception ex) when (IsSqliteBusy(ex) && attempt < 5)
-            {
-                _context.ChangeTracker.Clear();
-                await Task.Delay(25 * (attempt + 1));
-            }
-            finally
-            {
-                await _context.Database.CloseConnectionAsync();
+                await _context.Database.OpenConnectionAsync();
+                try
+                {
+                    await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+                    var result = await action();
+                    if (result is not ObjectResult { StatusCode: >= 500 })
+                        await tx.CommitAsync();
+                    return result;
+                }
+                catch (Exception ex) when (IsSqliteBusy(ex) && attempt < 5)
+                {
+                    _context.ChangeTracker.Clear();
+                    await Task.Delay(25 * (attempt + 1));
+                }
+                finally
+                {
+                    await _context.Database.CloseConnectionAsync();
+                }
             }
         }
+        finally
+        {
+            if (sqlite is not null && previousConnectionTimeout is int restore) sqlite.DefaultTimeout = restore;
+            _context.Database.SetCommandTimeout(previousCommandTimeout);
+        }
     }
+
+    /// <summary>
+    /// How long one attempt waits on another writer before giving up and retrying. It is the
+    /// connection's default timeout, which is what Microsoft.Data.Sqlite uses for its own retry of a
+    /// statement that hits a held lock; the retry loop is what covers a longer contention, not a
+    /// longer timeout.
+    /// </summary>
+    private const int HierarchyLockAttemptSeconds = 1;
 
     private static bool IsSqliteBusy(Exception ex) =>
         ex is SqliteException sqlite && sqlite.SqliteErrorCode is 5 or 6
@@ -344,12 +377,21 @@ public class ItemController : BaseController<Item>
             if (filePaths is not null) _attachments.MoveToTrash(filePaths);
             return result;
         }
-        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteExtendedErrorCode: 787 })
+        // A `RESTRICT` foreign key answers SQLITE_CONSTRAINT (19) with the extended code
+        // SQLITE_CONSTRAINT_TRIGGER (1811), not SQLITE_CONSTRAINT_FOREIGNKEY (787) — measured. The
+        // filter used to name 787, so this handler never ran and the honest 409 the code below builds
+        // was never built. Match the constraint class and let the child count decide: with children
+        // this is the delete being refused, without them it is a real error and is rethrown.
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 19 })
         {
             // Only an Item's children justify this 409; other FK failures remain real errors.
             _context.ChangeTracker.Clear();
+            // The pre-check inside the lock counts this organization's children, which is what the
+            // caller may see and move. The constraint that just fired has no organization filter, so
+            // the diagnosis must not have one either: a child row of another organization (only
+            // corruption produces one) would be filtered out here and turn the honest 409 into a 500.
             var childCount = await _context.Items.IgnoreQueryFilters()
-                .CountAsync(child => child.ParentId == id && child.TenantId == _context.CurrentTenantId);
+                .CountAsync(child => child.ParentId == id);
             if (childCount > 0) return ChildrenPreventDelete(childCount);
             throw;
         }
@@ -455,14 +497,18 @@ public class ItemController : BaseController<Item>
 
     [HttpPatch("{id:int}/activate")]
     [Authorize(Policy = "RequiereAdmin")]
-    public async Task<IActionResult> Activate(int id, CancellationToken cancellationToken)
+    public Task<IActionResult> Activate(int id, CancellationToken cancellationToken) =>
+        WithHierarchyWriteLock(() => ActivateLocked(id, cancellationToken));
+
+    private async Task<IActionResult> ActivateLocked(int id, CancellationToken cancellationToken)
     {
         var archive = await _context.ItemArchives.Where(row => row.ItemId == id && row.RestoredAtUtc == null)
             .OrderByDescending(row => row.DeletedAtUtc).ThenByDescending(row => row.ArchiveId)
             .FirstOrDefaultAsync(cancellationToken);
         if (archive is null) return NotFound();
 
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        // The writer lock and its transaction belong to WithHierarchyWriteLock, exactly as they do
+        // for every other route that reads the tree before writing it.
         var idIsFree = !await _context.Items.IgnoreQueryFilters().AnyAsync(item => item.Id == id, cancellationToken);
         var parentId = archive.ParentId;
         if (parentId is not null && !await _context.Items.IgnoreQueryFilters()
@@ -473,6 +519,10 @@ public class ItemController : BaseController<Item>
         if (parentId is not null)
         {
             var hierarchy = await AnalyzeParentChain(archive.ItemId, parentId.Value);
+            // A parent chain that already loops cannot be restored under: the tree would not paint
+            // the record, which is the same state Post and Put refuse with the same words.
+            if (hierarchy.AlreadyLooping)
+                return InvalidHierarchy("The parent hierarchy already contains a cycle.");
             if (hierarchy.Cycle) return InvalidHierarchy("The restore would create a cycle.");
             var attemptedLevel = hierarchy.ParentLevel + 1;
             if (attemptedLevel > _maxDepth) return DepthExceeded(attemptedLevel);
@@ -531,7 +581,9 @@ public class ItemController : BaseController<Item>
                 await _context.SaveChangesAsync(cancellationToken);
             }
 
-            await transaction.CommitAsync(cancellationToken);
+            // Committing is WithHierarchyWriteLock's job: an answer the caller rejected (a 400 from
+            // the depth or cycle checks above) must not leave half a restore behind, and a retry
+            // after a busy lock has to start over.
         }
         catch
         {
@@ -577,13 +629,46 @@ public class ItemController : BaseController<Item>
                 var tree = dto?.Where(x => x.ParentId == null)?.ToList();
                 var panels = data?.Select(x => new ItemDTO(x.Id,x.Label,x.Attributes,x.ParentId, x.Attachments));
 
-                return Ok(new { tree, panels });
+                return JsonBody(new { tree, panels });
             }
             throw new HttpRequestException();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _log.LogError(ex, "ItemController.Get could not read the tree");
             return StatusCode(StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    /// <summary>
+    /// Answers with one buffered JSON body instead of letting MVC stream it. A payload deeper than
+    /// the serializer's <c>MaxDepth</c> used to die halfway: the response had already started, so it
+    /// arrived as <c>200</c> with a truncated document and no status could correct it. Serializing
+    /// into a buffer first turns that into an honest answer — the whole body, or a 500 that says why.
+    /// </summary>
+    private IActionResult JsonBody(object payload)
+    {
+        var options = _json.Value.JsonSerializerOptions;
+        try
+        {
+            return new ContentResult
+            {
+                Content = JsonSerializer.Serialize(payload, options),
+                ContentType = "application/json; charset=utf-8",
+                StatusCode = StatusCodes.Status200OK
+            };
+        }
+        catch (JsonException ex)
+        {
+            _log.LogError(ex, "The item tree is deeper than the serializer allows (MaxDepth {MaxDepth})", options.MaxDepth);
+            return new ObjectResult(new ProblemDetails
+            {
+                Status = StatusCodes.Status500InternalServerError,
+                Title = "Item tree cannot be serialized",
+                Detail = $"The item tree is deeper than the JSON depth this API allows (MaxDepth {options.MaxDepth}). "
+                    + "The stored hierarchy is outside the depth the write routes enforce."
+            })
+            { StatusCode = StatusCodes.Status500InternalServerError };
         }
     }
 }

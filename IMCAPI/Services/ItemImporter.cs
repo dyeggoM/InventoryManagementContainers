@@ -33,13 +33,18 @@ public sealed class ItemImporter
     private readonly AuditLogWriter _audit;
     private readonly SubcategoryPlacement _placement;
     private readonly TenantScope _tenant;
+    private readonly int _maxDepth;
 
-    public ItemImporter(ApplicationContext context, AuditLogWriter audit, SubcategoryPlacement placement, TenantScope tenant)
+    public ItemImporter(ApplicationContext context, AuditLogWriter audit, SubcategoryPlacement placement, TenantScope tenant,
+        IConfiguration configuration)
     {
         _context = context;
         _audit = audit;
         _placement = placement;
         _tenant = tenant;
+        // The same bound the hierarchy routes enforce: an import that writes level 3 under a limit of
+        // 2 would hand the API a tree it would have refused to create.
+        _maxDepth = ItemHierarchyLimits.ResolveMaxDepth(configuration);
     }
 
     /// <summary>What an import did, so the answer can be checked against the file.</summary>
@@ -258,6 +263,26 @@ public sealed class ItemImporter
                     }
                 }
                 : row).ToList();
+        }
+
+        // The API refuses to place a record past ITEMS_MAX_DEPTH, and the import writes the same tree:
+        // the category is the root, the subcategory the level under it, and the row the level after
+        // that (a row whose subcategory is the category itself stops one level earlier). A row that
+        // would land deeper is red with the reason and stays in the preview — counted as rejected —
+        // instead of being written into a hierarchy the routes would have refused, and instead of
+        // aborting an import whose other rows are fine.
+        for (var index = 0; index < planned.Count; index++)
+        {
+            var (placement, item) = planned[index];
+            var attemptedLevel = Same(placement.Group, placement.Category) ? 2 : 3;
+            if (attemptedLevel <= _maxDepth) continue;
+            var reason = $"La jerarquía solicitada alcanzaría el nivel {attemptedLevel}; el máximo permitido es {_maxDepth}.";
+            planned[index] = (placement, item with
+            {
+                Status = Red,
+                Reasons = item.Reasons.Append(reason).ToList()
+            });
+            issues.Add(new ImportIssue(item.Source ?? "*", item.Row, Red, reason));
         }
 
         // Count only edits whose final verdict is importable; a failed repair remains a red row.

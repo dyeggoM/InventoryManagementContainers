@@ -127,9 +127,9 @@ public sealed class ItemHierarchyRaceTests : ApiTestBase
     public void KnownHierarchyRoutesDeclareTheirLockBoundary()
     {
         // Explicit contract until the separate architecture round supplies one enforced write gate.
-        // Add new Item hierarchy routes here; DetachChild/Activate intentionally remain deferred.
-        var guarded = new[] { "Post", "Put", "MoveChildren", "Delete" };
-        var deferred = new[] { "DetachChild", "Activate" };
+        // Every route that reads the hierarchy before writing it is on this list, without exceptions.
+        var guarded = new[] { "Post", "Put", "MoveChildren", "DetachChild", "Delete", "Activate" };
+        var deferred = Array.Empty<string>();
         var sourceRoot = Factory.Services.GetRequiredService<IWebHostEnvironment>().ContentRootPath;
         var source = File.ReadAllText(Path.Combine(sourceRoot, "Controllers", "ItemController.cs"));
         var routes = typeof(ItemController).GetMethods(System.Reflection.BindingFlags.Public |
@@ -138,10 +138,59 @@ public sealed class ItemHierarchyRaceTests : ApiTestBase
             .Select(method => method.Name).ToArray();
         foreach (var name in guarded.Concat(deferred))
             Assert.That(routes, Does.Contain(name), $"the hierarchy route {name} disappeared from the inventory");
+        Assert.That(deferred, Is.Empty, "no hierarchy route is left outside the write lock");
         // Source assertions deliberately fail if a protected handler drops its pre-read wrapper.
         foreach (var name in guarded)
             Assert.That(Regex.IsMatch(source,
                 $@"public (?:override )?(?:async )?Task<IActionResult> {name}\([^)]*\)[\s\S]{{0,450}}?WithHierarchyWriteLock\("),
                 Is.True, $"{name} must acquire the lock before reading the hierarchy");
+    }
+
+    /// <summary>
+    /// The contention the old `PRAGMA busy_timeout = 500` claimed to bound. An external process holds
+    /// `BEGIN IMMEDIATE` for two seconds: both routes have to wait and answer, not turn someone else's
+    /// writer lock into a 500 after thirty seconds.
+    /// </summary>
+    [Test]
+    public async Task AnExternalWriterHoldingTheLockDoesNotTurnDetachOrActivateIntoAServerError()
+    {
+        var parent = await CreateItem("LOCKED PARENT");
+        var child = await CreateItem("LOCKED CHILD", parent);
+        var archived = await CreateItem("LOCKED ARCHIVED");
+        Assert.That((await Client.DeleteAsync($"/api/item/{archived}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+
+        await using var writer = new SqliteConnection($"Data Source={Factory.DatabasePath}");
+        await writer.OpenAsync();
+        await using (var begin = writer.CreateCommand())
+        {
+            begin.CommandText = "BEGIN IMMEDIATE";
+            await begin.ExecuteNonQueryAsync();
+        }
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var detachTask = Client.DeleteAsync($"/api/item/{parent}/children/{child}");
+        var activateTask = Client.PatchAsync($"/api/item/{archived}/activate", content: null);
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        await using (var release = writer.CreateCommand())
+        {
+            release.CommandText = "ROLLBACK";
+            await release.ExecuteNonQueryAsync();
+        }
+
+        var detach = await detachTask;
+        var activate = await activateTask;
+        started.Stop();
+        TestContext.Out.WriteLine($"external writer held the lock for 2 s: detach={(int)detach.StatusCode}, "
+            + $"activate={(int)activate.StatusCode}, waited {started.ElapsedMilliseconds} ms");
+
+        var detachBody = await detach.Content.ReadAsStringAsync();
+        var activateBody = await activate.Content.ReadAsStringAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(detach.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), detachBody);
+            Assert.That(activate.StatusCode, Is.EqualTo(HttpStatusCode.OK), activateBody);
+            Assert.That(started.Elapsed, Is.LessThan(TimeSpan.FromSeconds(20)),
+                "the wait is bounded by the retry loop, not by the provider's 30 s default");
+        });
     }
 }
