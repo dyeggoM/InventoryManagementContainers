@@ -46,7 +46,11 @@ public class ItemController : BaseController<Item>
 
     [HttpPost]
     [Authorize(Policy = "RequiereEscritura")]
-    public override async Task<IActionResult> Post(Item data)
+    public override Task<IActionResult> Post(Item data) => data.ParentId is null
+        ? PostLocked(data)
+        : WithHierarchyWriteLock(() => PostLocked(data));
+
+    private async Task<IActionResult> PostLocked(Item data)
     {
         if (data.ParentId is int parentId)
         {
@@ -92,7 +96,7 @@ public class ItemController : BaseController<Item>
         if (data.Attachments is { Count: > 0 })
             return BadRequest("Attachments cannot be added through item PUT; use /api/attachment.");
         data.IsActive = existing.IsActive;
-        var subtreeHeight = GetSubtreeHeight(id, await LoadChildrenByParent(), new Dictionary<int, int>(), new HashSet<int>());
+        var subtreeHeight = GetSubtreeHeight(id, await LoadChildrenByParent(), new Dictionary<int, int>(), new HashSet<int>(), _maxDepth);
         if (data.ParentId is int proposedParentId)
         {
             var hierarchy = await AnalyzeParentChain(id, proposedParentId);
@@ -143,7 +147,7 @@ public class ItemController : BaseController<Item>
                 return InvalidHierarchy("The parent hierarchy already contains a cycle.");
             if (hierarchy.Cycle)
                 return InvalidHierarchy($"Child item {childId} would create a cycle.");
-            var attemptedLevel = hierarchy.ParentLevel + GetSubtreeHeight(childId, childrenByParent, heights, new HashSet<int>());
+            var attemptedLevel = hierarchy.ParentLevel + GetSubtreeHeight(childId, childrenByParent, heights, new HashSet<int>(), _maxDepth);
             if (attemptedLevel > _maxDepth)
                 return DepthExceeded(attemptedLevel);
         }
@@ -207,14 +211,19 @@ public class ItemController : BaseController<Item>
     }
 
     private static int GetSubtreeHeight(int rootId, Dictionary<int, int[]> childrenByParent,
-        Dictionary<int, int> heights, HashSet<int> visiting)
+        Dictionary<int, int> heights, HashSet<int> visiting, int maxDepth)
     {
         if (heights.TryGetValue(rootId, out var cached)) return cached;
         if (!visiting.Add(rootId)) return 0; // Historical corrupt cycles cannot recurse forever.
+        if (visiting.Count > maxDepth)
+        {
+            visiting.Remove(rootId);
+            return maxDepth + 1; // A corrupted/imported chain cannot overflow the process stack.
+        }
         var height = 1;
         if (childrenByParent.TryGetValue(rootId, out var children))
             foreach (var childId in children)
-                height = Math.Max(height, 1 + GetSubtreeHeight(childId, childrenByParent, heights, visiting));
+                height = Math.Max(height, 1 + GetSubtreeHeight(childId, childrenByParent, heights, visiting, maxDepth));
         visiting.Remove(rootId);
         return heights[rootId] = height;
     }
@@ -322,14 +331,40 @@ public class ItemController : BaseController<Item>
     [Authorize(Policy = "RequiereAdmin")]
     public override async Task<IActionResult> Delete(int id)
     {
+        string?[]? filePaths = null;
+        try
+        {
+            var result = await WithHierarchyWriteLock(async () =>
+            {
+                var (response, paths) = await DeleteLocked(id);
+                filePaths = paths;
+                return response;
+            });
+            // The database is committed before moving files; a rejected delete never touches trash.
+            if (filePaths is not null) _attachments.MoveToTrash(filePaths);
+            return result;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteExtendedErrorCode: 787 })
+        {
+            // Only an Item's children justify this 409; other FK failures remain real errors.
+            _context.ChangeTracker.Clear();
+            var childCount = await _context.Items.IgnoreQueryFilters()
+                .CountAsync(child => child.ParentId == id && child.TenantId == _context.CurrentTenantId);
+            if (childCount > 0) return ChildrenPreventDelete(childCount);
+            throw;
+        }
+    }
+
+    private async Task<(IActionResult Response, string?[]? FilePaths)> DeleteLocked(int id)
+    {
         var item = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(row => row.Id == id && row.TenantId == _context.CurrentTenantId);
-        if (item is null) return NotFound();
+        if (item is null) return (NotFound(), null);
 
         var attachments = await _context.Attachments.IgnoreQueryFilters()
             .Where(attachment => attachment.ItemId == id && attachment.TenantId == _context.CurrentTenantId).ToListAsync();
         var childCount = await _context.Items.IgnoreQueryFilters()
             .CountAsync(child => child.ParentId == id && child.TenantId == _context.CurrentTenantId);
-        if (childCount > 0) return ChildrenPreventDelete(childCount);
+        if (childCount > 0) return (ChildrenPreventDelete(childCount), null);
         var actorId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("sub")?.Value;
         var actorEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
@@ -346,15 +381,11 @@ public class ItemController : BaseController<Item>
         };
         var filePaths = attachments.Select(attachment => attachment.FilePath).ToArray();
 
-        await using var transaction = await _context.Database.BeginTransactionAsync();
         _context.ItemArchives.Add(archive);
         _context.Attachments.RemoveRange(attachments);
         _context.Items.Remove(item);
         await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
-
-        _attachments.MoveToTrash(filePaths);
-        return NoContent();
+        return (NoContent(), filePaths);
     }
 
     [HttpGet("archive")]
