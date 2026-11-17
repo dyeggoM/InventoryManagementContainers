@@ -121,7 +121,7 @@ public sealed class UserController : ControllerBase
         // compares, so the token minted with the old roles answers 401 from here on.
         var stamp = await _users.UpdateSecurityStampAsync(user);
         if (!stamp.Succeeded) return BadRequest(new { errors = stamp.Errors.Select(item => item.Description) });
-        await _audit.WriteAsync("RoleChange", "IdentityUser", id,
+        await _audit.WriteAsync(AuditActions.RoleChange, "IdentityUser", id,
             beforeJson: JsonSerializer.Serialize(currentRoles, AuditJson),
             afterJson: JsonSerializer.Serialize(nextRoles, AuditJson), cancellationToken: cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -179,6 +179,7 @@ public sealed class UserController : ControllerBase
         var startsAt = DateTime.UtcNow;
         var session = new ImpersonationSession
         {
+            TenantId = _context.CurrentTenantId,
             ActorUserId = actor.Id,
             ActorEmail = actor.Email,
             TargetRole = role,
@@ -188,10 +189,10 @@ public sealed class UserController : ControllerBase
         _context.ImpersonationSessions.Add(session);
         await _context.SaveChangesAsync(cancellationToken);
 
-        await _audit.WriteAsync("ImpersonateStart", "UserRole", role, actor.Id, actor.Email, cancellationToken,
+        await _audit.WriteAsync(AuditActions.ImpersonateStart, "UserRole", role, actor.Id, actor.Email, cancellationToken,
             afterJson: JsonSerializer.Serialize(new { role, impersonation_session = session.Id }, AuditJson),
             impersonationSessionId: session.Id);
-        var access = await _tokens.CreateImpersonationTokenAsync(actor, role, session.Id, session.ExpiresAtUtc);
+        var access = await _tokens.CreateImpersonationTokenAsync(actor, role, session.Id, session.ExpiresAtUtc, _context.CurrentTenantId);
         return Ok(new
         {
             access_token = access.Token, expires_at_utc = access.ExpiresAtUtc, role, scope = "read",
@@ -214,7 +215,7 @@ public sealed class UserController : ControllerBase
         var active = await _context.RefreshTokens.Where(token => token.UserId == id && token.RevokedAtUtc == null).ToListAsync(cancellationToken);
         foreach (var token in active) token.RevokedAtUtc = now;
         await _context.SaveChangesAsync(cancellationToken);
-        await _audit.WriteAsync("PasswordReset", "IdentityUser", id, cancellationToken: cancellationToken);
+        await _audit.WriteAsync(AuditActions.PasswordReset, "IdentityUser", id, cancellationToken: cancellationToken);
         return Ok(new { initialPassword = request?.Password is null ? password : null });
     }
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 
 namespace IMCAPI.Services;
 
@@ -68,14 +69,26 @@ public sealed class ArchiveRetentionSweeper : BackgroundService
         try
         {
             using var scope = _scopes.CreateScope();
+            var tenant = scope.ServiceProvider.GetRequiredService<TenantScope>();
+            var db = scope.ServiceProvider.GetRequiredService<IMCAPI.DB.ApplicationContext>();
+            // The sweeper has no token; explicitly enumerate active organizations, never sweep an implicit "all".
+            var organizations = await db.Constants.IgnoreQueryFilters()
+                .Where(row => row.Group == "Organization" && row.TenantId == 0 && row.IsActive)
+                .Select(row => row.Id).ToListAsync(cancellationToken);
             var retention = scope.ServiceProvider.GetRequiredService<ArchiveRetention>();
             var cutoff = DateTime.UtcNow.AddDays(-ageDays);
-            var result = await retention.PurgeAsync(cutoff, ageDays, "archive-retention", cancellationToken);
-            if (result.Deleted > 0)
+            var deleted = 0;
+            foreach (var organizationId in organizations)
+            {
+                tenant.SelectSystemTenant(organizationId);
+                var result = await retention.PurgeAsync(cutoff, ageDays, "archive-retention", cancellationToken);
+                deleted += result.Deleted;
+                if (result.Deleted > 0)
                 _logger.LogInformation(
                     "Archive retention removed {Deleted} ledger rows older than {Cutoff} and {Files} files.",
                     result.Deleted, cutoff, result.DestroyedAttachments);
-            return result.Deleted;
+            }
+            return deleted;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

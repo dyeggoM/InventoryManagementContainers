@@ -35,7 +35,7 @@ public sealed class AttachmentTrashTests : ApiTestBase
         var deleted = await Client.DeleteAsync($"/api/item/{itemId}");
         Assert.That(deleted.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), await deleted.Content.ReadAsStringAsync());
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var archive = await context.ItemArchives.SingleAsync(row => row.ItemId == itemId);
         Assert.Multiple(() =>
@@ -102,7 +102,7 @@ public sealed class AttachmentTrashTests : ApiTestBase
         Assert.That(File.Exists(Trashed(filePath)), Is.True);
 
         // Age the row past the retention window: the API only archives by deleting a live record.
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             var archive = await context.ItemArchives.SingleAsync(row => row.ItemId == itemId && row.RestoredAtUtc == null);
@@ -116,7 +116,7 @@ public sealed class AttachmentTrashTests : ApiTestBase
         Assert.That(payload.GetProperty("deleted").GetInt32(), Is.GreaterThanOrEqualTo(1));
 
         Assert.That(File.Exists(Trashed(filePath)), Is.False, "a purge is where a file is finally destroyed");
-        using var check = Factory.Services.CreateScope();
+        using var check = PersonaScope();
         var db = check.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await db.ItemArchives.AnyAsync(row => row.ItemId == itemId), Is.False);
     }

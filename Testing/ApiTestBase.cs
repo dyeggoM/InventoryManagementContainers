@@ -6,6 +6,7 @@ using IMCAPI.DB;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using IMCAPI.Services;
 
 namespace Testing;
 
@@ -58,6 +59,14 @@ public abstract class ApiTestBase
     /// out one shared factory: the per-fixture database is what keeps the suite's tests independent.
     /// </summary>
     protected virtual ApiFactory CreateFactory() => new();
+
+    /// <summary>A requestless fixture scope acting for Persona, including filtered reads.</summary>
+    protected IServiceScope PersonaScope()
+    {
+        var scope = Factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<TenantScope>().SelectSystemTenant(900001);
+        return scope;
+    }
 
     /// <summary>Opens the fixture's API and, unless opted out, signs the shared client in.</summary>
     protected virtual async Task StartApi()
@@ -128,7 +137,7 @@ public abstract class ApiTestBase
     /// </summary>
     protected async Task<HttpClient> CreateAccountAndLogin(string email, string role, string password = Password)
     {
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
             var user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
@@ -162,7 +171,7 @@ public abstract class ApiTestBase
     /// </summary>
     protected async Task<int> CountItems()
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         return await context.Items.IgnoreQueryFilters().CountAsync();
     }
@@ -181,6 +190,7 @@ public abstract class ApiTestBase
         var file = new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath(fixture)));
         file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         payload.Add(file, "file", fixture);
+        payload.Add(new StringContent(OrganizationConfiguration.DefaultTenantId.ToString()), "organizationId");
         return await Client.PostAsync(route, payload);
     }
 
@@ -203,6 +213,7 @@ public abstract class ApiTestBase
         var file = new ByteArrayContent(await File.ReadAllBytesAsync(FixturePath(fixture)));
         file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         payload.Add(file, "file", fixture);
+        payload.Add(new StringContent(OrganizationConfiguration.DefaultTenantId.ToString()), "organizationId");
         if (includeYellow is { } include) payload.Add(new StringContent(include ? "true" : "false"), "includeYellow");
         foreach (var code in skipCodes ?? Array.Empty<string>()) payload.Add(new StringContent(code), "skipCodes");
         return await Client.PostAsync("/api/import", payload);

@@ -6,6 +6,49 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — feat/organizations
+
+**Added — the inventory is split by organization, on one database.** `Persona`, `Live Room` and `Alquimia`
+are rows of `Constants` (group `Organization`, ids `900001`–`900003`), and every table that holds inventory
+data — `Items`, `Constants`, `Attachments`, `ItemsArchive`, `AuditLogs`, `ImpersonationSessions`,
+`RefreshTokens` — carries a `TenantId`. The organization is read from an `org` claim in the token and applied
+as an EF global query filter, so a query that forgets it sees nothing instead of seeing everything.
+`TenantId = 0` means *shared*: the organization list itself and the application's vocabulary (`FieldType`,
+`AttachmentType`), which is readable from every organization and writable only by `superadmin`. The migration
+assigns the existing rows to `Persona` and copies the configuration to the other two in two passes, so the
+copies hang from their own parents.
+
+**Added — `POST /api/auth/switch-organization`, `GET /api/organization`.** Switching validates an active
+organization, rotates the refresh, carries the new organization through the next refresh, refuses a borrowed
+(impersonated) token, and writes an `OrganizationSwitch` row in both the organization being left and the one
+being entered. `admin` and `superadmin` may switch; `lector` is refused. Roles are global today, so switching
+also grants writes — per-organization read-only is what a membership table would buy, and it is on the
+roadmap, not pretended here.
+
+**Added — an import names its destination.** `POST /api/import/preview` and `POST /api/import` take a required
+`organizationId`, which may be a different organization from the token's; the placement ladder, the similarity
+proposals and the unique-code check all run against the destination's configuration, and the import leaves an
+`ItemImport` row in **both** organizations. A missing field is `400`, an unknown or inactive organization is
+`400`, and only `admin`/`superadmin` may import.
+
+**Security — the boundary was audited four times, and the audit changed the design.** The independent review
+found and we closed: any authenticated user could switch into any organization (now `admin`+); the shared
+vocabulary was writable from an organization; any admin could mint an organization row; identity audit rows
+(`LoginFailed`, `RefreshReuse`) were written at tenant `0` and no reader could see them; a constant could be
+hung from another organization's parent; the import ignored the `organizationId` it documented; a
+cross-organization `PUT` answered `204` while writing nothing; the audit reader rejected the very action names
+this change introduced; `PUT` could relabel a row into `group = "Organization"`; an attachment `PUT` accepted
+an `ItemId` it never validated; the interceptor could leave a transaction open when a guard threw; and the
+switch persisted its rotated token only as a side effect of the audit write. `Testing/OrganizationIsolationTests.cs`
+and its companions walk every read path — tree, item by id, archive, attachments, constants, and the
+`IgnoreQueryFilters` sites — as one organization trying to see another.
+
+**Fixed — an item `PUT` no longer writes files it will not record.** `PUT /api/item/{id}` accepted an attachment with `uploadBase64`, wrote the file and inserted no row, because `UpdateAsync` copies scalar properties and the `Attachments` navigation is dropped: repeatable, unnameable media on disk. The field is now refused with `400` before any write and attachments go through `/api/attachment`. Found by the fourth audit, pre-existing.
+
+**Tests:** 235 API tests, and a fresh database migrated from scratch is checked by
+`cache/scratch/verify_tenants.py`: three organizations, 238 constants each, no cross-organization parent, no
+inventory row without an organization.
+
 ## Pending — `feat/import-similarity`
 
 **Changed — `npm run lint:check` checks formatting instead of printing it.** The script ran

@@ -59,6 +59,19 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
         var auditEntries = entries.Where(entry => entry.Entity is AuditLog).ToList();
         if (auditEntries.Any(entry => entry.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("Audit log rows are append-only.");
+        var tenantId = ((ApplicationContext)context).CurrentTenantId;
+        foreach (var entry in entries.Where(entry => entry.State == EntityState.Added))
+        {
+            // AuditLogs (identity events) and shared vocabulary Constants may legitimately use tenant 0.
+            // Every other scoped write requires an HTTP organization or SelectSystemTenant on the scope.
+            if (entry.Entity is Base scoped && !(scoped is Constants constant && TenantScope.IsShared(constant))
+                || entry.Entity is ItemArchive or ImpersonationSession)
+            {
+                if (tenantId == 0)
+                    throw new InvalidOperationException("Select a tenant before writing organization data.");
+                if (entry.Entity is ImpersonationSession session) session.TenantId = tenantId;
+            }
+        }
         // The impersonation session is bookkeeping for the audit trail, not a business change: its
         // Start/End rows already record what happened, so its own Update would be noise.
         var changed = entries.Where(entry => entry.Entity is not AuditLog and not ImpersonationSession
@@ -71,6 +84,9 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
             if (owns) transaction = async
                 ? await context.Database.BeginTransactionAsync(ct)
                 : context.Database.BeginTransaction();
+            // Register before inspecting entries: a guard may throw before a Change is built.
+            var changes = new List<Change>(changed.Count);
+            _pending.Add(context, new Pending(changes, transaction, owns));
             var http = accessor.HttpContext;
             var principal = http?.User;
             var now = DateTime.UtcNow;
@@ -85,9 +101,24 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
             // Which borrow the write happened under. The actor is already in `act`; this names the
             // session, so a row written during an impersonation can be paired with Start/End.
             var impSid = impersonated is null ? null : principal?.FindFirst("imp_sid")?.Value;
-            var changes = new List<Change>(changed.Count);
             foreach (var entry in changed)
             {
+                if (entry.Entity is Base scoped)
+                {
+                    if (entry.State == EntityState.Added)
+                        scoped.TenantId = scoped is Constants constant && TenantScope.IsShared(constant) ? 0
+                            : accessor.HttpContext is null ? tenantId
+                            : accessor.HttpContext.RequestServices.GetRequiredService<TenantScope>().WriteTenantOverride ?? tenantId;
+                    else if (entry.State == EntityState.Modified)
+                    {
+                        var tenant = entry.Property(nameof(Base.TenantId));
+                        tenant.CurrentValue = tenant.OriginalValue;
+                        tenant.IsModified = false;
+                        if (scoped.TenantId != tenantId && scoped.TenantId != 0)
+                            throw new InvalidOperationException("A row cannot be updated outside its organization.");
+                    }
+                }
+                if (entry.State == EntityState.Added && entry.Entity is ItemArchive archive) archive.TenantId = tenantId;
                 var isItemRestore = entry.Entity is Item && http?.Items.ContainsKey("ItemArchiveRestore") == true;
                 if (entry.Entity is Base entity)
                 {
@@ -123,11 +154,8 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                         && Equals(entry.Property(nameof(Base.IsActive)).CurrentValue, false)
                     || entry.Entity is UserProfile && Equals(entry.Property(nameof(UserProfile.IsActive)).OriginalValue, true)
                         && Equals(entry.Property(nameof(UserProfile.IsActive)).CurrentValue, false));
-                var action = isRole ? "RoleChange" : isSoftDelete ? "SoftDelete" : isItemRestore ? "Restore" : entry.State switch
-                {
-                    EntityState.Added => "Create", EntityState.Modified => "Update", EntityState.Deleted => "Delete",
-                    _ => throw new InvalidOperationException("Unexpected entity state.")
-                };
+                var action = AuditActions.ForChange(entry.State, isRoleChange: isRole, isSoftDelete: isSoftDelete,
+                    isRestore: isItemRestore);
                 changes.Add(new Change(entry, action, isRole ? "IdentityUserRole" : entry.Metadata.ClrType.Name,
                     isRole ? entry.Property("UserId").CurrentValue?.ToString() : null,
                     entry.State == EntityState.Added ? null : Serialize(entry, original: true),
@@ -135,7 +163,6 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                     now, actorId, actorEmail, imp, http?.Connection.RemoteIpAddress?.ToString(),
                     http?.Request.Headers.UserAgent.ToString(), http?.TraceIdentifier ?? Activity.Current?.Id, impSid));
             }
-            _pending.Add(context, new Pending(changes, transaction, owns));
         }
         catch
         {
@@ -172,7 +199,7 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                 var id = change.FixedId ?? string.Join(",", change.Entry.Metadata.FindPrimaryKey()!.Properties
                     .Select(property => change.Entry.Property(property.Name).CurrentValue?.ToString() ?? ""));
                 var afterValues = change.After;
-                if (change.Action == "Create" && afterValues is not null)
+                if (change.Action == AuditActions.Create && afterValues is not null)
                 {
                     foreach (var key in change.Entry.Metadata.FindPrimaryKey()!.Properties)
                     {
@@ -182,6 +209,9 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
                 }
                 var log = new AuditLog
                 {
+                    TenantId = change.Entry.Entity is Base row ? row.TenantId
+                        : change.Entry.Entity is ItemArchive archive ? archive.TenantId
+                        : ((ApplicationContext)context).CurrentTenantId,
                     TimestampUtc = change.Timestamp, ActorUserId = change.ActorId, ActorEmail = change.Email,
                     ImpersonatedUserId = change.ImpersonatedId, Action = change.Action, Entity = change.Entity,
                     ImpersonationSessionId = change.ImpersonationSessionId,
@@ -219,8 +249,8 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
 
     private static async Task InsertLog(DbContext context, AuditLog log, bool async, CancellationToken cancellationToken)
     {
-        const string sql = "INSERT INTO \"AuditLogs\" (\"TimestampUtc\", \"ActorUserId\", \"ActorEmail\", \"ImpersonatedUserId\", \"ImpersonationSessionId\", \"Action\", \"Entity\", \"EntityId\", \"BeforeJson\", \"AfterJson\", \"IpAddress\", \"UserAgent\", \"RequestId\") VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12)";
-        var values = new object?[] { log.TimestampUtc, log.ActorUserId, log.ActorEmail, log.ImpersonatedUserId,
+        const string sql = "INSERT INTO \"AuditLogs\" (\"TenantId\", \"TimestampUtc\", \"ActorUserId\", \"ActorEmail\", \"ImpersonatedUserId\", \"ImpersonationSessionId\", \"Action\", \"Entity\", \"EntityId\", \"BeforeJson\", \"AfterJson\", \"IpAddress\", \"UserAgent\", \"RequestId\") VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13)";
+        var values = new object?[] { log.TenantId, log.TimestampUtc, log.ActorUserId, log.ActorEmail, log.ImpersonatedUserId,
             log.ImpersonationSessionId, log.Action, log.Entity, log.EntityId, log.BeforeJson, log.AfterJson,
             log.IpAddress, log.UserAgent, log.RequestId };
         var connection = context.Database.GetDbConnection();
@@ -232,7 +262,8 @@ public sealed class AuditSaveChangesInterceptor(IHttpContextAccessor accessor) :
             var parameter = command.CreateParameter();
             parameter.ParameterName = $"@p{index}";
             parameter.Value = values[index] ?? DBNull.Value;
-            if (index == 0) parameter.DbType = DbType.DateTime;
+            if (index == 0) parameter.DbType = DbType.Int32;
+            else if (index == 1) parameter.DbType = DbType.DateTime;
             else if (values[index] is string || values[index] is null) parameter.DbType = DbType.String;
             command.Parameters.Add(parameter);
         }
@@ -287,6 +318,7 @@ public sealed class AuditLogWriter(ApplicationContext context, IHttpContextAcces
         var impersonating = principal?.FindFirst("act")?.Value;
         context.AuditLogs.Add(new AuditLog
         {
+            TenantId = context.CurrentTenantId,
             TimestampUtc = DateTime.UtcNow,
             ActorUserId = actorUserId ?? (impersonating is null
                 ? principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal?.FindFirst("sub")?.Value

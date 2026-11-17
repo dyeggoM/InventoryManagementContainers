@@ -23,12 +23,19 @@ public static class StartupTasks
                 DatabaseSeeder.SeedIdentityAsync(userManager, roleManager, app.Configuration).GetAwaiter().GetResult();
                 DatabaseSeeder.EnsureUserProfilesAsync(context, userManager).GetAwaiter().GetResult();
 
+                var tenant = serviceScope.ServiceProvider.GetRequiredService<TenantScope>();
+                tenant.SelectSystemTenant(OrganizationConfiguration.DefaultTenantId);
                 // Older rows carry the whole image; move it to disk once.
                 var storage = serviceScope.ServiceProvider.GetRequiredService<AttachmentStorage>();
                 DatabaseSeeder.BackfillAttachmentsAsync(context, storage).GetAwaiter().GetResult();
 
-                // Attribute definitions predate typed values; give them sensible types once.
-                DatabaseSeeder.BackfillAttributeTypesAsync(context).GetAwaiter().GetResult();
+                // Attribute definitions predate typed values; backfill each organization's copy.
+                foreach (var organizationId in context.Constants.IgnoreQueryFilters()
+                    .Where(row => row.Group == "Organization" && row.IsActive).Select(row => row.Id).ToArray())
+                {
+                    tenant.SelectSystemTenant(organizationId);
+                    DatabaseSeeder.BackfillAttributeTypesAsync(context).GetAwaiter().GetResult();
+                }
             }
         }
 

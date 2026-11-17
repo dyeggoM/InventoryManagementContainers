@@ -41,7 +41,7 @@ public sealed class UserAdminTests : ApiTestBase
 
         var list = await client.GetFromJsonAsync<JsonElement>("/api/users", Json);
         Assert.That(list.GetProperty("items").EnumerateArray().Any(user => user.GetProperty("id").GetString() == id), Is.True);
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await context.AuditLogs.AnyAsync(row => row.Entity == "IdentityUser" && row.EntityId == id && row.Action == "Create"), Is.True);
         Assert.That(await context.AuditLogs.AnyAsync(row => row.Action == "RoleChange" && row.EntityId == id), Is.True);
@@ -51,7 +51,7 @@ public sealed class UserAdminTests : ApiTestBase
     public async Task RoleChanges_RejectSelfAndSuperadminAssignment_AndAreAudited()
     {
         using var client = await LoginAsSuperadmin();
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var root = await users.FindByEmailAsync("bootstrap@example.test");
         Assert.That(root, Is.Not.Null);
@@ -78,7 +78,7 @@ public sealed class UserAdminTests : ApiTestBase
     public async Task Delete_SoftDeactivatesUserAndCannotDeleteSoleSuperadmin()
     {
         using var client = await LoginAsSuperadmin();
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var root = await users.FindByEmailAsync("bootstrap@example.test");
         var rootDelete = await client.DeleteAsync($"/api/users/{root!.Id}");
@@ -118,7 +118,7 @@ public sealed class UserAdminTests : ApiTestBase
         string? Claim(string type) => claims.FirstOrDefault(claim => claim.Type == type)?.Value;
         var roleClaims = claims.Where(claim => claim.Type == ClaimTypes.Role || claim.Type == "role")
             .Select(claim => claim.Value).ToList();
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var actor = await scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>()
             .FindByEmailAsync("bootstrap@example.test");
         Assert.Multiple(() =>
@@ -268,7 +268,7 @@ public sealed class UserAdminTests : ApiTestBase
 
         // The revocation is checked before logging in again, or the new session's own refresh token
         // would make the assertion meaningless.
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             Assert.That(await context.RefreshTokens.AnyAsync(row => row.UserId == id && row.RevokedAtUtc == null), Is.False,
@@ -413,7 +413,7 @@ public sealed class UserAdminTests : ApiTestBase
         Assert.That((await actor.SendAsync(second)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
             "a borrow is ended once: the second attempt has no live token to make it with");
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var session = await context.ImpersonationSessions.SingleAsync(row => row.Id == sessionId);
         Assert.That(session.EndedAtUtc, Is.Not.Null);
@@ -430,7 +430,7 @@ public sealed class UserAdminTests : ApiTestBase
         var sessionId = payload.GetProperty("impersonation_session").GetString()!;
 
         // Let the borrow run out without waiting seven minutes for it.
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             var session = await context.ImpersonationSessions.SingleAsync(row => row.Id == sessionId);
@@ -456,7 +456,7 @@ public sealed class UserAdminTests : ApiTestBase
         stopRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", borrowed);
         Assert.That((await root.SendAsync(stopRequest)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var startRow = await context.AuditLogs.SingleAsync(row => row.Action == "ImpersonateStart" && row.ImpersonationSessionId == sessionId);
         var endRow = await context.AuditLogs.SingleAsync(row => row.Action == "ImpersonateEnd" && row.ImpersonationSessionId == sessionId);

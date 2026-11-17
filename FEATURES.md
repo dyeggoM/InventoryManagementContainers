@@ -53,6 +53,26 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   back at level thirteen.
 - Empty states everywhere: no records yet, nothing matches, and “Select an item to edit it”.
 
+## Organizations
+
+The inventory is split by organization, and the three of them live in the same database.
+
+- **Persona, Live Room, Alquimia** are rows of `Constants` (group `Organization`). They are the list the app
+  offers, not a table of their own.
+- **Choose before you look.** The organization is read from the token, so every screen shows the inventory of
+  the organization the session is acting for; switching issues a new token and drops the previous
+  organization's state.
+- **What an organization owns**: its items, its configuration (categories, subcategories and attribute
+  values), its attachments, its delete ledger and its audit rows. `admin` and `superadmin` may switch;
+  a `lector` stays in its own.
+- **What is shared** (`TenantId = 0`): the organization list and the application's vocabulary —
+  field types and attachment types. Every organization reads them; only `superadmin` writes them.
+- **An import names its destination**: one organization per file, possibly a different one from the session,
+  and the result is recorded in both organizations' audit trails.
+- Implemented in `IMCAPI/Services/TenantScope.cs`, `IMCAPI/DB/OrganizationConfiguration.cs`, the global
+  filters in `IMCAPI/DB/ApplicationContext.cs`, `IMCAPI/Controllers/OrganizationController.cs` and
+  `Authentication: switch-organization` in `IMCAPI/Controllers/AuthController.cs`.
+
 ## Attributes
 
 - The set of attributes comes from Configuration (`Attribute` constants); a label with children there

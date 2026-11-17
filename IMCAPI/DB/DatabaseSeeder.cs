@@ -73,10 +73,12 @@ public static class DatabaseSeeder
     /// <summary>Seeds catalog definitions on a fresh database.</summary>
     public static bool SeedConfiguration(ApplicationContext context, string contentRootPath)
     {
-        if (context.Constants.Any()) return false;
+        if (context.Constants.IgnoreQueryFilters().Any(row => row.Group != "Organization")) return false;
         var seedPath = Path.Combine(contentRootPath, "DB", "Seed", "seed.sql");
         if (!File.Exists(seedPath)) return false;
         context.Database.ExecuteSqlRaw(File.ReadAllText(seedPath));
+        context.Database.ExecuteSqlRaw($"UPDATE Constants SET TenantId = {OrganizationConfiguration.DefaultTenantId} WHERE \"Group\" NOT IN ('Organization', 'FieldType', 'AttachmentType')");
+        context.Database.ExecuteSqlRaw(OrganizationConfiguration.CopySql);
         return true;
     }
 

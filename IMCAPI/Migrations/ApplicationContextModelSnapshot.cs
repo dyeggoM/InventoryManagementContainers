@@ -50,6 +50,9 @@ namespace IMCAPI.Migrations
                     b.Property<int?>("ItemId1")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("TenantId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ThumbnailBase64")
                         .HasColumnType("TEXT");
 
@@ -71,6 +74,8 @@ namespace IMCAPI.Migrations
                     b.HasIndex("ItemId1");
 
                     b.HasIndex("Type");
+
+                    b.HasIndex("TenantId", "ItemId");
 
                     b.ToTable("Attachments", (string)null);
                 });
@@ -123,6 +128,9 @@ namespace IMCAPI.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("TenantId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime>("TimestampUtc")
                         .HasColumnType("TEXT");
 
@@ -135,6 +143,8 @@ namespace IMCAPI.Migrations
                     b.HasIndex("TimestampUtc");
 
                     b.HasIndex("Entity", "EntityId");
+
+                    b.HasIndex("TenantId", "TimestampUtc");
 
                     b.ToTable("AuditLogs", (string)null);
                 });
@@ -182,6 +192,9 @@ namespace IMCAPI.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("TenantId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -194,10 +207,10 @@ namespace IMCAPI.Migrations
 
                     b.HasIndex("ParentId");
 
-                    b.HasIndex("Group", "Label")
+                    b.HasIndex("ParentId", "Label")
                         .IsUnique();
 
-                    b.HasIndex("ParentId", "Label")
+                    b.HasIndex("TenantId", "Group", "Label")
                         .IsUnique();
 
                     b.ToTable("Constants", (string)null);
@@ -236,9 +249,14 @@ namespace IMCAPI.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("TenantId")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ActorUserId");
+
+                    b.HasIndex("TenantId", "ActorUserId");
 
                     b.ToTable("ImpersonationSessions");
                 });
@@ -274,6 +292,9 @@ namespace IMCAPI.Migrations
                     b.Property<int?>("ParentId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("TenantId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -283,6 +304,8 @@ namespace IMCAPI.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParentId");
+
+                    b.HasIndex("TenantId", "ParentId");
 
                     b.ToTable("Items", (string)null);
                 });
@@ -343,6 +366,9 @@ namespace IMCAPI.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("TenantId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -359,6 +385,8 @@ namespace IMCAPI.Migrations
                     b.HasIndex("ItemId");
 
                     b.HasIndex("Label");
+
+                    b.HasIndex("TenantId", "ItemId");
 
                     b.ToTable("ItemsArchive", (string)null);
                 });
@@ -381,6 +409,9 @@ namespace IMCAPI.Migrations
                     b.Property<DateTime?>("RevokedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("TenantId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -396,6 +427,8 @@ namespace IMCAPI.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId");
 
                     b.ToTable("RefreshTokens");
                 });

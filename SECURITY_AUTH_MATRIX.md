@@ -59,9 +59,14 @@ a valid target. Password reset is restricted to `superadmin`.
 | 34 | `POST /api/auth/stop-impersonation` | `Controllers/AuthController.cs:155` | — (nueva) | `REQUIERE_AUTH` + claim `act` + `imp_sid`; el token del actor solo se devuelve con su cookie de refresco viva (sin ella: `204`) |
 | 35 | `POST /api/item/archive/purge` | `Controllers/Controllers.cs:250` | — (nueva) | `REQUIERE_AUTH (superadmin)`; exige retención configurada o `olderThanDays` |
 | 36 | `POST /api/import/preview` | `Controllers/ImportController.cs:35` | — (nueva) | `REQUIERE_AUTH (admin)`; lee un `.xlsx`/`.xls` y **no escribe**: sin credencial no se puede usar como lector de ficheros arbitrario |
+| 37 | `GET /api/organization` | `Controllers/OrganizationController.cs:8` | — (nueva) | `REQUIERE_AUTH`; devuelve las organizaciones activas. La autorización vive en el cambio de organización, no en la enumeración: un token prestado la lee y no puede usarla |
+| 38 | `POST /api/auth/switch-organization` | `Controllers/AuthController.cs:134` | — (nueva) | `REQUIERE_AUTH (admin)`; niega un token suplantado (`403`), valida que el destino sea una organización activa, rota el refresh y deja `OrganizationSwitch` en las dos organizaciones. Los roles son globales: cambiar también permite escribir, que es lo que una tabla de pertenencia sustituirá |
+| 39 | `POST /api/import` (con `organizationId`) | `Controllers/ImportController.cs:81` | — (nueva) | `REQUIERE_AUTH (admin)`; el campo `organizationId` es **obligatorio** y puede ser distinto del token: se valida contra una organización activa, y la importación escribe en destino y deja `ItemImport` en las dos organizaciones |
 
-Resumen: **28 rutas requieren autenticación** y 8 pueden responder sin credencial (las 5 del catálogo
-original más `login`, `refresh` y `logout`, que existen para poder autenticarse). `logs` pasa de
+Resumen: **31 rutas requieren autenticación** y 8 pueden responder sin credencial (las 5 del catálogo
+original más `login`, `refresh` y `logout`, que existen para poder autenticarse). Desde `feat/organizations`
+la organización activa sale del claim `org` del token y nunca del cuerpo: un `TenantId` enviado por el cliente
+no se lee en ninguna ruta, y una petición sin claim ve el vocabulario compartido (`TenantId = 0`) y nada más. `logs` pasa de
 `A_REVISAR` a `REQUIERE_AUTH (admin)` porque sirve rutas internas y trazas.
 
 La suplantación no es una excepción a esta tabla: el token que emite `POST /api/users/impersonate`
@@ -69,6 +74,14 @@ lleva el rol destino como único rol, `scope=read` y los claims `act`/`act_email
 (`Program.cs`) responde `403` a cualquier método que no sea seguro (sólo `GET`/`HEAD`/`OPTIONS`) y a
 `/api/auth/login` mientras ese claim esté presente. Restaurar del archivo es una escritura, así que
 también queda bloqueada.
+
+Con una sola base y una columna de organización, la regla que sostiene todo lo anterior es una: **la
+organización se deduce del token**. `ApplicationContext` aplica `HasQueryFilter` en cada tabla con `TenantId`,
+y las consultas que lo esquivan a propósito (`IgnoreQueryFilters`: guarda de ciclos, borrado, restauración,
+barrido de retención) vuelven a filtrar por organización a mano. `Testing/OrganizationIsolationTests.cs` las
+recorre todas con dos organizaciones y comprueba que ninguna ve a la otra; es la suite que hace que esta tabla
+signifique algo. `TenantId = 0` es *compartido* —el catálogo `Organization` y el vocabulario de la aplicación—
+y sólo `superadmin` lo puede escribir.
 
 Las 5 rutas anónimas están declaradas, una por línea, en
 [`endpoints.allow-anonymous.txt`](endpoints.allow-anonymous.txt). Ese archivo es la fuente del test

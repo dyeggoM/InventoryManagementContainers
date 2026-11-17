@@ -130,6 +130,12 @@ python3 $SM --repo . review --status passed --reviewer <you> --note '<evidence>'
   (`PasswordHash`, `SecurityStamp`, tokens) are redacted before serialization.
 - **Impersonation never forges identity**: a short-lived token with an actor claim, read-only by
   default, unable to reach user or role management.
+- **The organization comes from the token, never from the body.** `TenantScope` reads the `org` claim and
+  `ApplicationContext` applies a global filter on it; a `TenantId` sent by a client is never read. A query that
+  deliberately widens (`IgnoreQueryFilters`: cycle guard, delete, restore, retention sweep) must re-apply the
+  organization by hand, and `Testing/OrganizationIsolationTests.cs` exists to catch the one that forgets.
+  `TenantId = 0` is *shared* — the organization list and the application's vocabulary — and only
+  `superadmin` writes it.
 - **Soft delete is a one-way door today.** `HasQueryFilter(IsActive)` hides rows from every query,
   which is why cycle guards and the delete path use `IgnoreQueryFilters()` when they must see them.
 - **Never trust a path from the client**: validate the shape (`TryParseExact`, regex) and confine the

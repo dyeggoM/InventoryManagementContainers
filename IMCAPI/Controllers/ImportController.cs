@@ -1,7 +1,9 @@
 using System.Text.Json;
+using IMCAPI.DB;
 using IMCAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace IMCAPI.Controllers;
 
@@ -19,11 +21,13 @@ public sealed class ImportController : ControllerBase
 
     private readonly ItemImporter _importer;
     private readonly ILogger<ImportController> _log;
+    private readonly ApplicationContext _context;
 
-    public ImportController(ItemImporter importer, ILogger<ImportController> log)
+    public ImportController(ItemImporter importer, ILogger<ImportController> log, ApplicationContext context)
     {
         _importer = importer;
         _log = log;
+        _context = context;
     }
 
     /// <summary>The tree the file describes, each row green, yellow or red, and why. Writes nothing.</summary>
@@ -31,7 +35,8 @@ public sealed class ImportController : ControllerBase
     [RequestSizeLimit(20 * 1024 * 1024)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Preview(IFormFile? file, [FromForm] string? corrections,
+    public async Task<IActionResult> Preview([FromForm] IFormFile? file, [FromForm] int? organizationId,
+        [FromForm] string? corrections,
         CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
@@ -42,14 +47,16 @@ public sealed class ImportController : ControllerBase
             return BadRequest(Problem("Unsupported file",
                 $"The importer reads {HumanList(AcceptedExtensions)}; this is {extension}."));
 
+        var destinationError = await ValidateDestination(organizationId, cancellationToken);
+        if (destinationError is not null) return destinationError;
         var format = FormatOf(extension);
         if (!ParseCorrections(corrections, out var parsed, out var messages, out var error))
             return BadRequest(Problem("Invalid corrections", error!));
         try
         {
             await using var stream = file.OpenReadStream();
-            var preview = await _importer.PreviewAsync(stream, format, SheetName(file.FileName, format),
-                cancellationToken, parsed, messages);
+            var preview = await _importer.PreviewAsync(stream, organizationId!.Value, format,
+                SheetName(file.FileName, format), cancellationToken, parsed, messages);
             return Ok(preview);
         }
         catch (ImportFileException exception)
@@ -75,8 +82,9 @@ public sealed class ImportController : ControllerBase
     [RequestSizeLimit(20 * 1024 * 1024)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Import([FromForm] IFormFile? file, [FromForm] bool includeYellow = true,
-        [FromForm] List<string>? skipCodes = null, [FromForm] string? corrections = null,
+    public async Task<IActionResult> Import([FromForm] IFormFile? file, [FromForm] int? organizationId,
+        [FromForm] bool includeYellow = true, [FromForm] List<string>? skipCodes = null,
+        [FromForm] string? corrections = null,
         CancellationToken cancellationToken = default)
     {
         if (file is null || file.Length == 0)
@@ -87,13 +95,16 @@ public sealed class ImportController : ControllerBase
             return BadRequest(Problem("Unsupported file",
                 $"The importer reads {HumanList(AcceptedExtensions)}; this is {extension}."));
 
+        var destinationError = await ValidateDestination(organizationId, cancellationToken);
+        if (destinationError is not null) return destinationError;
         var format = FormatOf(extension);
         if (!ParseCorrections(corrections, out var parsed, out var messages, out var error))
             return BadRequest(Problem("Invalid corrections", error!));
         try
         {
             await using var stream = file.OpenReadStream();
-            var result = await _importer.ImportAsync(stream, format, SheetName(file.FileName, format),
+            var result = await _importer.ImportAsync(stream, organizationId!.Value, _context.CurrentTenantId,
+                format, SheetName(file.FileName, format),
                 includeYellow, skipCodes, cancellationToken, parsed, messages);
             _log.LogInformation("Imported {Items} records from {FileName} ({Sheets} sheets, {Groups} groups)",
                 result.CreatedItems, file.FileName, result.CreatedSheets, result.CreatedGroups);
@@ -207,6 +218,19 @@ public sealed class ImportController : ControllerBase
             messages.Add("JSON inválido en corrections; se conserva la fila original.");
         }
         return true;
+    }
+
+    private async Task<IActionResult?> ValidateDestination(int? organizationId, CancellationToken cancellationToken)
+    {
+        if (organizationId is null)
+            return BadRequest(Problem("Missing organization", "Supply organizationId for this import."));
+        var exists = await _context.Constants.IgnoreQueryFilters().AnyAsync(row => row.Id == organizationId
+            && row.Group == "Organization" && row.TenantId == 0 && row.IsActive, cancellationToken);
+        if (!exists)
+            return BadRequest(Problem("Unknown organization", "Select an active organization."));
+        if (organizationId != _context.CurrentTenantId && !User.IsInRole("admin") && !User.IsInRole("superadmin"))
+            return Forbid();
+        return null;
     }
 
     /// <summary>The extension is the only thing that says which reader to use; the bytes never are.</summary>

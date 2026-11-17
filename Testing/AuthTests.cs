@@ -45,7 +45,7 @@ public sealed class AuthTests : ApiTestBase
         var newCookie = CookieValue(refresh);
         Assert.That(newCookie, Is.Not.EqualTo(oldCookie));
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var storedTokens = (await context.RefreshTokens.OrderBy(token => token.Id).ToListAsync()).TakeLast(2).ToArray();
         Assert.Multiple(() =>
@@ -87,7 +87,7 @@ public sealed class AuthTests : ApiTestBase
     [Test]
     public async Task AdminRoute_WithOperatorToken_ReturnsForbidden()
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var user = new IdentityUser { UserName = "operator@example.test", Email = "operator@example.test", EmailConfirmed = true };
         var created = await userManager.CreateAsync(user, Password);
@@ -134,7 +134,7 @@ public sealed class AuthTests : ApiTestBase
     [Test]
     public async Task StartupInvariant_RejectsMoreThanOneSuperadmin()
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var duplicate = new IdentityUser { UserName = "another-root@example.test", Email = "another-root@example.test", EmailConfirmed = true };
         Assert.That((await userManager.CreateAsync(duplicate, Password)).Succeeded, Is.True);

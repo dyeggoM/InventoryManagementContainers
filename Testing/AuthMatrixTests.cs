@@ -257,7 +257,7 @@ public sealed class AuthMatrixTests : ApiTestBase
         Assert.That(accessExpiry, Is.InRange(before.AddMinutes(14), before.AddMinutes(16)),
             "the access token lifetime is the server's 15 minutes, not the client's 10 years");
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var user = await users.FindByEmailAsync("admin@example.test");
@@ -283,7 +283,7 @@ public sealed class AuthMatrixTests : ApiTestBase
     [Test]
     public async Task Login_ForAnAccountWithNoRole_CanStillNotReadBusinessData()
     {
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
             var user = new IdentityUser { UserName = "norole@example.test", Email = "norole@example.test", EmailConfirmed = true };

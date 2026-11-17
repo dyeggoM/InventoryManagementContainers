@@ -177,6 +177,7 @@ public sealed class StartupInvariantsTests
         await SignIn(two);
 
         using var scope = first.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<IMCAPI.Services.TenantScope>().SelectSystemTenant(900001);
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         context.Items.Add(new IMCAPI.DB.Entities.Item { Label = "only in the first" });
         await context.SaveChangesAsync();

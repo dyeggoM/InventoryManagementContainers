@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using IMCAPI.DB;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 
@@ -18,20 +19,20 @@ public sealed class AuthTokenService
         _configuration = configuration;
     }
 
-    public async Task<(string Token, DateTime ExpiresAtUtc)> CreateAccessTokenAsync(IdentityUser user)
+    public async Task<(string Token, DateTime ExpiresAtUtc)> CreateAccessTokenAsync(IdentityUser user, int organizationId = OrganizationConfiguration.DefaultTenantId)
     {
-        return await CreateTokenAsync(user, actor: null, targetRole: null, impersonation: false);
+        return await CreateTokenAsync(user, actor: null, targetRole: null, impersonation: false, organizationId: organizationId);
     }
 
     public async Task<(string Token, DateTime ExpiresAtUtc)> CreateImpersonationTokenAsync(
-        IdentityUser actor, string role, string sessionId, DateTime? expiresAtUtc = null)
+        IdentityUser actor, string role, string sessionId, DateTime? expiresAtUtc = null, int organizationId = OrganizationConfiguration.DefaultTenantId)
     {
-        return await CreateTokenAsync(actor, actor, role, impersonation: true, sessionId, expiresAtUtc);
+        return await CreateTokenAsync(actor, actor, role, impersonation: true, sessionId, expiresAtUtc, organizationId);
     }
 
     private async Task<(string Token, DateTime ExpiresAtUtc)> CreateTokenAsync(
         IdentityUser user, IdentityUser? actor, string? targetRole, bool impersonation,
-        string? impersonationSessionId = null, DateTime? impersonationExpiresAtUtc = null)
+        string? impersonationSessionId = null, DateTime? impersonationExpiresAtUtc = null, int organizationId = OrganizationConfiguration.DefaultTenantId)
     {
         var key = GetSetting("Auth:Jwt:Key", "AUTH_JWT_KEY");
         var issuer = GetSetting("Auth:Jwt:Issuer", "AUTH_JWT_ISSUER");
@@ -47,6 +48,7 @@ public sealed class AuthTokenService
             // The stamp is the server's lever over a live session: rotating it (a password reset) has
             // to invalidate the tokens already handed out, or a reset would only stop the next login.
             new("sstamp", user.SecurityStamp ?? ""),
+            new("org", organizationId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
         if (impersonation && actor is not null)
         {

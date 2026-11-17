@@ -62,6 +62,15 @@ public static class AuthSetup
     {
         var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationContext>();
         var principal = context.Principal!;
+        var org = principal.FindFirst("org")?.Value;
+        if (!int.TryParse(org, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var organizationId)
+            || !await db.Constants.IgnoreQueryFilters().AsNoTracking().AnyAsync(row =>
+                row.Id == organizationId && row.Group == "Organization" && row.TenantId == 0 && row.IsActive))
+        {
+            context.Fail("The organization is no longer active.");
+            return;
+        }
         var subjectId = principal.FindFirst("sub")?.Value
             ?? principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var actorId = principal.FindFirst("act")?.Value;
@@ -80,9 +89,11 @@ public static class AuthSetup
         if (actorId is not null)
         {
             var sessionId = principal.FindFirst("imp_sid")?.Value;
-            var live = !string.IsNullOrWhiteSpace(sessionId) && await db.ImpersonationSessions
+            // Token validation runs before HttpContext.User is populated; the filter cannot read org yet.
+            var live = !string.IsNullOrWhiteSpace(sessionId) && await db.ImpersonationSessions.IgnoreQueryFilters()
                 .AsNoTracking()
                 .AnyAsync(session => session.Id == sessionId
+                    && session.TenantId == organizationId
                     && session.ActorUserId == actorId
                     && session.EndedAtUtc == null
                     && session.ExpiresAtUtc > DateTime.UtcNow);
