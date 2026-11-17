@@ -3,6 +3,7 @@ namespace IMCAPI.DB.Entities;
 public sealed class RefreshToken
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = IMCAPI.DB.OrganizationConfiguration.DefaultTenantId;
     public string UserId { get; set; } = "";
     public string TokenHash { get; set; } = "";
     public DateTime CreatedAtUtc { get; set; }

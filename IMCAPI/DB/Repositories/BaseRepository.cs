@@ -40,11 +40,11 @@ namespace IMCAPI.DB.Repositories
         Task AddRange(IEnumerable<T> entities);
 
         /// <summary>
-        /// Deletes the Entity from DB asynchronous
+        /// Deletes the Entity from DB asynchronous.
         /// </summary>
         /// <param name="id">Id of the desired Entity to delete.</param>
-        /// <returns></returns>
-        Task Delete(int id);
+        /// <returns>False when no row the caller may delete carries that id.</returns>
+        Task<bool> Delete(int id);
         /// <summary>
         /// Deletes many Entities from DB asynchronous
         /// </summary>
@@ -63,7 +63,7 @@ namespace IMCAPI.DB.Repositories
         /// <param name="id">Id of Entity to update.</param>
         /// <param name="entity">Entity to update.</param>
         /// <returns></returns>
-        Task UpdateAsync(int id, T entity);
+        Task<bool> UpdateAsync(int id, T entity);
         /// <summary>
         /// Updates many Entities on DB asynchronous
         /// </summary>
@@ -135,6 +135,7 @@ namespace IMCAPI.DB.Repositories
         public virtual async Task Add(T entity)
         {
             entity.Id = 0;
+            AssignTenant(entity);
             entity.UpdatedAt = DateTime.UtcNow;
             await _entities.AddAsync(entity);
             await _context.SaveChangesAsync();
@@ -150,6 +151,7 @@ namespace IMCAPI.DB.Repositories
             foreach (var item in entityList)
             {
                 item.Id = 0;
+                AssignTenant(item);
                 item.UpdatedAt = DateTime.UtcNow;
             }
             await _entities.AddRangeAsync(entityList);
@@ -157,17 +159,17 @@ namespace IMCAPI.DB.Repositories
         }
 
         /// <summary>
-        /// Deletes the Entity from DB asynchronous
+        /// Deletes the Entity from DB asynchronous.
         /// </summary>
         /// <param name="id">Id of the desired Entity to delete.</param>
-        /// <returns></returns>
-        public virtual async Task Delete(int id)
+        /// <returns>False when no row the caller may delete carries that id.</returns>
+        public virtual async Task<bool> Delete(int id)
         {
             // GetById is filtered by HasQueryFilter(IsActive), so an inactive row came back null and
             // the physical-delete branch below could never be reached: a soft-deleted row was stuck
             // forever. The lookup has to see the row the caller is asking about.
-            T? entity = await _entities.IgnoreQueryFilters().FirstOrDefaultAsync(row => row.Id == id);
-            if (entity == null) return;
+            T? entity = await FindDeletableRow(id);
+            if (entity == null) return false;
             if( entity.IsActive)
             {
                 entity.UpdatedAt = DateTime.UtcNow;
@@ -190,6 +192,7 @@ namespace IMCAPI.DB.Repositories
                     _context.Entry(entity).State = EntityState.Unchanged;
                 }
             }
+            return true;
         }
         /// <summary>
         /// Deletes many Entities from DB asynchronous
@@ -201,7 +204,7 @@ namespace IMCAPI.DB.Repositories
             var deleteEntities = new List<T>();
             foreach (var item in ids)
             {
-                T? result = await _entities.IgnoreQueryFilters().FirstOrDefaultAsync(row => row.Id == item);
+                T? result = await FindDeletableRow(item);
                 if (result == null) continue;
                 if (result.IsActive)
                 {
@@ -242,13 +245,14 @@ namespace IMCAPI.DB.Repositories
         /// </summary>
         /// <param name="id">Id of Entity to update.</param>
         /// <param name="entity">Entity to update.</param>
-        /// <returns></returns>
-        public virtual async Task UpdateAsync(int id, T entity)
+        /// <returns>False when no row visible to the caller carries that id.</returns>
+        public virtual async Task<bool> UpdateAsync(int id, T entity)
         {
             var persisted = await _entities.FirstOrDefaultAsync(current => current.Id == id);
-            if (persisted is null) return;
+            if (persisted is null) return false;
             CopyClientValues(entity, persisted);
             await _context.SaveChangesAsync();
+            return true;
         }
         /// <summary>
         /// Updates many Entities on DB asynchronous
@@ -268,10 +272,25 @@ namespace IMCAPI.DB.Repositories
             await _context.SaveChangesAsync();
         }
 
+        /// <summary>
+        /// The row a delete may reach: the caller's own organization, plus tenant 0 for the one role
+        /// that owns the shared vocabulary. A shared row (a seed <c>Constants</c> row) carries no
+        /// organization, so scoping the lookup to <see cref="ApplicationContext.CurrentTenantId"/>
+        /// alone made it invisible and the delete answered 204 having found nothing.
+        /// </summary>
+        private async Task<T?> FindDeletableRow(int id)
+        {
+            var query = _entities.IgnoreQueryFilters().Where(row => row.Id == id);
+            query = _context.IsSuperadmin
+                ? query.Where(row => row.TenantId == _context.CurrentTenantId || row.TenantId == 0)
+                : query.Where(row => row.TenantId == _context.CurrentTenantId);
+            return await query.FirstOrDefaultAsync();
+        }
+
         private static readonly HashSet<string> ServerControlledProperties = new(StringComparer.Ordinal)
         {
             nameof(Base.Id), nameof(Base.IsActive), nameof(Base.CreatedAt), nameof(Base.CreatedBy),
-            nameof(Base.UpdatedAt), nameof(Base.UpdatedBy)
+            nameof(Base.UpdatedAt), nameof(Base.UpdatedBy), nameof(Base.TenantId)
         };
 
         private void CopyClientValues(T source, T persisted)
@@ -283,6 +302,13 @@ namespace IMCAPI.DB.Repositories
                 if (!ServerControlledProperties.Contains(property.Name))
                     persistedValues[property.Name] = sourceValues[property.Name];
             }
+        }
+        private void AssignTenant(T entity)
+        {
+            entity.TenantId = entity is Constants constant && Services.TenantScope.IsShared(constant)
+                ? 0 : _context.CurrentTenantId;
+            if (entity is Item item)
+                foreach (var attachment in item.Attachments) attachment.TenantId = entity.TenantId;
         }
     }
 }

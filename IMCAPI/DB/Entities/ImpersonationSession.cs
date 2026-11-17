@@ -12,6 +12,7 @@ public sealed class ImpersonationSession
 {
     /// <summary>Guid with no dashes: it travels in a claim and in the audit rows.</summary>
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public int TenantId { get; set; }
 
     public string ActorUserId { get; set; } = string.Empty;
     public string? ActorEmail { get; set; }

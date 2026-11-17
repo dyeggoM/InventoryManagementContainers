@@ -3,6 +3,7 @@ namespace IMCAPI.DB.Entities;
 public sealed class AuditLog
 {
     public int Id { get; set; }
+    public int TenantId { get; set; }
     public DateTime TimestampUtc { get; set; }
     public string? ActorUserId { get; set; }
     public string? ActorEmail { get; set; }

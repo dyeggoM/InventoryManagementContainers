@@ -19,6 +19,7 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         using var form = new MultipartFormDataContent();
         form.Add(new ByteArrayContent(workbook ?? await File.ReadAllBytesAsync(FixturePath("import-sample.xlsx"))),
             "file", "import-sample.xlsx");
+        form.Add(new StringContent(OrganizationConfiguration.DefaultTenantId.ToString()), "organizationId");
         if (corrections is not null) form.Add(new StringContent(corrections), "corrections");
         return await Client.PostAsync(route, form);
     }
@@ -68,11 +69,17 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         Assert.That(result.GetProperty("correctionIssues").GetArrayLength(), Is.Zero);
         using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        var saved = await context.Items.SingleAsync(row => row.Label == "ATRIL CORREGIDO");
+        var saved = await context.Items.IgnoreQueryFilters().SingleAsync(row => row.Label == "ATRIL CORREGIDO");
         Assert.That(JsonDocument.Parse(saved.Attributes!).RootElement.GetProperty("Code").GetString(),
             Is.EqualTo("FREE-CORRECTED"));
-        var audit = await context.AuditLogs.SingleAsync(row => row.Action == "ItemImport");
+        var audit = await context.AuditLogs.IgnoreQueryFilters().SingleAsync(row => row.Action == "ItemImport");
         Assert.That(audit.AfterJson, Does.Contain("\"corrected\":1"));
+        TestContext.Out.WriteLine("correction-only " + JsonSerializer.Serialize(new
+        {
+            baselineRed = before.GetProperty("summary").GetProperty("red").GetInt32(),
+            verdict = item.GetProperty("status").GetString(), importStatus = (int)response.StatusCode,
+            saved.Label, saved.TenantId, corrected = result.GetProperty("corrected").GetInt32()
+        }));
     }
 
     [Test]
@@ -123,8 +130,8 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         Assert.That(result.GetProperty("createdItems").GetInt32(), Is.GreaterThan(0));
         using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        Assert.That(await context.Items.AnyAsync(item => item.Label == "SHOULD NOT APPLY"), Is.False);
-        Assert.That(await context.Items.CountAsync(), Is.GreaterThan(0));
+        Assert.That(await context.Items.IgnoreQueryFilters().AnyAsync(item => item.Label == "SHOULD NOT APPLY"), Is.False);
+        Assert.That(await context.Items.IgnoreQueryFilters().CountAsync(), Is.GreaterThan(0));
     }
 
     [Test]
@@ -225,7 +232,7 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        var record = await context.Items.SingleAsync(item => item.Attributes!.Contains("UNIQUE-CODE-42"));
+        var record = await context.Items.IgnoreQueryFilters().SingleAsync(item => item.Attributes!.Contains("UNIQUE-CODE-42"));
         Assert.That(JsonDocument.Parse(record.Attributes!).RootElement.GetProperty("Code").GetString(),
             Is.EqualTo("UNIQUE-CODE-42"));
     }
@@ -261,7 +268,7 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        var saved = await context.Items.SingleAsync(item => item.Label == label);
+        var saved = await context.Items.IgnoreQueryFilters().SingleAsync(item => item.Label == label);
         using var attributes = JsonDocument.Parse(saved.Attributes!);
         Assert.Multiple(() => {
             Assert.That(attributes.RootElement.GetProperty("Estado").GetString(), Is.EqualTo("Bueno"));
@@ -304,7 +311,7 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        var saved = await context.Items.SingleAsync(item => item.Label == Label(original));
+        var saved = await context.Items.IgnoreQueryFilters().SingleAsync(item => item.Label == Label(original));
         using var attributes = JsonDocument.Parse(saved.Attributes!);
         Assert.That(attributes.RootElement.TryGetProperty("Brand", out var brand), Is.EqualTo(retained));
         if (retained) Assert.That(brand.GetString(), Is.EqualTo(original.GetProperty("brand").GetString()));
@@ -327,7 +334,7 @@ public sealed class ItemImportCorrectionTests : ApiTestBase
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         using var scope = Factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        var saved = await context.Items.SingleAsync(item => item.Label == Label(original));
+        var saved = await context.Items.IgnoreQueryFilters().SingleAsync(item => item.Label == Label(original));
         using var attributes = JsonDocument.Parse(saved.Attributes!);
         Assert.That(attributes.RootElement.GetProperty("Code").GetString(), Is.EqualTo("VALIDATED-42"));
     }

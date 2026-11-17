@@ -254,7 +254,13 @@ public class ApiTests : ApiTestBase
     [Test]
     public async Task GetConstants_ReturnsTheSeededCatalogueWithDataTypes()
     {
-        var payload = await Client.GetFromJsonAsync<JsonElement>("/api/constants", Json);
+        // Read the organization's copy rather than the anonymous/shared vocabulary.
+        using var organizationClient = await LoginAsSuperadmin();
+        var switched = await organizationClient.PostAsJsonAsync("/api/auth/switch-organization", new { organizationId = 900002 });
+        Assert.That(switched.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var accessToken = (await switched.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("access_token").GetString();
+        organizationClient.DefaultRequestHeaders.Authorization = new("Bearer", accessToken);
+        var payload = await organizationClient.GetFromJsonAsync<JsonElement>("/api/constants", Json);
         var panels = payload.GetProperty("panels").EnumerateArray().ToList();
 
         Assert.That(panels, Is.Not.Empty, "a fresh database is seeded on startup");
@@ -267,6 +273,7 @@ public class ApiTests : ApiTestBase
         Assert.Multiple(() =>
         {
             Assert.That(attributes.Count, Is.GreaterThan(0));
+            Assert.That(attributes.Select(a => a.GetProperty("label").GetString()).Distinct().Count(), Is.EqualTo(attributes.Count));
             Assert.That(
                 attributes.Single(a => a.GetProperty("label").GetString() == "BuyPrice")
                     .GetProperty("dataType").GetString(),
@@ -583,7 +590,7 @@ public class ApiTests : ApiTestBase
         var b = (await PostItem(Unique("PoisonB"), a)).GetProperty("id").GetInt32();
         var c = (await PostItem(Unique("PoisonC"), b)).GetProperty("id").GetInt32();
 
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             await context.Database.ExecuteSqlRawAsync("UPDATE Items SET ParentId = {0} WHERE Id = {1}", c, a);

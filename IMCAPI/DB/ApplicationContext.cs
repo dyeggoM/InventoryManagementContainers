@@ -2,11 +2,17 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using IMCAPI.Services;
 
 namespace IMCAPI.DB
 {
     public class ApplicationContext : IdentityDbContext
     {
+        private readonly TenantScope _tenant;
+        public int CurrentTenantId => _tenant.TenantId;
+
+        /// <summary>The acting caller is allowed to touch the shared (tenant 0) rows.</summary>
+        public bool IsSuperadmin => _tenant.IsSuperadmin;
         public virtual DbSet<Item> Items { get; set; }
 
         public virtual DbSet<Attachment> Attachments { get; set; }
@@ -19,9 +25,10 @@ namespace IMCAPI.DB
 
         public virtual DbSet<ImpersonationSession> ImpersonationSessions { get; set; }
 
-        public ApplicationContext(DbContextOptions<ApplicationContext> options)
+        public ApplicationContext(DbContextOptions<ApplicationContext> options, TenantScope tenant)
             : base(options)
         {
+            _tenant = tenant;
         }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -36,6 +43,7 @@ namespace IMCAPI.DB
             {
                 entity.HasIndex(token => token.TokenHash).IsUnique();
                 entity.HasIndex(token => token.UserId);
+                entity.HasIndex(token => new { token.TenantId, token.UserId });
                 entity.Property(token => token.TokenHash).HasMaxLength(64).IsRequired();
                 entity.Property(token => token.UserId).IsRequired();
                 entity.HasOne<IdentityUser>().WithMany().HasForeignKey(token => token.UserId).OnDelete(DeleteBehavior.Cascade);
@@ -58,6 +66,8 @@ namespace IMCAPI.DB
             {
                 entity.HasKey(session => session.Id);
                 entity.HasIndex(session => session.ActorUserId);
+                entity.HasIndex(session => new { session.TenantId, session.ActorUserId });
+                entity.HasQueryFilter(session => session.TenantId == CurrentTenantId);
                 entity.Property(session => session.Id).HasMaxLength(64);
                 entity.Property(session => session.ActorUserId).HasMaxLength(64);
                 entity.Property(session => session.ActorEmail).HasMaxLength(320);
@@ -78,6 +88,8 @@ namespace IMCAPI.DB
                 entity.Property(archive => archive.DeletedBy).HasMaxLength(320);
                 entity.Property(archive => archive.RestoredById).HasMaxLength(450);
                 entity.HasIndex(archive => archive.ItemId);
+                entity.HasIndex(archive => new { archive.TenantId, archive.ItemId });
+                entity.HasQueryFilter(archive => archive.TenantId == CurrentTenantId);
                 entity.HasIndex(archive => archive.DeletedAtUtc);
                 entity.HasIndex(archive => archive.DeletedById);
                 // The archive screen filters by label; without this the filter is a scan on a table
@@ -90,6 +102,8 @@ namespace IMCAPI.DB
                 entity.ToTable("AuditLogs");
                 entity.HasKey(log => log.Id);
                 entity.HasIndex(log => new { log.Entity, log.EntityId });
+                entity.HasIndex(log => new { log.TenantId, log.TimestampUtc });
+                entity.HasQueryFilter(log => log.TenantId == CurrentTenantId);
                 entity.HasIndex(log => log.TimestampUtc);
                 // Room for the action names this app will keep adding: SQLite does not enforce the
                 // length, SQL Server does, and a 33-character action would fail only after a migration.
@@ -113,9 +127,9 @@ namespace IMCAPI.DB
             // ─────────────────────────────────────────────
             // GLOBAL QUERY FILTER (soft delete)
             // ─────────────────────────────────────────────
-            modelBuilder.Entity<Item>().HasQueryFilter(i => i.IsActive);
-            modelBuilder.Entity<Attachment>().HasQueryFilter(i => i.IsActive);
-            modelBuilder.Entity<Constants>().HasQueryFilter(i => i.IsActive);
+            modelBuilder.Entity<Item>().HasQueryFilter(i => i.IsActive && i.TenantId == CurrentTenantId);
+            modelBuilder.Entity<Attachment>().HasQueryFilter(i => i.IsActive && i.TenantId == CurrentTenantId);
+            modelBuilder.Entity<Constants>().HasQueryFilter(i => i.IsActive && (i.TenantId == CurrentTenantId || i.TenantId == 0));
 
         }
 
@@ -143,6 +157,7 @@ namespace IMCAPI.DB
 
                 // ── Indexes ──
                 entity.HasIndex(e => e.ParentId);
+                entity.HasIndex(e => new { e.TenantId, e.ParentId });
             });
         }
 
@@ -175,6 +190,7 @@ namespace IMCAPI.DB
 
                 // ── Indexes ──
                 entity.HasIndex(e => e.ItemId);
+                entity.HasIndex(e => new { e.TenantId, e.ItemId });
                 entity.HasIndex(e => e.Type);
             });
         }
@@ -206,7 +222,7 @@ namespace IMCAPI.DB
 
                 // ── Indexes ──
                 entity.HasIndex(e => e.Group);
-                entity.HasIndex(e => new { e.Group, e.Label }).IsUnique();
+                entity.HasIndex(e => new { e.TenantId, e.Group, e.Label }).IsUnique();
                 entity.HasIndex(e => new { e.ParentId, e.Label }).IsUnique();
                 entity.HasIndex(e => e.ParentId);
             });

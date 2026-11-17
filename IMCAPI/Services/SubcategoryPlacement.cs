@@ -89,10 +89,10 @@ public sealed class SubcategoryPlacement
     /// the categories (`Group = Category`) and, under each one, the subcategories the workshop
     /// actually uses. `Other` catches what the file has and the configuration does not.
     /// </summary>
-    internal async Task<CategoryMap> LoadAsync(CancellationToken cancellationToken)
+    internal async Task<CategoryMap> LoadAsync(int organizationId, CancellationToken cancellationToken)
     {
-        var rows = await _context.Constants.AsNoTracking()
-            .Where(row => row.Group != null)
+        var rows = await _context.Constants.IgnoreQueryFilters().AsNoTracking()
+            .Where(row => row.TenantId == organizationId && row.IsActive && row.Group != null)
             .Select(row => new { row.Group, row.Label })
             .ToListAsync(cancellationToken);
 

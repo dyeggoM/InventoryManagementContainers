@@ -59,7 +59,7 @@ public sealed class ItemImportWriteTests : ApiTestBase
     {
         await Import("import-sample.xlsx");
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var record = await context.Items.SingleAsync(item => item.Label == "BASE DE BRAZO DW 9000");
 
@@ -77,7 +77,7 @@ public sealed class ItemImportWriteTests : ApiTestBase
     {
         await Import("import-sample.xlsx");
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var labels = await context.Items.Select(item => item.Label).ToListAsync();
 
@@ -134,7 +134,7 @@ public sealed class ItemImportWriteTests : ApiTestBase
     {
         await Import("import-sample.xlsx");
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var rows = await context.AuditLogs.Where(row => row.Action == "ItemImport").ToListAsync();
 

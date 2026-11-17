@@ -36,6 +36,7 @@ public sealed class TokenHardeningTests : ApiTestBase
         var claims = new Dictionary<string, object>
         {
             ["sub"] = subject,
+            ["org"] = "900001",
             ["iss"] = Issuer,
             ["aud"] = Issuer,
             ["exp"] = DateTimeOffset.UtcNow.AddMinutes(15).ToUnixTimeSeconds(),
@@ -49,7 +50,7 @@ public sealed class TokenHardeningTests : ApiTestBase
 
     private async Task<(string Subject, string Stamp)> BootstrapClaims()
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var user = await context.Users.SingleAsync(row => row.Email == "bootstrap@example.test");
         return (user.Id, user.SecurityStamp!);
@@ -102,7 +103,7 @@ public sealed class TokenHardeningTests : ApiTestBase
 
         var responses = await Task.WhenAll(Client.SendAsync(one), Client.SendAsync(two));
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var ends = await context.AuditLogs.CountAsync(row =>
             row.Action == "ImpersonateEnd" && row.ImpersonationSessionId == sessionId);

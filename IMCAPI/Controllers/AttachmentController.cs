@@ -87,6 +87,7 @@ public class AttachmentController : BaseController<Attachment>
 
         var attachment = new Attachment
         {
+            TenantId = _context.CurrentTenantId,
             ItemId = itemId,
             Type = type ?? "Photo",
             FileName = fileName ?? file.FileName,
@@ -105,6 +106,17 @@ public class AttachmentController : BaseController<Attachment>
         }
 
         return Ok(attachment);
+    }
+
+    [HttpPut("{id:int}")]
+    [Authorize(Policy = "RequiereEscritura")]
+    public override async Task<IActionResult> Put(int id, Attachment data)
+    {
+        if (id != data.Id) return BadRequest();
+        // A foreign item and a missing item are both outside this request's tenant-filtered tree.
+        if (data.ItemId <= 0 || !await _context.Items.AnyAsync(item => item.Id == data.ItemId))
+            return BadRequest("The attachment needs a record in this organization.");
+        return await base.Put(id, data);
     }
 
     [HttpDelete("{id:int}")]

@@ -83,7 +83,9 @@ namespace Testing
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .Options;
 
-            context = new ApplicationContext(options);
+            var tenant = new IMCAPI.Services.TenantScope(new Microsoft.AspNetCore.Http.HttpContextAccessor());
+            tenant.SelectSystemTenant(900001);
+            context = new ApplicationContext(options, tenant);
             context.Database.EnsureCreated();
         }
 
@@ -92,6 +94,8 @@ namespace Testing
         public async Task Setup()
         {
             CreateContext();
+            foreach (var item in new[] { SetTimbales, Timbal14, Aro14, Tornillo, Timbal15, BaseTimbales })
+                item.TenantId = 900001;
             context.Items.AddRange(
                 SetTimbales,
                 Timbal14,

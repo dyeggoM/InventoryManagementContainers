@@ -32,12 +32,14 @@ public sealed class ItemImporter
     private readonly ApplicationContext _context;
     private readonly AuditLogWriter _audit;
     private readonly SubcategoryPlacement _placement;
+    private readonly TenantScope _tenant;
 
-    public ItemImporter(ApplicationContext context, AuditLogWriter audit, SubcategoryPlacement placement)
+    public ItemImporter(ApplicationContext context, AuditLogWriter audit, SubcategoryPlacement placement, TenantScope tenant)
     {
         _context = context;
         _audit = audit;
         _placement = placement;
+        _tenant = tenant;
     }
 
     /// <summary>What an import did, so the answer can be checked against the file.</summary>
@@ -94,26 +96,26 @@ public sealed class ItemImporter
     /// The file name for a CSV, which has no sheet names of its own; the tree's root takes it. Ignored
     /// for a workbook, whose sheets name themselves.
     /// </param>
-    public async Task<ImportPreview> PreviewAsync(Stream stream, ImportFormat format = ImportFormat.Workbook,
+    public async Task<ImportPreview> PreviewAsync(Stream stream, int organizationId, ImportFormat format = ImportFormat.Workbook,
         string? sourceName = null, CancellationToken cancellationToken = default,
         IReadOnlyList<ImportCorrection>? corrections = null, IReadOnlyList<string>? correctionIssues = null) =>
-        (await BuildAsync(stream, format, sourceName, cancellationToken, corrections, correctionIssues)).Preview;
+        (await BuildAsync(stream, organizationId, format, sourceName, cancellationToken, corrections, correctionIssues)).Preview;
 
     /// <summary>The preview and the rows it is made of: one parse serves both calls.</summary>
     private async Task<(ImportPreview Preview, List<(string Category, string Group, ImportItem Item)> Rows,
         int Corrected)> BuildAsync(
-        Stream stream, ImportFormat format, string? sourceName, CancellationToken cancellationToken,
+        Stream stream, int organizationId, ImportFormat format, string? sourceName, CancellationToken cancellationToken,
         IReadOnlyList<ImportCorrection>? corrections, IReadOnlyList<string>? correctionIssues)
     {
         // .xls needs the code pages; .xlsx does not, but registering once is harmless and the
         // registration is idempotent.
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-        var brands = await KnownBrandsAsync(cancellationToken);
-        var takenCodes = await ExistingCodesAsync(cancellationToken);
+        var brands = await KnownBrandsAsync(organizationId, cancellationToken);
+        var takenCodes = await ExistingCodesAsync(organizationId, cancellationToken);
         // The configuration decides the tree: a row's parent is the Category that owns its
         // subcategory, not the sheet it happens to sit on.
-        var categories = await _placement.LoadAsync(cancellationToken);
+        var categories = await _placement.LoadAsync(organizationId, cancellationToken);
 
         var issues = new List<ImportIssue>();
         var planned = new List<(Placement Placement, ImportItem Item)>();
@@ -336,15 +338,37 @@ public sealed class ItemImporter
     /// second time — a code that already exists, or a nameless record that is already there, is
     /// skipped instead of duplicated.
     /// </summary>
-    public async Task<ImportResult> ImportAsync(Stream stream, ImportFormat format = ImportFormat.Workbook,
+    public async Task<ImportResult> ImportAsync(Stream stream, int organizationId, int actingOrganizationId,
+        ImportFormat format = ImportFormat.Workbook,
         string? sourceName = null, bool includeYellow = true,
         IReadOnlyCollection<string>? skipCodes = null, CancellationToken cancellationToken = default,
         IReadOnlyList<ImportCorrection>? corrections = null, IReadOnlyList<string>? correctionIssues = null)
     {
-        var (preview, rows, corrected) = await BuildAsync(stream, format, sourceName, cancellationToken,
-            corrections, correctionIssues);
-        var rejected = preview.CorrectionIssues;
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        (ImportResult result, string? auditJson) imported;
+        using (_tenant.SetWriteTenant(organizationId))
+        {
+            imported = await ImportForTenantAsync(stream, organizationId, actingOrganizationId, format, sourceName,
+                includeYellow, skipCodes, cancellationToken, corrections, correctionIssues);
+        }
+        if (imported.auditJson is not null && actingOrganizationId != organizationId)
+        {
+            // Two rows: the destination records what arrived; the actor's organization records
+            // what it sent. This row is written after restoring the request tenant, before commit.
+            await _audit.WriteAsync("ItemImport", "Item", null, cancellationToken: cancellationToken,
+                afterJson: imported.auditJson);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return imported.result;
+    }
 
+    private async Task<(ImportResult Result, string? AuditJson)> ImportForTenantAsync(Stream stream, int organizationId, int actingOrganizationId,
+        ImportFormat format, string? sourceName, bool includeYellow, IReadOnlyCollection<string>? skipCodes,
+        CancellationToken cancellationToken, IReadOnlyList<ImportCorrection>? corrections, IReadOnlyList<string>? correctionIssues)
+    {
+        var (preview, rows, corrected) = await BuildAsync(stream, organizationId, format, sourceName,
+            cancellationToken, corrections, correctionIssues);
+        var rejected = preview.CorrectionIssues;
 
         var skip = new HashSet<string>(skipCodes ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var skippedRed = rows.Count(row => row.Item.Status == Red);
@@ -355,25 +379,23 @@ public sealed class ItemImporter
             .Where(row => row.Item.Code is null || !skip.Contains(row.Item.Code))
             .ToList();
 
-        var existingCodes = await ExistingCodesAsync(cancellationToken);
+        var existingCodes = await ExistingCodesAsync(organizationId, cancellationToken);
         // The pairs that already exist today, so a codeless row is not created twice across runs.
         // Rows created *during* this run are not added to this set on purpose: thirty identical
         // rows in one file are thirty units, not thirty duplicates.
-        var existingPairs = await ExistingPairsAsync(cancellationToken);
+        var existingPairs = await ExistingPairsAsync(organizationId, cancellationToken);
 
         if (wanted.Count == 0)
-            return new ImportResult(0, 0, 0, skippedRed, skippedYellow, 0, includeYellow, corrected, rejected);
+            return (new ImportResult(0, 0, 0, skippedRed, skippedYellow, 0, includeYellow, corrected, rejected), null);
 
         var createdSheets = 0;
         var createdGroups = 0;
         var createdItems = 0;
         var skippedExisting = 0;
 
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-
-        var roots = await _context.Items.IgnoreQueryFilters().Where(item => item.ParentId == null)
+        var roots = await _context.Items.IgnoreQueryFilters().Where(item => item.TenantId == organizationId && item.ParentId == null)
             .ToListAsync(cancellationToken);
-        var children = await _context.Items.IgnoreQueryFilters().Where(item => item.ParentId != null)
+        var children = await _context.Items.IgnoreQueryFilters().Where(item => item.TenantId == organizationId && item.ParentId != null)
             .ToListAsync(cancellationToken);
 
         foreach (var category in wanted.GroupBy(row => row.Category, StringComparer.Ordinal))
@@ -383,7 +405,7 @@ public sealed class ItemImporter
             var root = roots.FirstOrDefault(item => Same(item.Label, category.Key));
             if (root is null)
             {
-                root = NewItem(category.Key, parentId: null);
+                root = NewItem(category.Key, parentId: null, organizationId);
                 _context.Items.Add(root);
                 await _context.SaveChangesAsync(cancellationToken); // the id is needed by its children
                 roots.Add(root);
@@ -401,7 +423,7 @@ public sealed class ItemImporter
                     parent = children.FirstOrDefault(item => item.ParentId == root.Id && Same(item.Label, group.Key));
                     if (parent is null)
                     {
-                        parent = NewItem(group.Key, root.Id);
+                        parent = NewItem(group.Key, root.Id, organizationId);
                         _context.Items.Add(parent);
                         await _context.SaveChangesAsync(cancellationToken);
                         children.Add(parent);
@@ -424,7 +446,7 @@ public sealed class ItemImporter
                         continue;
                     }
 
-                    _context.Items.Add(NewItem(item.Label, parent.Id, item));
+                    _context.Items.Add(NewItem(item.Label, parent.Id, organizationId, item));
                     createdItems++;
                     if (item.Code is not null) existingCodes.Add(item.Code);
                 }
@@ -433,22 +455,22 @@ public sealed class ItemImporter
             }
         }
 
-        await _audit.WriteAsync("ItemImport", "Item", null, cancellationToken: cancellationToken,
-            afterJson: JsonSerializer.Serialize(new
+        var auditJson = JsonSerializer.Serialize(new
             {
+                actingOrganizationId, organizationId,
                 rows = preview.Summary.Rows,
                 createdSheets, createdGroups, createdItems,
                 skippedRed, skippedYellow, skippedExisting,
                 includeYellow, corrected
-            }));
+            });
+        await _audit.WriteAsync("ItemImport", "Item", null, cancellationToken: cancellationToken,
+            afterJson: auditJson);
 
-        await transaction.CommitAsync(cancellationToken);
-
-        return new ImportResult(createdSheets, createdGroups, createdItems, skippedRed, skippedYellow, skippedExisting,
-            includeYellow, corrected, rejected);
+        return (new ImportResult(createdSheets, createdGroups, createdItems, skippedRed, skippedYellow, skippedExisting,
+            includeYellow, corrected, rejected), auditJson);
     }
 
-    private static Item NewItem(string label, int? parentId, ImportItem? source = null)
+    private static Item NewItem(string label, int? parentId, int organizationId, ImportItem? source = null)
     {
         var attributes = source is null ? new Dictionary<string, string>(StringComparer.Ordinal) : ItemAttributes(source);
 
@@ -457,6 +479,7 @@ public sealed class ItemImporter
             Label = label,
             Icon = string.Empty,
             ParentId = parentId,
+            TenantId = organizationId,
             IsActive = true,
             Attributes = attributes.Count == 0 ? "{}" : JsonSerializer.Serialize(attributes)
         };
@@ -486,9 +509,10 @@ public sealed class ItemImporter
         string.Equals(Normalize(left), Normalize(right), StringComparison.Ordinal);
 
     /// <summary>Every (parent, name) already in the tree, so a nameless record is not created twice.</summary>
-    private async Task<HashSet<(int?, string)>> ExistingPairsAsync(CancellationToken cancellationToken)
+    private async Task<HashSet<(int?, string)>> ExistingPairsAsync(int organizationId, CancellationToken cancellationToken)
     {
         var rows = await _context.Items.IgnoreQueryFilters()
+            .Where(item => item.TenantId == organizationId)
             .Select(item => new { item.ParentId, item.Label })
             .ToListAsync(cancellationToken);
         return rows.Select(row => (row.ParentId, Normalize(row.Label))).ToHashSet();
@@ -777,14 +801,15 @@ public sealed class ItemImporter
         return normalized.Length == 0 ? null : normalized;
     }
 
-    private async Task<HashSet<string>> KnownBrandsAsync(CancellationToken cancellationToken)
+    private async Task<HashSet<string>> KnownBrandsAsync(int organizationId, CancellationToken cancellationToken)
     {
-        var root = await _context.Constants
-            .FirstOrDefaultAsync(row => row.ParentId == null && row.Label == "Brand", cancellationToken);
+        var root = await _context.Constants.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(row => row.TenantId == organizationId && row.IsActive
+                && row.ParentId == null && row.Label == "Brand", cancellationToken);
         if (root is null) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var children = await _context.Constants
-            .Where(row => row.ParentId == root.Id)
+        var children = await _context.Constants.IgnoreQueryFilters()
+            .Where(row => row.TenantId == organizationId && row.IsActive && row.ParentId == root.Id)
             .ToListAsync(cancellationToken);
         return children.Select(child => Normalize(child.Label)).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
@@ -793,9 +818,10 @@ public sealed class ItemImporter
     /// Every code already in the inventory, archived rows included: a code identifies a physical
     /// element, so a deleted one still owns its code.
     /// </summary>
-    private async Task<HashSet<string>> ExistingCodesAsync(CancellationToken cancellationToken)
+    private async Task<HashSet<string>> ExistingCodesAsync(int organizationId, CancellationToken cancellationToken)
     {
         var rows = await _context.Items.IgnoreQueryFilters()
+            .Where(item => item.TenantId == organizationId)
             .Select(item => new { item.Attributes })
             .ToListAsync(cancellationToken);
 

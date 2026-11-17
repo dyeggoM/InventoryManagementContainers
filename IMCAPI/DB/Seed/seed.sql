@@ -249,7 +249,12 @@ VALUES
 (3121510, 'MEDICION','', 'MEDIDOR DE ESPESOR', '', 0, 31215, 'system', 1, '2026-08-23 00:00:00'),
 (308020201, 'CONSOLA DIGITAL','', 'SERVER', '', 0, 3080202, 'system', 1, '2026-08-23 00:00:00'),
 (308020202, 'CONSOLA DIGITAL','', 'STAGEBOX', '', 0, 3080202, 'system', 1, '2026-08-23 00:00:00'),
-(308020203, 'CONSOLA DIGITAL','', 'INTERFAZ MADI', '', 0, 3080202, 'system', 1, '2026-08-23 00:00:00')
+(308020203, 'CONSOLA DIGITAL','', 'INTERFAZ MADI', '', 0, 3080202, 'system', 1, '2026-08-23 00:00:00');
+
+INSERT OR IGNORE INTO Constants (Id, TenantId, 'Group', Icon, Label, SortOrder, UpdatedBy, IsActive, UpdatedAt)
+VALUES (900001, 0, 'Organization', '', 'Persona', 0, 'system', 1, CURRENT_TIMESTAMP),
+       (900002, 0, 'Organization', '', 'Live Room', 0, 'system', 1, CURRENT_TIMESTAMP),
+       (900003, 0, 'Organization', '', 'Alquimia', 0, 'system', 1, CURRENT_TIMESTAMP);
 
 
 

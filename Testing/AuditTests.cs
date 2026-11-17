@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using IMCAPI.DB;
 using IMCAPI.DB.Entities;
+using IMCAPI.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
@@ -26,7 +27,7 @@ public sealed class AuditTests : ApiTestBase
     [Test]
     public async Task Interceptor_RecordsBeforeAndAfterOnUpdate()
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var item = new Item { Label = "Audit before " + Guid.NewGuid(), Icon = "", UpdatedBy = "forged-on-create" };
         context.Items.Add(item);
@@ -52,7 +53,7 @@ public sealed class AuditTests : ApiTestBase
     [Test]
     public async Task Interceptor_RecordsDeletedEntityBeforeValues()
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var item = new Item { Label = "Delete audit " + Guid.NewGuid(), Icon = "" };
         context.Items.Add(item);
@@ -71,7 +72,7 @@ public sealed class AuditTests : ApiTestBase
     [Test]
     public async Task Interceptor_RedactsPasswordSecurityStampAndRefreshTokenHash()
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var user = new IdentityUser
         {
@@ -109,7 +110,7 @@ public sealed class AuditTests : ApiTestBase
     {
         using var client = Factory.CreateClient();
         await Authenticate(client, SuperadminEmail);
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var actor = await users.FindByEmailAsync("bootstrap@example.test");
         var label = "HTTP audit " + Guid.NewGuid().ToString("N");
@@ -141,7 +142,7 @@ public sealed class AuditTests : ApiTestBase
     [Test]
     public async Task AuditEndpoint_AdminIsForbiddenAndSuperadminCanRead()
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var email = "audit-admin-" + Guid.NewGuid().ToString("N") + "@example.test";
         var user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
@@ -230,7 +231,7 @@ public sealed class AuditTests : ApiTestBase
         });
         Assert.That(create.StatusCode, Is.EqualTo(HttpStatusCode.OK), await create.Content.ReadAsStringAsync());
         var id = (await create.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetInt32();
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var persisted = await context.Items.SingleAsync(item => item.Id == id);
         var originalCreatedAt = persisted.CreatedAt;
@@ -265,11 +266,12 @@ public sealed class AuditTests : ApiTestBase
     public async Task AuditEndpoint_FiltersAndPaginates()
     {
         const string actorId = "audit-filter-actor";
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             context.AuditLogs.Add(new AuditLog
             {
+                TenantId = 900001,
                 TimestampUtc = DateTime.UtcNow,
                 ActorUserId = actorId,
                 ActorEmail = "audit-filter@example.test",
@@ -326,7 +328,8 @@ public sealed class AuditTests : ApiTestBase
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That((await client.PostAsync("/api/auth/logout", content: null)).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
+        scope.ServiceProvider.GetRequiredService<TenantScope>().SelectSystemTenant(0);
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var actions = await context.AuditLogs.Where(row => row.Action == "LoginFailed" || row.Action == "Login" || row.Action == "Logout")
             .Select(row => row.Action).ToListAsync();
@@ -348,7 +351,8 @@ public sealed class AuditTests : ApiTestBase
         replay.Headers.TryAddWithoutValidation("Cookie", oldCookie);
         Assert.That((await client.SendAsync(replay)).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
+        scope.ServiceProvider.GetRequiredService<TenantScope>().SelectSystemTenant(0);
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await context.AuditLogs.CountAsync(row => row.Action == "RefreshReuse"), Is.EqualTo(1));
     }

@@ -65,11 +65,11 @@ public sealed class ArchiveRetention
         // The rows are gone from the database; the bytes go with them.
         _attachments.DeleteFromTrash(files);
 
-        await _audit.WriteAsync("ArchivePurge", "ItemArchive", cutoffUtc.ToString("O"),
+        await _audit.WriteAsync(AuditActions.ArchivePurge, "ItemArchive", cutoffUtc.ToString("O"),
             cancellationToken: cancellationToken,
             afterJson: System.Text.Json.JsonSerializer.Serialize(new
             {
-                deleted = expired.Count, cutoffUtc, olderThanDays = ageDays,
+                organizationId = _context.CurrentTenantId, deleted = expired.Count, cutoffUtc, olderThanDays = ageDays,
                 destroyedAttachments = files.Length, by = actor
             }));
 

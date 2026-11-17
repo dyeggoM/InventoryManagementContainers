@@ -53,7 +53,7 @@ public sealed class ArchiveRetentionTests : ApiTestBase
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
         Assert.That(payload.GetProperty("deleted").GetInt32(), Is.GreaterThanOrEqualTo(1));
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await context.ItemArchives.AnyAsync(row => row.Label == "expired"), Is.False);
         Assert.That(await context.ItemArchives.AnyAsync(row => row.Label == "recent"), Is.True,
@@ -75,7 +75,7 @@ public sealed class ArchiveRetentionTests : ApiTestBase
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var expiredGone = !await context.ItemArchives.AnyAsync(row => row.Label == "expired-default");
         var recentKept = await context.ItemArchives.AnyAsync(row => row.Label == "inside-default");
@@ -100,7 +100,7 @@ public sealed class ArchiveRetentionTests : ApiTestBase
         var deleted = await Factory.Services.GetRequiredService<ArchiveRetentionSweeper>()
             .SweepOnceAsync();
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var sweptAway = await context.ItemArchives.AnyAsync(row => row.Label == "swept-away");
         var sweptPast = await context.ItemArchives.AnyAsync(row => row.Label == "swept-past");
@@ -157,7 +157,7 @@ public sealed class ArchiveRetentionTests : ApiTestBase
     /// <summary>Writes a ledger row straight to the database: the API only archives by deleting an item.</summary>
     private async Task AddArchiveRow(string label, DateTime deletedAtUtc)
     {
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         context.ItemArchives.Add(new ItemArchive
         {

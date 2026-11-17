@@ -119,16 +119,14 @@ namespace IMCAPI.Controllers
                 _logger.Log(LogLevel.Information, $"Inicio: {methodName}");
                 if (id != data.Id) return BadRequest();
 
-                await _repository.UpdateAsync(id, data);
-
-                return NoContent();
+                return await _repository.UpdateAsync(id, data) ? NoContent() : NotFound();
             }
             catch (DbUpdateConcurrencyException e)
             {
                 var logMessage = $"{methodName}.Message: {e.Message}" +
                                  (e.InnerException != null ? $"\n{methodName}.InnerException: {e.InnerException}" : "");
                 _logger.Log(LogLevel.Error, logMessage);
-                if (_repository.GetById(id) == null) return NotFound();
+                if (await _repository.GetById(id) is null) return NotFound();
                 return StatusCode(StatusCodes.Status500InternalServerError);
             }
             catch (Exception e)
@@ -182,8 +180,10 @@ namespace IMCAPI.Controllers
             try
             {
                 _logger.Log(LogLevel.Information, $"Inicio: {methodName}");
-                await _repository.Delete(id);
-                return NoContent();
+                // The repository says whether it found a row it could delete: answering 204 for a
+                // row that does not exist (or that the caller may not reach) told the client the
+                // delete happened when nothing had.
+                return await _repository.Delete(id) ? NoContent() : NotFound();
             }
             catch (Exception e)
             {

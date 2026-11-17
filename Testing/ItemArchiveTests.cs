@@ -20,7 +20,7 @@ public sealed class ItemArchiveTests : ApiTestBase
         var id = await CreateItem("archivable-" + Guid.NewGuid().ToString("N"));
         const string fileName = "archive-photo.jpg";
         const string filePath = "media/items/archive/archive-photo.jpg";
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             context.Attachments.Add(new Attachment { ItemId = id, FileName = fileName, Type = "Photo", FilePath = filePath });
@@ -45,7 +45,7 @@ public sealed class ItemArchiveTests : ApiTestBase
             Assert.That(archived.GetProperty("attachmentsJson").GetString(), Does.Contain(fileName).And.Contain("Photo").And.Contain(filePath));
         });
 
-        using var scopeAfter = Factory.Services.CreateScope();
+        using var scopeAfter = PersonaScope();
         var db = scopeAfter.ServiceProvider.GetRequiredService<ApplicationContext>();
         Assert.That(await db.Items.IgnoreQueryFilters().AnyAsync(item => item.Id == id), Is.False);
         Assert.That(await db.Attachments.IgnoreQueryFilters().AnyAsync(attachment => attachment.ItemId == id), Is.False);
@@ -78,7 +78,7 @@ public sealed class ItemArchiveTests : ApiTestBase
         });
         Assert.That((await Client.GetAsync($"/api/item/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var actor = await scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>()
             .FindByEmailAsync("bootstrap@example.test");
@@ -101,7 +101,7 @@ public sealed class ItemArchiveTests : ApiTestBase
         var parentId = await CreateItem("removed-parent-" + Guid.NewGuid().ToString("N"));
         var childId = await CreateItem("restored-root-" + Guid.NewGuid().ToString("N"), parentId);
         Assert.That((await Client.DeleteAsync($"/api/item/{childId}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
-        using (var scope = Factory.Services.CreateScope())
+        using (var scope = PersonaScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             var parent = await context.Items.SingleAsync(item => item.Id == parentId);

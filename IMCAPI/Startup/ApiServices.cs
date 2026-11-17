@@ -46,6 +46,7 @@ public static class ApiServices
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<TenantScope>();
         builder.Services.AddSingleton<AuditSaveChangesInterceptor>();
         builder.Services.AddDbContext<ApplicationContext>((services, options) =>
             options.UseSqlite(connectionString)

@@ -2,6 +2,28 @@
 
 What is deliberately not built yet, in the order it is worth doing.
 
+### Inventarios por organización (`feat/organizations`) — `in progress`
+
+- [x] **Una base con columna de organización** — `done`. `TenantId` en `Items`, `Constants`, `Attachments`,
+  `ItemsArchive`, `AuditLogs`, `ImpersonationSessions` y `RefreshTokens`; `TenantId = 0` es *compartido*;
+  filtro global por petición desde el claim `org`; migración que asigna lo existente a `Persona` y copia la
+  configuración a las otras dos.
+- [x] **Persona, Live Room y Alquimia como `Constants`** — `done`, ids 900001–900003.
+- [x] **Cambio de organización** — `done` (`POST /api/auth/switch-organization`, `admin`+). Los roles son
+  globales, así que cambiar también permite escribir.
+- [x] **Importar con organización destino por fichero** — `done`, `organizationId` obligatorio y auditado en
+  las dos organizaciones.
+- [ ] **Constantes por organización en Configuración** — `todo` (ronda 2): selector en la pantalla, grupos
+  compartidos en sólo lectura.
+- [ ] **Elegir organización antes del inventario** — `todo` (ronda 3): selector previo, alta ligada a la
+  organización elegida, estado anterior limpiado al cambiar.
+- [ ] **Tabla de pertenencia `UserOrganization`** — `todo`, `Later`. Es lo que permite «sólo mirar» otra
+  organización y roles por empresa; hoy `admin` entra y escribe porque los roles son globales. Decide también
+  si la lista de organizaciones deja de ser pública para cualquier autenticado.
+- [ ] **Contrato del `PUT` de ítems** — `todo`, `Low`. El campo `attachments` se rechaza con `400`; queda un
+  bucle muerto en `ItemController.Put` (antes escribía el fichero sin fila) que conviene borrar cuando
+  alguien pase por el fichero.
+
 ### Deuda abierta del archivado de registros (`feat/api-items-archive`)
 
 - [x] **Los hijos de un registro borrado quedan como raíces** — resuelto: ahora el borrado devuelve

@@ -208,7 +208,7 @@ public sealed class ItemImportPlacementTests : ApiTestBase
         var response = await PostImport("import-placement.csv", Csv, includeYellow: null);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
 
-        using var scope = Factory.Services.CreateScope();
+        using var scope = PersonaScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         var items = await context.Items.IgnoreQueryFilters().ToListAsync();
 

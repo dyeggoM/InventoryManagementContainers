@@ -9,6 +9,7 @@ public sealed class ItemArchive
     [Key]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int ArchiveId { get; set; }
+    public int TenantId { get; set; }
     public int ItemId { get; set; }
     [Required, MaxLength(1000)]
     public string Label { get; set; } = "";

@@ -20,9 +20,11 @@ public sealed class AuthController : ControllerBase
     private readonly AuthTokenService _tokens;
     private readonly IHostEnvironment _environment;
     private readonly AuditLogWriter _audit;
+    private readonly TenantScope _tenant;
 
     public AuthController(SignInManager<IdentityUser> signIn, UserManager<IdentityUser> users,
-        ApplicationContext context, AuthTokenService tokens, IHostEnvironment environment, AuditLogWriter audit)
+        ApplicationContext context, AuthTokenService tokens, IHostEnvironment environment, AuditLogWriter audit,
+        TenantScope tenant)
     {
         _signIn = signIn;
         _users = users;
@@ -30,6 +32,7 @@ public sealed class AuthController : ControllerBase
         _tokens = tokens;
         _environment = environment;
         _audit = audit;
+        _tenant = tenant;
     }
 
     [AllowAnonymous]
@@ -68,6 +71,7 @@ public sealed class AuthController : ControllerBase
         {
             UserId = user.Id,
             TokenHash = AuthTokenService.HashRefreshToken(refresh),
+            TenantId = OrganizationConfiguration.DefaultTenantId,
             CreatedAtUtc = now,
             ExpiresAtUtc = now.AddDays(7),
         });
@@ -91,9 +95,10 @@ public sealed class AuthController : ControllerBase
             var previousUser = await _users.FindByIdAsync(stored.UserId);
             // Presenting a retired token means the cookie was copied somewhere. Auditing the reuse
             // while leaving the replacement alive gives the audit trail a confession nobody acts on:
-            // every live token of that account dies with it, and the holder signs in again.
+            // only this organization's live chain dies; independent organization sessions survive.
             var family = await _context.RefreshTokens
-                .Where(token => token.UserId == stored.UserId && token.RevokedAtUtc == null)
+                .Where(token => token.UserId == stored.UserId && token.TenantId == stored.TenantId
+                    && token.RevokedAtUtc == null)
                 .ToListAsync();
             foreach (var token in family) token.RevokedAtUtc = now;
             await _audit.WriteAsync("RefreshReuse", "RefreshToken", stored.Id.ToString(), stored.UserId, previousUser?.Email);
@@ -110,7 +115,9 @@ public sealed class AuthController : ControllerBase
 
         var user = await _users.FindByIdAsync(stored.UserId);
         var profile = user is null ? null : await _context.UserProfiles.SingleOrDefaultAsync(row => row.UserId == user.Id);
-        if (user is null || profile is { IsActive: false })
+        if (user is null || profile is { IsActive: false }
+            || !await _context.Constants.IgnoreQueryFilters().AnyAsync(row => row.Id == stored.TenantId
+                && row.Group == "Organization" && row.TenantId == 0 && row.IsActive))
         {
             stored.RevokedAtUtc = now;
             await _context.SaveChangesAsync();
@@ -127,13 +134,68 @@ public sealed class AuthController : ControllerBase
         {
             UserId = user.Id,
             TokenHash = replacementHash,
+            TenantId = stored.TenantId,
             CreatedAtUtc = now,
             ExpiresAtUtc = now.AddDays(7),
         });
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
         SetRefreshCookie(replacement, now.AddDays(7));
-        var access = await _tokens.CreateAccessTokenAsync(user);
+        var access = await _tokens.CreateAccessTokenAsync(user, stored.TenantId);
+        return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc });
+    }
+
+    [Authorize]
+    [HttpPost("switch-organization")]
+    public async Task<IActionResult> SwitchOrganization(SwitchOrganizationRequest request)
+    {
+        if (User.HasClaim(claim => claim.Type == "act")) return Forbid();
+        // Switching changes the token: admin can write in the target too because roles are global.
+        // UserOrganization membership enables per-organization read-only rights and replaces this boundary.
+        if (!User.IsInRole("admin") && !User.IsInRole("superadmin")) return Forbid();
+        var next = await _context.Constants.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(row =>
+            row.Id == request.OrganizationId && row.Group == "Organization" && row.TenantId == 0 && row.IsActive);
+        if (next is null) return NotFound();
+        var oldId = _context.CurrentTenantId;
+        var old = await _context.Constants.IgnoreQueryFilters().AsNoTracking()
+            .SingleOrDefaultAsync(row => row.Id == oldId && row.Group == "Organization" && row.TenantId == 0);
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
+        var user = userId is null ? null : await _users.FindByIdAsync(userId);
+        if (user is null || !Request.Cookies.TryGetValue(RefreshCookie, out var refresh)) return Unauthorized();
+        var now = DateTime.UtcNow;
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        var stored = await _context.RefreshTokens.SingleOrDefaultAsync(row =>
+            row.TokenHash == AuthTokenService.HashRefreshToken(refresh) && row.UserId == user.Id
+            && row.TenantId == oldId && row.RevokedAtUtc == null && row.ExpiresAtUtc > now);
+        if (stored is null) return Unauthorized();
+        var replacement = AuthTokenService.NewRefreshToken();
+        var hash = AuthTokenService.HashRefreshToken(replacement);
+        var closed = await _context.RefreshTokens
+            .Where(token => token.Id == stored.Id && token.RevokedAtUtc == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.RevokedAtUtc, now));
+        if (closed == 0) return Unauthorized(); // Another request already rotated this chain.
+        stored.ReplacedByTokenHash = hash;
+        _context.RefreshTokens.Add(new RefreshToken
+        {
+            TenantId = next.Id, UserId = user.Id, TokenHash = hash,
+            CreatedAtUtc = now, ExpiresAtUtc = now.AddDays(7)
+        });
+        // Persist the rotation before auditing it: a future audit change cannot strand the new cookie.
+        await _context.SaveChangesAsync();
+        var beforeJson = System.Text.Json.JsonSerializer.Serialize(new { id = oldId, label = old?.Label });
+        var afterJson = System.Text.Json.JsonSerializer.Serialize(new { id = next.Id, label = next.Label });
+        await _audit.WriteAsync("OrganizationSwitch", "Organization", next.Id.ToString(), user.Id, user.Email,
+            beforeJson: beforeJson, afterJson: afterJson);
+        if (next.Id != oldId)
+        {
+            // Both trails need the same departure/arrival: the old token alone would log only the exit.
+            using (_tenant.SetWriteTenant(next.Id))
+                await _audit.WriteAsync(AuditActions.OrganizationSwitch, "Organization", next.Id.ToString(), user.Id, user.Email,
+                    beforeJson: beforeJson, afterJson: afterJson);
+        }
+        await transaction.CommitAsync();
+        SetRefreshCookie(replacement, now.AddDays(7));
+        var access = await _tokens.CreateAccessTokenAsync(user, next.Id);
         return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc });
     }
 
@@ -212,7 +274,7 @@ public sealed class AuthController : ControllerBase
             cancellationToken);
         if (!ownsSession) return NoContent();
 
-        var access = await _tokens.CreateAccessTokenAsync(actor);
+        var access = await _tokens.CreateAccessTokenAsync(actor, _context.CurrentTenantId);
         return Ok(new { access_token = access.Token, expires_at_utc = access.ExpiresAtUtc });
     }
 
@@ -223,4 +285,5 @@ public sealed class AuthController : ControllerBase
         new CookieOptions { HttpOnly = true, Secure = Request.IsHttps || !_environment.IsDevelopment(), SameSite = SameSiteMode.Lax, Path = "/api/auth" });
 
     public sealed record LoginRequest(string Email, string Password);
+    public sealed record SwitchOrganizationRequest(int OrganizationId);
 }

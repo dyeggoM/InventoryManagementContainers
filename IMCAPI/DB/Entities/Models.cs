@@ -9,6 +9,7 @@ namespace IMCAPI.DB.Entities
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public virtual int Id { get; set; }
+        public int TenantId { get; set; }
         public virtual bool IsActive { get; set; }
         public virtual DateTime? CreatedAt { get; set; }
         public virtual string? CreatedBy { get; set; }

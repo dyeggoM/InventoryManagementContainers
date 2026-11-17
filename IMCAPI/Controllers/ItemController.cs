@@ -76,8 +76,12 @@ public class ItemController : BaseController<Item>
     public override async Task<IActionResult> Put(int id, Item data)
     {
         if (id != data.Id) return BadRequest();
-        var existing = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.Id == id);
+        var existing = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.Id == id && item.TenantId == _context.CurrentTenantId);
         if (existing is null) return NotFound();
+        // The repository updates scalar item fields, not the detached Attachments navigation.
+        // Refuse it before writing any file; attachments are added through /api/attachment.
+        if (data.Attachments is { Count: > 0 })
+            return BadRequest("Attachments cannot be added through item PUT; use /api/attachment.");
         data.IsActive = existing.IsActive;
         var subtreeHeight = await GetSubtreeHeight(id);
         if (data.ParentId is int proposedParentId)
@@ -123,7 +127,7 @@ public class ItemController : BaseController<Item>
         {
             if (itemId != 0 && currentId == itemId) return (true, true, parentLevel);
             var parent = await _context.Items.IgnoreQueryFilters().AsNoTracking()
-                .Where(item => item.Id == currentId)
+                .Where(item => item.Id == currentId && item.TenantId == _context.CurrentTenantId)
                 .Select(item => new { item.ParentId })
                 .SingleOrDefaultAsync();
             if (parent is null) return (false, false, parentLevel);
@@ -136,7 +140,7 @@ public class ItemController : BaseController<Item>
 
     private async Task<int> GetSubtreeHeight(int rootId)
     {
-        var items = await _context.Items.IgnoreQueryFilters().AsNoTracking()
+        var items = await _context.Items.IgnoreQueryFilters().AsNoTracking().Where(item => item.TenantId == _context.CurrentTenantId)
             .Select(item => new { item.Id, item.ParentId }).ToListAsync();
         var childrenByParent = items.Where(item => item.ParentId is not null)
             .GroupBy(item => item.ParentId!.Value)
@@ -227,13 +231,13 @@ public class ItemController : BaseController<Item>
     [Authorize(Policy = "RequiereAdmin")]
     public override async Task<IActionResult> Delete(int id)
     {
-        var item = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(row => row.Id == id);
+        var item = await _context.Items.IgnoreQueryFilters().SingleOrDefaultAsync(row => row.Id == id && row.TenantId == _context.CurrentTenantId);
         if (item is null) return NotFound();
 
         var attachments = await _context.Attachments.IgnoreQueryFilters()
-            .Where(attachment => attachment.ItemId == id).ToListAsync();
+            .Where(attachment => attachment.ItemId == id && attachment.TenantId == _context.CurrentTenantId).ToListAsync();
         var childCount = await _context.Items.IgnoreQueryFilters()
-            .CountAsync(child => child.ParentId == id);
+            .CountAsync(child => child.ParentId == id && child.TenantId == _context.CurrentTenantId);
         if (childCount > 0) return ChildrenPreventDelete(childCount);
         var actorId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("sub")?.Value;
@@ -241,6 +245,7 @@ public class ItemController : BaseController<Item>
         var now = DateTime.UtcNow;
         var archive = new ItemArchive
         {
+            TenantId = _context.CurrentTenantId,
             ItemId = item.Id, Label = item.Label, Icon = item.Icon, ParentId = item.ParentId,
             Attributes = item.Attributes, IsActive = item.IsActive, CreatedAt = item.CreatedAt,
             CreatedBy = item.CreatedBy, UpdatedAt = item.UpdatedAt, UpdatedBy = item.UpdatedBy,
@@ -339,7 +344,7 @@ public class ItemController : BaseController<Item>
         var idIsFree = !await _context.Items.IgnoreQueryFilters().AnyAsync(item => item.Id == id, cancellationToken);
         var parentId = archive.ParentId;
         if (parentId is not null && !await _context.Items.IgnoreQueryFilters()
-                .AnyAsync(item => item.Id == parentId.Value, cancellationToken))
+                .AnyAsync(item => item.Id == parentId.Value && item.TenantId == _context.CurrentTenantId, cancellationToken))
             parentId = null;
         // The row was a leaf when it was archived, but its parent may have been moved deeper in the
         // meantime: restoring it must obey the same depth bound that create and update enforce.
@@ -353,6 +358,7 @@ public class ItemController : BaseController<Item>
 
         var restored = new Item
         {
+            TenantId = _context.CurrentTenantId,
             Id = idIsFree ? archive.ItemId : 0,
             Label = archive.Label, Icon = archive.Icon, ParentId = parentId, Attributes = archive.Attributes,
             IsActive = true, CreatedAt = archive.CreatedAt, CreatedBy = archive.CreatedBy,
@@ -381,6 +387,7 @@ public class ItemController : BaseController<Item>
                 || returned.Contains(attachment.FilePath, StringComparer.Ordinal))
             .Select(attachment => new Attachment
             {
+                TenantId = _context.CurrentTenantId,
                 ItemId = restored.Id,
                 FileName = attachment.FileName ?? string.Empty,
                 Type = attachment.Type ?? "Photo",

@@ -1,4 +1,5 @@
 using IMCAPI.DB;
+using IMCAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,12 +10,6 @@ namespace IMCAPI.Controllers;
 [Route("api/audit")]
 public sealed class AuditController(ApplicationContext context) : ControllerBase
 {
-    private static readonly HashSet<string> Actions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Create", "Update", "Delete", "SoftDelete", "Login", "LoginFailed", "Logout", "RoleChange",
-        "ImpersonateStart", "ImpersonateEnd", "RefreshReuse", "ArchivePurge"
-    };
-
     [Authorize(Policy = "RequiereSuperadmin")]
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] string? actor = null, [FromQuery] string? entity = null,
@@ -28,13 +23,23 @@ public sealed class AuditController(ApplicationContext context) : ControllerBase
             return Problem(statusCode: 400, title: "Invalid audit query", detail: "from must be earlier than or equal to to.");
         if (!string.IsNullOrWhiteSpace(action))
         {
-            var canonicalAction = Actions.FirstOrDefault(candidate => candidate.Equals(action, StringComparison.OrdinalIgnoreCase));
+            // The vocabulary the writers use, not a copy of it: a name the API cannot write is a 400,
+            // and a name it can write is filterable the day it is written.
+            var canonicalAction = AuditActions.Canonical(action);
             if (canonicalAction is null)
                 return Problem(statusCode: 400, title: "Invalid audit query", detail: "action is not a recognized audit action.");
             action = canonicalAction;
         }
 
-        var query = context.AuditLogs.AsNoTracking().AsQueryable();
+        var query = context.AuditLogs.IgnoreQueryFilters().AsNoTracking().AsQueryable();
+        // The model's query filter is `TenantId == CurrentTenantId`, and an anonymous request has no
+        // organization claim: Login, LoginFailed, RefreshReuse and role changes are therefore written
+        // at tenant 0 and were invisible to every reader. A superadmin reads its own organization
+        // plus the system tenant; the row's own `tenantId` is what names a system event, so no
+        // second flag is added for the same fact. Any other reader stays inside its organization.
+        query = User.IsInRole("superadmin")
+            ? query.Where(row => row.TenantId == context.CurrentTenantId || row.TenantId == 0)
+            : query.Where(row => row.TenantId == context.CurrentTenantId);
         if (!string.IsNullOrWhiteSpace(actor))
             query = query.Where(row => row.ActorUserId == actor || row.ActorEmail == actor);
         if (!string.IsNullOrWhiteSpace(entity)) query = query.Where(row => row.Entity == entity);
