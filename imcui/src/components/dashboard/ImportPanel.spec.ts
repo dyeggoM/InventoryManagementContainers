@@ -192,7 +192,9 @@ const QSelect = defineComponent({
             h('li', { class: 'q-select-stub__option' }, optionLabel(option)),
           ),
         ),
-        slots['no-option']?.({ inputValue: '' }) ?? null,
+        // Quasar shows `no-option` only when nothing matches, and the attribute rows fill it with
+        // their own items: rendering it always would mount controls this spec does not stub.
+        props.options.length === 0 ? (slots['no-option']?.({ inputValue: '' }) ?? null) : null,
       ]);
   },
 });
@@ -273,6 +275,10 @@ const stubs = {
   QCard: passthrough('QCard'),
   QCardSection: passthrough('QCardSection'),
   QCardActions: passthrough('QCardActions'),
+  // The attribute editor's rows carry these; the panel only hosts it.
+  QItem: passthrough('QItem'),
+  QItemSection: passthrough('QItemSection'),
+  QSpinner: defineComponent({ name: 'QSpinner', render: () => h('span', { class: 'q-spinner' }) }),
   QSpace: defineComponent({ name: 'QSpace', render: () => h('span', { class: 'q-space' }) }),
   QTooltip: defineComponent({
     name: 'QTooltip',

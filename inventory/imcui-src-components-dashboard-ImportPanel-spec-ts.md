@@ -17,7 +17,7 @@ Indexed: **19 symbols** across **1 file** (0 C#, 0 Python, 19 JS/TS/Vue) · **26
 
 ## Symbols by file
 
-### `imcui/src/components/dashboard/ImportPanel.spec.ts` — 1526 lines, 19 symbols, index failed
+### `imcui/src/components/dashboard/ImportPanel.spec.ts` — 1532 lines, 19 symbols, index failed
 
 - `L23` **method** `useFeedback`()
 - `L94` **method** `setup.onChange`()
