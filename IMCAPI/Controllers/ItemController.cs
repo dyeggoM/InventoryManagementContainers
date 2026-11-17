@@ -242,13 +242,13 @@ public class ItemController : BaseController<Item>
         // for 4 s while the pragma said 500 ms, and BEGIN IMMEDIATE came back after 4020 ms; the audit's
         // 11.8 s wait is the same thing on a 12 s hold. The knob that actually bounds it is the
         // connection's default timeout, so that is what is set here (and restored when the lock is
-        // released), one second per attempt; the retry loop below is what covers a longer contention
-        // instead of turning it into a 500 after half a minute.
+        // released) two seconds per attempt; the retry loop below multiplies that into the budget
+        // that covers a longer contention instead of turning it into a 500 after half a minute.
         var sqlite = _context.Database.GetDbConnection() as SqliteConnection;
         var previousConnectionTimeout = sqlite?.DefaultTimeout;
         if (sqlite is not null) sqlite.DefaultTimeout = HierarchyLockAttemptSeconds;
         var previousCommandTimeout = _context.Database.GetCommandTimeout();
-        _context.Database.SetCommandTimeout(HierarchyLockAttemptSeconds);
+        _context.Database.SetCommandTimeout(HierarchyCommandTimeoutSeconds);
         try
         {
             for (var attempt = 0; ; attempt++)
@@ -262,10 +262,10 @@ public class ItemController : BaseController<Item>
                         await tx.CommitAsync();
                     return result;
                 }
-                catch (Exception ex) when (IsSqliteBusy(ex) && attempt < 5)
+                catch (Exception ex) when (IsSqliteBusy(ex) && attempt < HierarchyLockAttempts - 1)
                 {
                     _context.ChangeTracker.Clear();
-                    await Task.Delay(25 * (attempt + 1));
+                    await Task.Delay(HierarchyLockRetryDelayMilliseconds * (attempt + 1));
                 }
                 finally
                 {
@@ -283,10 +283,36 @@ public class ItemController : BaseController<Item>
     /// <summary>
     /// How long one attempt waits on another writer before giving up and retrying. It is the
     /// connection's default timeout, which is what Microsoft.Data.Sqlite uses for its own retry of a
-    /// statement that hits a held lock; the retry loop is what covers a longer contention, not a
-    /// longer timeout.
+    /// statement that hits a held lock (`BEGIN IMMEDIATE` waited 4020 ms under a 4 s hold); the
+    /// retry loop below multiplies it into the total budget, it does not extend it.
     /// </summary>
-    private const int HierarchyLockAttemptSeconds = 1;
+    private const int HierarchyLockAttemptSeconds = 2;
+
+    /// <summary>
+    /// How many attempts the retry loop makes before giving up: 10 x 2 s plus the short back-off
+    /// between attempts, so the whole budget is a bit over 20 s. It is sized to cover a short
+    /// backup (or checkpoint) and a large bulk move holding SQLite's single writer lock — measured:
+    /// a 5000-item move held it for ~4 s, and a checkpoint can hold it for tens of seconds. Past
+    /// the budget the caller gets an honest 500 instead of hanging forever; waiting longer than
+    /// this would mean the request lives as long as the longest possible backup, which no HTTP
+    /// client behind a proxy tolerates anyway.
+    /// </summary>
+    private const int HierarchyLockAttempts = 10;
+
+    /// <summary>Short, growing back-off between lock attempts; the per-attempt wait does the waiting.</summary>
+    private const int HierarchyLockRetryDelayMilliseconds = 25;
+
+    /// <summary>
+    /// How long a single command inside the hierarchy write may execute on its own before being
+    /// aborted. This is deliberately NOT the lock-wait budget and must not share its number: the
+    /// lock wait is about somebody else holding the writer lock (bounded by
+    /// HierarchyLockAttempts x HierarchyLockAttemptSeconds), while this bounds one statement's own
+    /// execution. It used to be 1 s — the same number as the per-attempt lock wait, a coincidence
+    /// that left no margin: a measured 5000-item move answered in 3973 ms with every individual
+    /// command under 1 s, so any slower machine would abort a legitimate move. 15 s keeps a
+    /// generous per-command ceiling without ever meaning "wait 15 s for a lock".
+    /// </summary>
+    private const int HierarchyCommandTimeoutSeconds = 15;
 
     private static bool IsSqliteBusy(Exception ex) =>
         ex is SqliteException sqlite && sqlite.SqliteErrorCode is 5 or 6
@@ -302,11 +328,13 @@ public class ItemController : BaseController<Item>
     private BadRequestObjectResult DepthExceeded(int attemptedLevel) => InvalidHierarchy(
         $"The requested hierarchy would reach level {attemptedLevel}; the maximum allowed depth is {_maxDepth}.");
 
-    private static ObjectResult ChildrenPreventDelete(int count) => new(new ProblemDetails
+    private static ObjectResult ChildrenPreventDelete(int count, bool possiblyFromAnotherOrganization = false) => new(new ProblemDetails
     {
         Status = StatusCodes.Status409Conflict,
         Title = "Item has children",
-        Detail = $"This item has {count} child item(s). Move or delete them before deleting this item."
+        Detail = possiblyFromAnotherOrganization
+            ? $"This item has {count} child item(s), possibly from another organization: the refusing constraint has no organization filter. Move or delete them before deleting this item."
+            : $"This item has {count} child item(s). Move or delete them before deleting this item."
     }) { StatusCode = StatusCodes.Status409Conflict };
 
     private static void ApplyAttachmentCount(ItemDTO node, Dictionary<int, int> counts)
@@ -392,7 +420,7 @@ public class ItemController : BaseController<Item>
             // corruption produces one) would be filtered out here and turn the honest 409 into a 500.
             var childCount = await _context.Items.IgnoreQueryFilters()
                 .CountAsync(child => child.ParentId == id);
-            if (childCount > 0) return ChildrenPreventDelete(childCount);
+            if (childCount > 0) return ChildrenPreventDelete(childCount, possiblyFromAnotherOrganization: true);
             throw;
         }
     }

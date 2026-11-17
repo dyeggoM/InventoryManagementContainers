@@ -79,7 +79,7 @@ public sealed class ItemHierarchyHardeningTests : ApiTestBase
         Assert.Multiple(() =>
         {
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Conflict), body);
-            Assert.That(body, Does.Contain("This item has 1 child item(s)."));
+            Assert.That(body, Does.Contain("This item has 1 child item(s), possibly from another organization"));
         });
 
         using var check = PersonaScope();

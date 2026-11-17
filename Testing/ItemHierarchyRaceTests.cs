@@ -193,4 +193,124 @@ public sealed class ItemHierarchyRaceTests : ApiTestBase
                 "the wait is bounded by the retry loop, not by the provider's 30 s default");
         });
     }
+
+    /// <summary>
+    /// The budget regression: a writer holding the lock for 10 s — twice the old 6.7 s budget, which
+    /// used to answer 500 — is waited out and answered 2xx. The 20 s budget exists for exactly this.
+    /// </summary>
+    [Test]
+    public async Task AnExternalWriterHoldingTheLockForTenSecondsIsWaitedOutNotRefused()
+    {
+        var parent = await CreateItem("TEN SECOND PARENT");
+        var child = await CreateItem("TEN SECOND CHILD", parent);
+        var archived = await CreateItem("TEN SECOND ARCHIVED");
+        Assert.That((await Client.DeleteAsync($"/api/item/{archived}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+
+        await using var writer = new SqliteConnection($"Data Source={Factory.DatabasePath}");
+        await writer.OpenAsync();
+        await using (var begin = writer.CreateCommand())
+        {
+            begin.CommandText = "BEGIN IMMEDIATE";
+            await begin.ExecuteNonQueryAsync();
+        }
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var detachTask = Client.DeleteAsync($"/api/item/{parent}/children/{child}");
+        var activateTask = Client.PatchAsync($"/api/item/{archived}/activate", content: null);
+        await Task.Delay(TimeSpan.FromSeconds(10));
+        await using (var release = writer.CreateCommand())
+        {
+            release.CommandText = "ROLLBACK";
+            await release.ExecuteNonQueryAsync();
+        }
+
+        var detach = await detachTask;
+        var activate = await activateTask;
+        started.Stop();
+        var detachBody = await detach.Content.ReadAsStringAsync();
+        var activateBody = await activate.Content.ReadAsStringAsync();
+        TestContext.Out.WriteLine($"external writer held the lock for 10 s: detach={(int)detach.StatusCode}, "
+            + $"activate={(int)activate.StatusCode}, waited {started.ElapsedMilliseconds} ms");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(detach.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), detachBody);
+            Assert.That(activate.StatusCode, Is.EqualTo(HttpStatusCode.OK), activateBody);
+            Assert.That(started.Elapsed, Is.GreaterThan(TimeSpan.FromSeconds(10)).And.LessThan(TimeSpan.FromSeconds(25)),
+                "the request waited out the holder inside the 20 s budget instead of answering 500");
+        });
+    }
+
+    /// <summary>
+    /// Past the budget the failure is honest: a real error status, no half-written state, and no
+    /// hang — the request gives up while the external writer still holds the lock.
+    /// </summary>
+    [Test]
+    public async Task AnExternalWriterHoldingTheLockForFortySecondsFailsHonestlyWithoutAPartialWrite()
+    {
+        var parent = await CreateItem("FORTY SECOND PARENT");
+        var child = await CreateItem("FORTY SECOND CHILD", parent);
+
+        await using var writer = new SqliteConnection($"Data Source={Factory.DatabasePath}");
+        await writer.OpenAsync();
+        await using (var begin = writer.CreateCommand())
+        {
+            begin.CommandText = "BEGIN IMMEDIATE";
+            await begin.ExecuteNonQueryAsync();
+        }
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        // 35 s is under the holder's 40 s: if the request needed the holder to release, this fails
+        // with a timeout — which is exactly the hang this test exists to rule out.
+        var detach = await Client.DeleteAsync($"/api/item/{parent}/children/{child}").WaitAsync(TimeSpan.FromSeconds(35));
+        started.Stop();
+        var detachBody = await detach.Content.ReadAsStringAsync();
+        TestContext.Out.WriteLine($"external writer held the lock for 40 s: detach={(int)detach.StatusCode} "
+            + $"after {started.ElapsedMilliseconds} ms (budget ~21 s, holder released at 40 s), body={detachBody}");
+
+        using var check = PersonaScope();
+        var db = check.ServiceProvider.GetRequiredService<ApplicationContext>();
+        Assert.Multiple(async () =>
+        {
+            Assert.That((int)detach.StatusCode, Is.GreaterThanOrEqualTo(500), detachBody);
+            Assert.That(started.Elapsed, Is.GreaterThan(TimeSpan.FromSeconds(18)).And.LessThan(TimeSpan.FromSeconds(40)),
+                "the request gave up on its own budget, before the holder released");
+            Assert.That(await db.Items.IgnoreQueryFilters().Where(item => item.Id == child)
+                .Select(item => item.ParentId).SingleAsync(), Is.EqualTo(parent), "the refused move wrote nothing");
+            Assert.That(await db.ItemArchives.AnyAsync(row => row.ItemId == child), Is.False, "no half archive");
+        });
+    }
+
+    /// <summary>
+    /// The normal case stays normal: 30 concurrent single-child moves contend on the write lock, and
+    /// every one is served inside the budget — no 500, and no new artificial wait on top of the lock.
+    /// </summary>
+    [Test]
+    public async Task ThirtyConcurrentMovesAllSucceedWithoutAServerError()
+    {
+        var source = await CreateItem("MOVE SOURCE");
+        var destination = await CreateItem("MOVE DESTINATION", source);
+        var children = new List<int>();
+        for (var i = 0; i < 30; i++)
+            children.Add(await CreateItem($"MOVE CHILD {i}", source));
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var moves = await Task.WhenAll(children.Select(childId =>
+            Client.PostAsJsonAsync($"/api/item/{destination}/children", new { ids = new[] { childId } })));
+        started.Stop();
+
+        var statuses = moves.Select(move => (int)move.StatusCode).ToArray();
+        TestContext.Out.WriteLine($"30 concurrent single-child moves: HTTP {JsonSerializer.Serialize(statuses)} "
+            + $"in {started.ElapsedMilliseconds} ms");
+        using var check = PersonaScope();
+        var db = check.ServiceProvider.GetRequiredService<ApplicationContext>();
+        Assert.Multiple(async () =>
+        {
+            Assert.That(statuses, Is.All.EqualTo(200), "no move was refused or errored");
+            Assert.That(await db.Items.AsNoTracking().Where(item => children.Contains(item.Id))
+                .Select(item => item.ParentId).ToListAsync(), Is.All.EqualTo(destination),
+                "every child ended up under the destination");
+            Assert.That(started.Elapsed, Is.LessThan(TimeSpan.FromSeconds(30)), "contention was served, not stalled");
+        });
+    }
 }
