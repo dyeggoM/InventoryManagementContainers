@@ -2,6 +2,13 @@ import { api } from './api';
 
 export interface Constants {
   id: number;
+  /**
+   * Stable identity: what an item stores as an attribute key or as a list value. The API assigns
+   * it and never rewrites it, so a rename changes `label` only. Rows that predate the column
+   * arrive without it; `codeOf` falls back to the label for exactly those.
+   */
+  code?: string | null | undefined;
+  /** What the screen shows. Translating it is translating copy, not data. */
   label: string;
   icon: string;
   children: Constants[];
@@ -12,6 +19,26 @@ export interface Constants {
   /** How an attribute value is edited: Text | Number | Money | Date | LongText. */
   dataType?: string | null | undefined;
   parent?: Constants | undefined;
+}
+
+/** One entry of the catalogue: the code is the data, the label is what the screen shows. */
+export interface CatalogueEntry {
+  code: string;
+  label: string;
+}
+
+/**
+ * The code of a constant. The migration fills `Code := Label` for the rows that predate the
+ * column, and those are the strings the items already store, so the label is the right fallback —
+ * never a translation, always the identity.
+ */
+export function codeOf(constant: Constants): string {
+  return (constant.code ?? '').trim() || constant.label;
+}
+
+/** The catalogue entry of a constant: identity and display text, side by side. */
+export function entryOf(constant: Constants): CatalogueEntry {
+  return { code: codeOf(constant), label: constant.label || codeOf(constant) };
 }
 
 export interface ConstantsReponse {

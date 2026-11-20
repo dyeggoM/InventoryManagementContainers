@@ -3,7 +3,7 @@
     <div class="row items-center q-gutter-sm q-mb-md">
       <q-icon name="dashboard" size="28px" color="primary" />
       <div class="column">
-        <div class="text-h6">Dashboard</div>
+        <div class="text-h6">Panel</div>
         <div class="text-caption text-grey-7">{{ subtitle }}</div>
       </div>
     </div>

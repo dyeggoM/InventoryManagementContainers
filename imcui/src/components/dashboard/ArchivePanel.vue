@@ -1,5 +1,5 @@
 <template>
-  <div class="archive-panel" lang="es">
+  <div class="archive-panel">
     <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-subtitle1 text-weight-medium">Archivo</div>
       <q-space />

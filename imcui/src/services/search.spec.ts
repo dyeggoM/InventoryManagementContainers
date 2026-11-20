@@ -17,16 +17,31 @@ const kit = node({
 });
 
 describe('attributeMatch', () => {
-  it('finds a value and reports the pair', () => {
-    expect(attributeMatch(kit, 'sn-0042')).toEqual({ label: 'Serial', value: 'SN-0042' });
+  it('finds a value and reports the pair by code', () => {
+    expect(attributeMatch(kit, 'sn-0042')).toEqual({ code: 'Serial', value: 'SN-0042' });
   });
 
   it('matches a key with spacing and punctuation ignored', () => {
-    expect(attributeMatch(kit, 'buy price')).toEqual({ label: 'BuyPrice', value: '10000000' });
+    expect(attributeMatch(kit, 'buy price')).toEqual({ code: 'BuyPrice', value: '10000000' });
   });
 
   it('does not care about case on either side', () => {
-    expect(attributeMatch(kit, 'brand')).toEqual({ label: 'Brand', value: 'DW' });
+    expect(attributeMatch(kit, 'brand')).toEqual({ code: 'Brand', value: 'DW' });
+  });
+
+  it('matches the label the screen shows, and still reports the code', () => {
+    // «precio» is what the person reads; `BuyPrice` is what the item stores.
+    const labelOf = (code: string) =>
+      ({ Brand: 'Marca', BuyPrice: 'Precio de compra', Serial: 'Número de serie' })[code] ?? code;
+
+    expect(attributeMatch(kit, 'precio', labelOf)).toEqual({
+      code: 'BuyPrice',
+      value: '10000000',
+    });
+    expect(attributeMatch(kit, 'numero de serie', labelOf)).toEqual({
+      code: 'Serial',
+      value: 'SN-0042',
+    });
   });
 
   it('returns null for a record with malformed attributes instead of throwing', () => {
@@ -58,7 +73,7 @@ describe('filterTree', () => {
   it('marks a record that matched on a value and carries the pair', () => {
     const result = filterTree([kit], 'SN-0042');
 
-    expect(result[0]!.match).toEqual({ label: 'Serial', value: 'SN-0042' });
+    expect(result[0]!.match).toEqual({ code: 'Serial', value: 'SN-0042' });
     expect(result[0]!.hit).toBe(true);
     expect(result[0]!.children).toHaveLength(1);
     expect(result[0]!.children[0]!.label).toBe('Snare 14"');

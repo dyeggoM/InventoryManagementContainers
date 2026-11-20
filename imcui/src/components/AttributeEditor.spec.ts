@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import AttributeEditor from './AttributeEditor.vue';
 import type { Attributes } from '@services/items';
+import type { CatalogueEntry } from '@services/constants';
 
 // Quasar's components are replaced with stubs that keep the props visible: what matters here is
 // which control a typed row gets, not how the control looks. The select stub renders the slots the
@@ -26,6 +27,15 @@ const QInput = defineComponent({
   },
 });
 
+/** Options are objects carrying a `label` and a `code`; anything else is printed as it is. */
+function optionText(option: unknown): string {
+  if (option && typeof option === 'object' && 'label' in option) {
+    const label = (option as { label?: unknown }).label;
+    return typeof label === 'string' ? label : '';
+  }
+  return typeof option === 'string' || typeof option === 'number' ? String(option) : '';
+}
+
 const QSelect = defineComponent({
   name: 'QSelect',
   props: {
@@ -42,6 +52,11 @@ const QSelect = defineComponent({
     disable: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
     readonly: { type: Boolean, default: false },
+    emitValue: { type: Boolean, default: false },
+    mapOptions: { type: Boolean, default: false },
+    optionLabel: { type: String, default: undefined },
+    optionValue: { type: String, default: undefined },
+    newValueMode: { type: String, default: undefined },
   },
   emits: ['update:modelValue', 'filter', 'popup-hide'],
   render() {
@@ -49,7 +64,7 @@ const QSelect = defineComponent({
     const list = h(
       'ul',
       { class: 'q-select-stub__options' },
-      options.map((option) => h('li', { class: 'q-select-stub__option' }, String(option))),
+      options.map((option) => h('li', { class: 'q-select-stub__option' }, optionText(option))),
     );
     // Quasar shows the no-option slot only when nothing matches, and after-options only when the
     // list has entries; mirroring that keeps the assertions honest.
@@ -110,7 +125,15 @@ const QSpinner = defineComponent({
 
 const stubs = { QInput, QSelect, QBtn, QIcon, QItem, QItemSection, QSpinner };
 
-const labels = ['Brand', 'Type', 'BuyPrice', 'RentPrice', 'Description', 'Notes'];
+/** The catalogue as Configuration would send it: the code is the identity, the label is shown. */
+const attributes: CatalogueEntry[] = [
+  { code: 'Brand', label: 'Marca' },
+  { code: 'Type', label: 'Tipo' },
+  { code: 'BuyPrice', label: 'Precio de compra' },
+  { code: 'RentPrice', label: 'Precio de alquiler' },
+  { code: 'Description', label: 'Descripción' },
+  { code: 'Notes', label: 'Notas' },
+];
 
 const types: Record<string, string> = {
   Brand: 'Text',
@@ -121,17 +144,23 @@ const types: Record<string, string> = {
   Notes: 'LongText',
 };
 
-const brandValues = ['Bosch', 'DeWalt', 'Makita'];
+/** Brand names are data: their code and their label are the same word in any language. */
+const brandValues: CatalogueEntry[] = [
+  { code: 'Bosch', label: 'Bosch' },
+  { code: 'DeWalt', label: 'DeWalt' },
+  { code: 'Makita', label: 'Makita' },
+];
 
 function rowsFixture(extra: Attributes[] = []): Attributes[] {
-  return [...labels.map((label) => ({ label, value: '' })), ...extra];
+  return [...attributes.map((entry) => ({ code: entry.code, value: '' })), ...extra];
 }
 
 interface MountOverrides {
   types?: Record<string, string>;
-  lists?: Record<string, string[]>;
-  createValue?: (label: string, value: string) => Promise<boolean>;
+  lists?: Record<string, CatalogueEntry[]>;
+  createValue?: (attributeCode: string, label: string) => Promise<CatalogueEntry | null>;
   readonly?: boolean;
+  entries?: CatalogueEntry[];
 }
 
 function mountEditor(rows: Attributes[], overrides: MountOverrides = {}) {
@@ -139,7 +168,7 @@ function mountEditor(rows: Attributes[], overrides: MountOverrides = {}) {
   const wrapper = mount(AttributeEditor, {
     props: {
       modelValue: rows,
-      labels,
+      attributes: overrides.entries ?? attributes,
       lists: overrides.lists ?? {},
       types: { ...types, ...(overrides.types ?? {}) },
       readonly: overrides.readonly ?? false,
@@ -210,13 +239,13 @@ describe('AttributeEditor', () => {
     expect(input.props('type')).toBe('date');
   });
 
-  it('keeps an ordinary text value exactly as typed', async () => {
+  it('keeps an ordinary text value exactly as typed, keyed by the code', async () => {
     const wrapper = mountEditor(rowsFixture());
     const input = valueInput(wrapper, 0); // Brand
 
     await input.vm.$emit('update:modelValue', 'DeWalt 12"');
 
-    expect(currentRows(wrapper)[0]).toEqual({ label: 'Brand', value: 'DeWalt 12"' });
+    expect(currentRows(wrapper)[0]).toEqual({ code: 'Brand', value: 'DeWalt 12"' });
   });
 
   it('scrubs a money value down to digits and one separator', async () => {
@@ -225,31 +254,47 @@ describe('AttributeEditor', () => {
 
     await input.vm.$emit('update:modelValue', '12abc000');
 
-    expect(currentRows(wrapper)[2]).toEqual({ label: 'BuyPrice', value: '12000' });
+    expect(currentRows(wrapper)[2]).toEqual({ code: 'BuyPrice', value: '12000' });
+  });
+
+  it('shows the label of every code and keeps the code when the catalogue is relabelled', () => {
+    const relabelled = attributes.map((entry) =>
+      entry.code === 'Brand' ? { code: 'Brand', label: 'Brand 2' } : entry,
+    );
+    const before = mountEditor(rowsFixture());
+    const after = mountEditor(rowsFixture(), { entries: relabelled });
+
+    const nameOf = (wrapper: VueWrapper) =>
+      wrapper.findAll('.attribute-row')[0]!.findComponent({ name: 'QSelect' });
+
+    // Renaming the constant is translating copy: what is written does not move.
+    expect(nameOf(before).props('displayValue')).toBe('Marca');
+    expect(nameOf(after).props('displayValue')).toBe('Brand 2');
+    expect(currentRows(after)[0]).toEqual({ code: 'Brand', value: '' });
   });
 
   it('shows a row for a key the catalogue does not have, with an editable name', () => {
-    const wrapper = mountEditor(rowsFixture([{ label: 'Serial', value: 'SN-0042' }]));
+    const wrapper = mountEditor(rowsFixture([{ code: 'Serial', value: 'SN-0042' }]));
     const custom = wrapper.findAll('.attribute-row').at(-1)!;
 
-    expect(custom.findComponent({ name: 'QInput' }).props('ariaLabel')).toBe('Attribute name');
+    expect(custom.findComponent({ name: 'QInput' }).props('ariaLabel')).toBe('Nombre del atributo');
     expect(custom.classes()).toContain('attribute-row');
   });
 
   it('names each value field after its attribute, so the row is not just "text box"', () => {
-    const wrapper = mountEditor(rowsFixture([{ label: 'Serial', value: '' }]));
+    const wrapper = mountEditor(rowsFixture([{ code: 'Serial', value: '' }]));
     const rows = wrapper.findAll('.attribute-row');
 
-    // Brand comes from the catalogue; Serial was typed by hand and is named the same way.
-    expect(valueInput(wrapper, 0).props('ariaLabel')).toBe('Brand');
+    // Brand comes from the catalogue, in Spanish; Serial was typed by hand and is named as written.
+    expect(valueInput(wrapper, 0).props('ariaLabel')).toBe('Marca');
     expect(valueInput(wrapper, rows.length - 1).props('ariaLabel')).toBe('Serial');
   });
 
   it('names a value field whose custom key is still empty', () => {
-    const wrapper = mountEditor(rowsFixture([{ label: '', value: '' }]));
+    const wrapper = mountEditor(rowsFixture([{ code: '', value: '' }]));
     const rows = wrapper.findAll('.attribute-row');
 
-    expect(valueInput(wrapper, rows.length - 1).props('ariaLabel')).toBe('Value');
+    expect(valueInput(wrapper, rows.length - 1).props('ariaLabel')).toBe('Valor');
   });
 
   it('hides the visual header from assistive technology', () => {
@@ -262,24 +307,28 @@ describe('AttributeEditor', () => {
     const wrapper = mountEditor(rowsFixture());
     const addCustom = wrapper
       .findAllComponents({ name: 'QBtn' })
-      .find((button) => button.props('label') === 'Add custom')!;
+      .find((button) => button.props('label') === 'Añadir personalizado')!;
 
     await addCustom.trigger('click');
 
-    expect(currentRows(wrapper).at(-1)).toEqual({ label: '', value: '' });
+    expect(currentRows(wrapper).at(-1)).toEqual({ code: '', value: '' });
   });
 
-  it('filters the rows by name or value once there are more than five', async () => {
+  it('filters the rows by label or value, in the words the screen shows', async () => {
     const wrapper = mountEditor(rowsFixture());
     expect(wrapper.findAll('.attribute-row')).toHaveLength(6);
 
     const filter = wrapper
       .findAllComponents({ name: 'QInput' })
-      .find((input) => input.props('ariaLabel') === 'Filter attributes')!;
+      .find((input) => input.props('ariaLabel') === 'Filtrar atributos')!;
     expect(filter).toBeTruthy();
 
-    await filter.vm.$emit('update:modelValue', 'price');
+    // "precio" is a label: the codes are BuyPrice and RentPrice and the user never types them.
+    await filter.vm.$emit('update:modelValue', 'precio');
     expect(wrapper.findAll('.attribute-row')).toHaveLength(2);
+
+    await filter.vm.$emit('update:modelValue', 'marca');
+    expect(wrapper.findAll('.attribute-row')).toHaveLength(1);
 
     await filter.vm.$emit('update:modelValue', 'nothing here');
     expect(wrapper.findAll('.attribute-row')).toHaveLength(0);
@@ -301,12 +350,35 @@ describe('AttributeEditor', () => {
     expect(select.attributes('inputmode')).toBe('search');
   });
 
+  it('offers the values of the catalogue and nothing else', () => {
+    const wrapper = mountEditor(rowsFixture(), { lists: { Brand: brandValues } });
+    const select = valueSelect(wrapper, 0);
+
+    // A closed list: the values come from Configuration, and there is no free text mode.
+    expect(select.props('options')).toEqual(brandValues);
+    expect(select.props('newValueMode')).toBeUndefined();
+    expect(select.props('emitValue')).toBe(true);
+    expect(select.props('mapOptions')).toBe(true);
+    // The keys are named because the entry is `code` + `label`, not Quasar's `value` + `label`:
+    // without this the select showed the stored code and emitted `undefined`.
+    expect(select.props('optionLabel')).toBe('label');
+    expect(select.props('optionValue')).toBe('code');
+  });
+
+  it('shows a stored value its list no longer has, instead of hiding it', () => {
+    const rows = rowsFixture();
+    rows[0]!.value = 'Acme';
+    const wrapper = mountEditor(rows, { lists: { Brand: brandValues } });
+
+    expect(valueSelect(wrapper, 0).props('modelValue')).toBe('Acme');
+  });
+
   it('narrows a value list as the user types and restores it when the dropdown closes', async () => {
     const wrapper = mountEditor(rowsFixture(), { lists: { Brand: brandValues } });
 
     expect(valueSelect(wrapper, 0).props('options')).toEqual(brandValues);
 
-    expect((await typeIntoValueList(wrapper, 0, 'dew')).props('options')).toEqual(['DeWalt']);
+    expect((await typeIntoValueList(wrapper, 0, 'dew')).props('options')).toEqual([brandValues[1]]);
 
     await valueSelect(wrapper, 0).vm.$emit('popup-hide');
     await wrapper.vm.$nextTick();
@@ -316,7 +388,7 @@ describe('AttributeEditor', () => {
   it('offers the typed string when it matches no option', async () => {
     const wrapper = mountEditor(rowsFixture(), {
       lists: { Brand: brandValues },
-      createValue: vi.fn().mockResolvedValue(true),
+      createValue: vi.fn().mockResolvedValue({ code: 'Acme', label: 'Acme' }),
     });
 
     const select = await typeIntoValueList(wrapper, 0, 'Acme');
@@ -324,12 +396,14 @@ describe('AttributeEditor', () => {
     expect(select.props('options')).toEqual([]);
     const addRow = wrapper.find('.attribute-add-option');
     expect(addRow.exists()).toBe(true);
-    expect(addRow.text()).toContain('Añadir «Acme» a «Brand»');
+    expect(addRow.text()).toContain('Añadir «Acme» a «Marca»');
   });
 
   it('adds the value only once the write resolves, with the field busy meanwhile', async () => {
-    let resolveWrite: (created: boolean) => void = () => undefined;
-    const createValue = vi.fn(() => new Promise<boolean>((resolve) => (resolveWrite = resolve)));
+    let resolveWrite: (created: CatalogueEntry | null) => void = () => undefined;
+    const createValue = vi.fn(
+      () => new Promise<CatalogueEntry | null>((resolve) => (resolveWrite = resolve)),
+    );
     const wrapper = mountEditor(rowsFixture(), {
       lists: { Brand: brandValues },
       createValue,
@@ -346,10 +420,11 @@ describe('AttributeEditor', () => {
     await wrapper.find('.attribute-add-option').trigger('click');
     expect(createValue).toHaveBeenCalledTimes(1);
 
-    resolveWrite(true);
+    // The server assigns the code; the row keeps that one, not the text that was typed.
+    resolveWrite({ code: 'Acme-1', label: 'Acme' });
     await flushPromises();
 
-    expect(currentRows(wrapper)[0]).toEqual({ label: 'Brand', value: 'Acme' });
+    expect(currentRows(wrapper)[0]).toEqual({ code: 'Brand', value: 'Acme-1' });
     expect(valueSelect(wrapper, 0).props('loading')).toBe(false);
   });
 
@@ -358,14 +433,14 @@ describe('AttributeEditor', () => {
     rows[0]!.value = 'Bosch';
     const wrapper = mountEditor(rows, {
       lists: { Brand: brandValues },
-      createValue: vi.fn().mockResolvedValue(false),
+      createValue: vi.fn().mockResolvedValue(null),
     });
 
     await typeIntoValueList(wrapper, 0, 'Acme');
     await wrapper.find('.attribute-add-option').trigger('click');
     await flushPromises();
 
-    expect(currentRows(wrapper)[0]).toEqual({ label: 'Brand', value: 'Bosch' });
+    expect(currentRows(wrapper)[0]).toEqual({ code: 'Brand', value: 'Bosch' });
     const error = wrapper.find('.attribute-error');
     expect(error.exists()).toBe(true);
     expect(error.text()).toContain('Acme');
@@ -384,13 +459,13 @@ describe('AttributeEditor', () => {
   it('never offers an existing option as a bare string to add', async () => {
     const wrapper = mountEditor(rowsFixture(), {
       lists: { Brand: brandValues },
-      createValue: vi.fn().mockResolvedValue(true),
+      createValue: vi.fn().mockResolvedValue({ code: 'DeWalt', label: 'DeWalt' }),
     });
 
     // Same value in another case: the list already has it, so there is nothing to add.
     const select = await typeIntoValueList(wrapper, 0, 'dewalt');
 
-    expect(select.props('options')).toEqual(['DeWalt']);
+    expect(select.props('options')).toEqual([brandValues[1]]);
     expect(wrapper.find('.attribute-add-option').exists()).toBe(false);
   });
 });

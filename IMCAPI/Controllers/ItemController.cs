@@ -66,6 +66,10 @@ public class ItemController : BaseController<Item>
                 return DepthExceeded(attemptedLevel);
         }
 
+        // Attributes are catalog data: keys are constant codes and list values are codes too.
+        if (await NormalizeAttributesAsync(data) is { } attributeRefusal)
+            return attributeRefusal;
+
         // The client may send IsActive, but only delete/restore may control visibility.
         data.IsActive = true;
         // Attachments are created with the item, so their files are stored here too.
@@ -96,6 +100,10 @@ public class ItemController : BaseController<Item>
         if (data.Attachments is { Count: > 0 })
             return BadRequest("Attachments cannot be added through item PUT; use /api/attachment.");
         data.IsActive = existing.IsActive;
+        // Attributes absent from the body are not an emptying: PUT is read-modify-write, so a
+        // client that does not send the bag keeps the one the item already carries. It is also the
+        // obvious way around the attribute validation — a null bag must not slip past it.
+        if (data.Attributes is null) data.Attributes = existing.Attributes;
         var subtreeHeight = GetSubtreeHeight(id, await LoadChildrenByParent(), new Dictionary<int, int>(), new HashSet<int>(), _maxDepth);
         if (data.ParentId is int proposedParentId)
         {
@@ -116,7 +124,114 @@ public class ItemController : BaseController<Item>
             return DepthExceeded(subtreeHeight);
         }
 
+        // Same contract on update: an unknown code is refused before anything is written, and a
+        // value spelled as a label is stored as its code.
+        if (await NormalizeAttributesAsync(data) is { } attributeRefusal)
+            return attributeRefusal;
+
         return await base.Put(id, data);
+    }
+
+    /// <summary>
+    /// Attribute keys that predate the catalog contract and carry free values: the importer writes
+    /// them and <see cref="Services.ItemImporter.ReadCode"/> reads the item's code back from
+    /// "Code", so they are accepted beside the catalog-driven keys, never inside one.
+    /// </summary>
+    private static readonly HashSet<string> LegacyAttributeKeys = new(StringComparer.Ordinal)
+    {
+        "Code", "Reference", "Serial", "Dimensions",
+    };
+
+    /// <summary>
+    /// The code/label contract on item writes: every key must be the code of an Attribute constant
+    /// (or one of the legacy keys), and a list value must resolve to a constant in the value group
+    /// the key names. A value spelled as a label — or in any case — is normalized to the code and
+    /// stored as the code, the same resolution the importer applies, so renaming or translating a
+    /// label never leaves an item unsaveable. An unknown code is a 400 that names it; the item is
+    /// not written.
+    /// </summary>
+    private async Task<IActionResult?> NormalizeAttributesAsync(Item data)
+    {
+        var (refusal, normalized) = await ResolveAttributesAsync(data.Attributes);
+        if (refusal is not null) return refusal;
+        data.Attributes = normalized;
+        return null;
+    }
+
+    /// <summary>
+    /// Validates one attribute bag and answers the normalized form to store (labels resolved to
+    /// codes, everything else untouched) beside the refusal, if any. Answers (null, original) when
+    /// there is nothing to do.
+    /// </summary>
+    private async Task<(IActionResult? Refusal, string Attributes)> ResolveAttributesAsync(string? attributes)
+    {
+        if (string.IsNullOrWhiteSpace(attributes)) return (null, attributes ?? "");
+        Dictionary<string, string> parsed;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(attributes,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+        }
+        catch (JsonException)
+        {
+            return (BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Invalid attributes",
+                Detail = "attributes must be a JSON object of string values."
+            }), attributes);
+        }
+
+        var catalog = await _context.Constants.IgnoreQueryFilters().AsNoTracking()
+            .Where(row => row.TenantId == _context.CurrentTenantId && row.IsActive)
+            .Select(row => new { row.Code, row.Label, row.Group, row.ParentId })
+            .ToListAsync();
+        // Attributes are tenant-owned here: the seed copies the vocabulary into every organization.
+        var attributeDefs = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in catalog.Where(row => row.Group == "Attribute"))
+            // Keys are codes, period: accepting the display label here would couple stored data to
+            // the language of the day, which is exactly what the code/label contract removes.
+            attributeDefs.TryAdd(row.Code, row.Code);
+        var valuesByGroup = catalog
+            // The one row whose code names its group is the group's root, the shelf the values sit
+            // on — not a value itself, in the importer's catalogue either.
+            .Where(row => row.Code != row.Group)
+            .GroupBy(row => row.Group!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+
+        foreach (var (key, value) in parsed)
+        {
+            if (!attributeDefs.TryGetValue(key, out var attributeCode))
+            {
+                if (LegacyAttributeKeys.Contains(key)) continue;
+                return (BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Unknown attribute",
+                    Detail = $"Attribute '{key}' does not exist in the Attribute catalog."
+                }), attributes);
+            }
+
+            if (string.IsNullOrWhiteSpace(value) || !valuesByGroup.TryGetValue(attributeCode, out var group))
+                continue; // a free-text, number or date attribute: the catalog does not constrain it
+
+            // Same tolerance as the importer — code or label, without case — and always stored as
+            // the code, so renaming or translating a label never leaves an item unsaveable.
+            var code = group.Where(row => string.Equals(row.Code, value, StringComparison.OrdinalIgnoreCase))
+                .Select(row => row.Code).FirstOrDefault()
+                ?? group.Where(row => string.Equals(row.Label, value, StringComparison.OrdinalIgnoreCase))
+                    .Select(row => row.Code).FirstOrDefault();
+            if (code is null)
+                return (BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Unknown value",
+                    Detail = $"Value '{value}' is not a code of attribute '{attributeCode}'."
+                }), attributes);
+            if (!string.Equals(code, value, StringComparison.Ordinal)) parsed[key] = code;
+        }
+
+        return (null, JsonSerializer.Serialize(parsed));
     }
 
     public sealed record MoveChildrenRequest(int[]? Ids);
@@ -556,11 +671,20 @@ public class ItemController : BaseController<Item>
             if (attemptedLevel > _maxDepth) return DepthExceeded(attemptedLevel);
         }
 
+        // An archive written before the code/label contract could carry attributes the catalogue
+        // does not know; restoring it would create an item the API then refuses to save again.
+        // Refuse the restore for the same reason and with the same words, before any file or row
+        // moves — the archive stays exactly as it was. A bag that validates is stored normalized
+        // (labels resolved to codes), the same way a fresh write would land.
+        var (restoreRefusal, restoredAttributes) = await ResolveAttributesAsync(archive.Attributes);
+        if (restoreRefusal is not null) return restoreRefusal;
+
         var restored = new Item
         {
             TenantId = _context.CurrentTenantId,
             Id = idIsFree ? archive.ItemId : 0,
-            Label = archive.Label, Icon = archive.Icon, ParentId = parentId, Attributes = archive.Attributes,
+            Label = archive.Label, Icon = archive.Icon, ParentId = parentId,
+            Attributes = string.IsNullOrWhiteSpace(restoredAttributes) ? archive.Attributes : restoredAttributes,
             IsActive = true, CreatedAt = archive.CreatedAt, CreatedBy = archive.CreatedBy,
             UpdatedAt = archive.UpdatedAt, UpdatedBy = archive.UpdatedBy
         };

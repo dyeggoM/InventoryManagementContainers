@@ -1,7 +1,7 @@
 <template>
   <div class="attachment-editor">
     <div v-if="rows.length === 0" class="text-caption text-grey-7 q-mb-sm">
-      No attachments yet — take a photo or pick a file.
+      Todavía no hay adjuntos: haz una foto o elige un archivo.
     </div>
 
     <div class="attachment-list">
@@ -12,7 +12,7 @@
         </div>
 
         <div class="attachment-body">
-          <div class="text-body2 ellipsis">{{ row.fileName || 'New attachment' }}</div>
+          <div class="text-body2 ellipsis">{{ row.fileName || 'Adjunto nuevo' }}</div>
 
           <div class="row items-center q-gutter-xs">
             <q-select
@@ -21,10 +21,14 @@
               options-dense
               :readonly="readonly"
               class="attachment-type"
-              aria-label="Attachment type"
+              aria-label="Tipo de adjunto"
               v-model="row.type"
               :options="types"
-              :rules="[(value: string) => !!value || 'Pick a type']"
+              option-label="label"
+              option-value="code"
+              emit-value
+              map-options
+              :rules="[(value: string) => !!value || 'Elige un tipo']"
             />
             <q-btn
               v-if="row.id > 0 && row.filePath"
@@ -33,7 +37,7 @@
               size="sm"
               no-caps
               icon="open_in_new"
-              label="Open"
+              label="Abrir"
               type="button"
               class="q-px-xs"
               @click="openOriginal(row)"
@@ -44,11 +48,11 @@
             <q-file
               dense
               borderless
-              :label="isPhoto(row) ? 'Take a photo' : 'Select a file'"
+              :label="isPhoto(row) ? 'Hacer una foto' : 'Elegir un archivo'"
               :accept="isPhoto(row) ? 'image/*' : undefined"
               :capture="isPhoto(row) ? 'environment' : undefined"
               :model-value="row.file ?? null"
-              :rules="[() => !!(row.file || row.fileName) || 'Choose a file']"
+              :rules="[() => !!(row.file || row.fileName) || 'Elige un archivo']"
               @update:model-value="(file: File | null) => onFile(row, file)"
             >
               <template v-slot:prepend>
@@ -64,7 +68,7 @@
               size="sm"
               no-caps
               icon="photo_library"
-              label="Pick from gallery instead"
+              label="Elegir de la galería"
               class="self-start q-px-none"
               @click="pickFromGallery(row)"
             />
@@ -79,7 +83,7 @@
           dense
           color="grey-6"
           type="button"
-          :aria-label="`Remove attachment ${row.fileName || row.id}`"
+          :aria-label="`Quitar el adjunto ${row.fileName || row.id}`"
           @click="emit('remove', index)"
         />
       </div>
@@ -91,13 +95,13 @@
         no-caps
         dense
         icon="add"
-        label="Add attachment"
+        label="Añadir adjunto"
         color="primary"
         type="button"
         @click="emit('add')"
       />
       <span v-if="rows.length" class="text-caption text-grey-7"
-        >{{ rows.length }} on this item</span
+        >{{ rows.length }} en este ítem</span
       >
     </div>
 
@@ -114,6 +118,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue';
 import FilePreviewDialog from './FilePreviewDialog.vue';
+import type { CatalogueEntry } from '@services/constants';
 
 /** An attachment row that may still carry the file the user picked in this form. */
 export interface AttachmentRow {
@@ -131,8 +136,8 @@ export interface AttachmentRow {
 }
 
 defineProps<{
-  /** Attachment types from the `AttachmentType` constant. */
-  types: string[];
+  /** Attachment types from the `AttachmentType` constant: code for the record, label for the select. */
+  types: CatalogueEntry[];
   /** The session cannot write: no picking, adding or removing files. */
   readonly?: boolean;
 }>();
@@ -166,9 +171,12 @@ function openOriginal(row: AttachmentRow) {
   };
 }
 
-/** A photo is taken with the camera; every other type is a document from the file manager. */
+/**
+ * A photo is taken with the camera; every other type is a document from the file manager. The test
+ * reads the stored **code**, never the label: Configuration can call it «Foto» and this still works.
+ */
 function isPhoto(row: AttachmentRow): boolean {
-  return (row.type ?? '').toLowerCase() === 'photo';
+  return (row.type ?? '').toLowerCase().includes('photo');
 }
 
 function preview(row: AttachmentRow): string | null {
@@ -176,6 +184,7 @@ function preview(row: AttachmentRow): string | null {
 }
 
 function typeIcon(row: AttachmentRow): string {
+  // Codes again: «Manual de usuario» in Configuration is still stored as `User Manual`.
   const type = (row.type ?? '').toLowerCase();
   if (type.includes('photo')) return 'image';
   if (type.includes('manual')) return 'menu_book';

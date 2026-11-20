@@ -51,10 +51,10 @@ function makeEditor(captured: Captured) {
 
   const editor = useTreeEditor<Row>({
     service,
-    addNew: () => ({ id: 0, label: 'Add New', icon: '', children: [] }),
+    addNew: () => ({ id: 0, label: 'Nuevo ítem', icon: '', children: [] }),
     blank: () => ({ id: 0, label: '', icon: '', children: [], parentId: null }),
     flatten: (nodes) =>
-      [{ id: 0, label: 'Add New', hierarchicalLabel: 'Add New', depth: 0 }].concat(
+      [{ id: 0, label: 'Nuevo ítem', hierarchicalLabel: 'Nuevo ítem', depth: 0 }].concat(
         nodes.flatMap((node) => [
           {
             id: node.id,
@@ -70,8 +70,7 @@ function makeEditor(captured: Captured) {
           })),
         ]),
       ),
-    entity: 'item',
-    emptyMessage: 'No items yet',
+    emptyMessage: 'Todavía no hay ítems',
     deleteHint: 'Its files go with it.',
     onSelect: (entry) => {
       captured.select = entry;
@@ -187,13 +186,12 @@ describe('useTreeEditor', () => {
     // A controller that always complains, to prove the save never reaches the service.
     const strict = useTreeEditor<Row>({
       service,
-      addNew: () => ({ id: 0, label: 'Add New', icon: '', children: [] }),
+      addNew: () => ({ id: 0, label: 'Nuevo ítem', icon: '', children: [] }),
       blank: () => ({ id: 0, label: '', icon: '', children: [], parentId: null }),
       flatten: () => [],
-      entity: 'item',
       emptyMessage: '',
       deleteHint: '',
-      validate: () => 'Give every attribute a name',
+      validate: () => 'Ponle nombre a todos los atributos',
     });
 
     strict.treeItem.value.label = 'Valid';
@@ -201,7 +199,7 @@ describe('useTreeEditor', () => {
 
     expect(saved).toBe(false);
     expect(service.create).not.toHaveBeenCalled();
-    expect(feedback.error).toHaveBeenCalledWith('Give every attribute a name');
+    expect(feedback.error).toHaveBeenCalledWith('Ponle nombre a todos los atributos');
   });
 
   it('deletes only after the confirmation is accepted', async () => {
@@ -258,7 +256,10 @@ describe('useTreeEditor', () => {
 
     await editor.loadData();
 
-    expect(feedback.error).toHaveBeenCalledWith(expect.anything(), 'Could not load the items');
+    expect(feedback.error).toHaveBeenCalledWith(
+      expect.anything(),
+      'No se pudieron cargar los datos',
+    );
     expect(editor.loading.value).toBe(false);
     expect(editor.tree.value).toEqual([]);
   });
@@ -285,10 +286,9 @@ describe('useTreeEditor', () => {
     const { service } = makeEditor(newCaptured());
     const editor = useTreeEditor<Row>({
       service,
-      addNew: () => ({ id: 0, label: 'Add New', icon: '', children: [] }),
+      addNew: () => ({ id: 0, label: 'Nuevo ítem', icon: '', children: [] }),
       blank: () => ({ id: 0, label: '', icon: '', children: [], parentId: null }),
       flatten: () => [],
-      entity: 'item',
       emptyMessage: '',
       deleteHint: '',
       dirtySnapshot: (entry) => JSON.stringify({ entry, extra: extra.value }),

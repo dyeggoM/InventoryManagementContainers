@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import AuditPanel from './AuditPanel.vue';
 import type { AuditEntry } from '@services/audit';
-import { asText } from '@services/utilities';
+import { asText, formatTimestamp } from '@services/utilities';
 
 // The panel's job is the query it sends and the reader it opens, so the service is replaced and the
 // calls are asserted directly. `formatAuditPayload` stays real: the dialog shows what it produces.
@@ -218,7 +218,7 @@ describe('AuditPanel', () => {
     expect(card.text()).toContain('Update · Item');
     expect(card.text()).toContain('#7');
     expect(card.text()).toContain('root@imc.test');
-    expect(card.text()).toContain(new Date('2026-11-10T12:30:00Z').toLocaleString());
+    expect(card.text()).toContain(formatTimestamp('2026-11-10T12:30:00Z'));
 
     // The card itself is the tap target of the before/after viewer.
     await card.trigger('click');

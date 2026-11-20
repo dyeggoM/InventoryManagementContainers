@@ -97,7 +97,12 @@ function currentRows(wrapper: VueWrapper): AttachmentRow[] {
   return (wrapper.props() as { modelValue: AttachmentRow[] }).modelValue;
 }
 
-function mountEditor(rows: AttachmentRow[], types: string[] = ['Photo', 'User Manual']) {
+const attachmentTypes = [
+  { code: 'Photo', label: 'Foto' },
+  { code: 'User Manual', label: 'Manual de usuario' },
+];
+
+function mountEditor(rows: AttachmentRow[], types = attachmentTypes) {
   const holder: { wrapper?: VueWrapper } = {};
   const wrapper = mount(AttachmentEditor, {
     props: {
@@ -117,13 +122,13 @@ describe('AttachmentEditor', () => {
     const wrapper = mountEditor([row()]);
     const file = wrapper.findComponent({ name: 'QFile' });
 
-    expect(file.props('label')).toBe('Take a photo');
+    expect(file.props('label')).toBe('Hacer una foto');
     expect(file.props('accept')).toBe('image/*');
     expect(file.props('capture')).toBe('environment');
     expect(
       wrapper
         .findAllComponents({ name: 'QBtn' })
-        .some((b) => b.props('label') === 'Pick from gallery instead'),
+        .some((b) => b.props('label') === 'Elegir de la galería'),
     ).toBe(true);
   });
 
@@ -131,13 +136,13 @@ describe('AttachmentEditor', () => {
     const wrapper = mountEditor([row({ type: 'User Manual' })]);
     const file = wrapper.findComponent({ name: 'QFile' });
 
-    expect(file.props('label')).toBe('Select a file');
+    expect(file.props('label')).toBe('Elegir un archivo');
     expect(file.props('accept')).toBeUndefined();
     expect(file.props('capture')).toBeUndefined();
     expect(
       wrapper
         .findAllComponents({ name: 'QBtn' })
-        .some((b) => b.props('label') === 'Pick from gallery instead'),
+        .some((b) => b.props('label') === 'Elegir de la galería'),
     ).toBe(false);
   });
 
@@ -154,12 +159,12 @@ describe('AttachmentEditor', () => {
 
   it('says what an empty list means', () => {
     const wrapper = mountEditor([]);
-    expect(wrapper.text()).toContain('No attachments yet');
+    expect(wrapper.text()).toContain('Todavía no hay adjuntos');
   });
 
   it('asks for the row when the remove button is pressed, without removing it itself', async () => {
     const wrapper = mountEditor([row({ fileName: 'kick.png' })]);
-    const remove = wrapper.find('[aria-label="Remove attachment kick.png"]');
+    const remove = wrapper.find('[aria-label="Quitar el adjunto kick.png"]');
 
     await remove.trigger('click');
 
@@ -171,17 +176,19 @@ describe('AttachmentEditor', () => {
     const wrapper = mountEditor([row({ fileName: 'a.png' }), row({ fileName: 'b.png' })]);
     const add = wrapper
       .findAllComponents({ name: 'QBtn' })
-      .find((button) => button.props('label') === 'Add attachment')!;
+      .find((button) => button.props('label') === 'Añadir adjunto')!;
 
     await add.trigger('click');
 
     expect(wrapper.emitted('add')).toHaveLength(1);
-    expect(wrapper.text()).toContain('2 on this item');
+    expect(wrapper.text()).toContain('2 en este ítem');
   });
 
   it('opens the stored file in the preview dialog, not in a new tab', async () => {
     const saved = mountEditor([row({ id: 7, filePath: 'media/items/3/x.png', fileName: 'x.png' })]);
-    const open = saved.findAllComponents({ name: 'QBtn' }).find((b) => b.props('label') === 'Open');
+    const open = saved
+      .findAllComponents({ name: 'QBtn' })
+      .find((b) => b.props('label') === 'Abrir');
     expect(open).toBeTruthy();
     // A link would be opened by the browser without the bearer token: the route answers 401.
     expect(open!.props('href')).toBeUndefined();
@@ -194,9 +201,9 @@ describe('AttachmentEditor', () => {
     expect(dialog.props('fileName')).toBe('x.png');
 
     const draft = mountEditor([row({ id: 0, fileName: 'new.png' })]);
-    expect(draft.findAllComponents({ name: 'QBtn' }).some((b) => b.props('label') === 'Open')).toBe(
-      false,
-    );
+    expect(
+      draft.findAllComponents({ name: 'QBtn' }).some((b) => b.props('label') === 'Abrir'),
+    ).toBe(false);
   });
 
   it('reads a picked file into the row as a data URL', async () => {

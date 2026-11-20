@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import ItemEditor from './ItemEditor.vue';
 import type { Attributes } from '@services/items';
+import type { CatalogueEntry } from '@services/constants';
 
 // Quasar is stubbed down to the props this form reads: which control a field gets, what it is
 // labelled, whether it can be typed into, and what it offers. `AttributeEditor` stays real — the
@@ -121,13 +122,18 @@ function optionLabel(option: unknown): string {
 
 const stubs = { QInput, QSelect, QBtn, QIcon, QItem, QItemSection, QSpinner };
 
-const labels = ['Brand', 'Type', 'Notes'];
+/** The catalogue as Configuration sends it now: a code for the item, a label for the screen. */
+const entries: CatalogueEntry[] = [
+  { code: 'Brand', label: 'Marca' },
+  { code: 'Type', label: 'Tipo' },
+  { code: 'Notes', label: 'Notas' },
+];
 
 function rowsFixture(): Attributes[] {
   return [
-    { label: 'Brand', value: 'DW' },
-    { label: 'Type', value: 'Boom stand' },
-    { label: 'Notes', value: '' },
+    { code: 'Brand', value: 'DW' },
+    { code: 'Type', value: 'Boom stand' },
+    { code: 'Notes', value: '' },
   ];
 }
 
@@ -147,10 +153,10 @@ function mountEditor(overrides: MountOverrides = {}): VueWrapper {
       label: overrides.label ?? 'Base de brazo',
       parent: overrides.parent ?? null,
       attributes: rowsFixture(),
-      attributeLabels: labels,
+      attributeEntries: entries,
       mode: overrides.mode ?? 'tree',
       parentOptions: overrides.parentOptions ?? [
-        { label: 'No Parent', value: null },
+        { label: 'Sin padre', value: null },
         { label: 'BACKLINE', value: 7 },
       ],
       readonly: overrides.readonly ?? false,
@@ -162,7 +168,7 @@ function mountEditor(overrides: MountOverrides = {}): VueWrapper {
 }
 
 /** The name field, found by the label the form gave it. */
-function nameInput(wrapper: VueWrapper, label = 'Name') {
+function nameInput(wrapper: VueWrapper, label = 'Nombre') {
   const found = wrapper
     .findAllComponents({ name: 'QInput' })
     .find((candidate) => candidate.props('label') === label);
@@ -186,10 +192,10 @@ describe('ItemEditor', () => {
     expect(nameInput(wrapper).props('modelValue')).toBe('Base de brazo');
     expect(parentSelect(wrapper).props('modelValue')).toBe(null);
     // The blank-tree sentinel is spelled out, so an empty field is not mistaken for a missing one.
-    expect(parentSelect(wrapper).props('displayValue')).toBe('No parent');
+    expect(parentSelect(wrapper).props('displayValue')).toBe('Sin padre');
     // Every configured label has its row, in the order Configuration gave them.
     expect(wrapper.findAll('.attribute-row')).toHaveLength(3);
-    expect(wrapper.findAll('.attribute-row')[0]!.text()).toContain('Brand');
+    expect(wrapper.findAll('.attribute-row')[0]!.text()).toContain('Marca');
   });
 
   it('renders the actions the host puts in the details header', () => {
@@ -198,15 +204,15 @@ describe('ItemEditor', () => {
         label: 'Base',
         parent: null as string | number | null,
         attributes: rowsFixture(),
-        attributeLabels: labels,
+        attributeEntries: entries,
       },
-      slots: { 'details-actions': '<button class="host-action">Add child item</button>' },
+      slots: { 'details-actions': '<button class="host-action">Añadir ítem hijo</button>' },
       global: { stubs },
     });
 
-    // The inventory keeps its "Add child item" button there; the dialog puts nothing in it.
+    // The inventory keeps its "Añadir ítem hijo" button there; the dialog puts nothing in it.
     expect(wrapper.find('.host-action').exists()).toBe(true);
-    expect(wrapper.findAll('.imc-section')[0]!.text()).toContain('Add child item');
+    expect(wrapper.findAll('.imc-section')[0]!.text()).toContain('Añadir ítem hijo');
   });
 
   it('passes the choice lists and the types it is given to the attribute editor', () => {
@@ -215,8 +221,14 @@ describe('ItemEditor', () => {
         label: 'Base',
         parent: null as string | number | null,
         attributes: rowsFixture(),
-        attributeLabels: labels,
-        attributeLists: { Brand: ['DW', 'Pearl', 'Yamaha'] },
+        attributeEntries: entries,
+        attributeLists: {
+          Brand: [
+            { code: 'DW', label: 'DW' },
+            { code: 'Pearl', label: 'Pearl' },
+            { code: 'Yamaha', label: 'Yamaha' },
+          ],
+        },
         attributeTypes: { Notes: 'LongText' },
       },
       global: { stubs },
@@ -263,7 +275,7 @@ describe('ItemEditor', () => {
   });
 
   it('gives the name the validation rule of the screen that hosts it', () => {
-    const required = (value: string) => value.trim().length > 0 || 'Name is required';
+    const required = (value: string) => value.trim().length > 0 || 'El nombre es obligatorio';
     const wrapper = mountEditor({ labelRule: required });
 
     expect(nameInput(wrapper).props('rules')).toEqual([required]);
@@ -279,7 +291,7 @@ describe('ItemEditor', () => {
       parentSelect(wrapper)
         .findAll('.q-select-stub__option')
         .map((o) => o.text()),
-    ).toEqual(['No Parent', 'BACKLINE']);
+    ).toEqual(['Sin padre', 'BACKLINE']);
   });
 
   it('lets the group field name a new group, where the parent is a subcategory', () => {
@@ -302,7 +314,7 @@ describe('ItemEditor', () => {
   it('words the fields the way the host screen asks, and keeps the defaults untouched', () => {
     const wrapper = mountEditor({
       copy: {
-        details: 'El item',
+        details: 'El ítem',
         name: 'Descripción',
         parent: 'Subcategoría',
         parentEmpty: 'Sin grupo',
@@ -314,7 +326,7 @@ describe('ItemEditor', () => {
     expect(nameInput(wrapper, 'Descripción').exists()).toBe(true);
     expect(parentSelect(wrapper).props('label')).toBe('Subcategoría');
     // The sections keep their headings, so the dialog and the page read the same.
-    expect(wrapper.text()).toContain('El item');
-    expect(wrapper.text()).toContain('Attributes');
+    expect(wrapper.text()).toContain('El ítem');
+    expect(wrapper.text()).toContain('Atributos');
   });
 });

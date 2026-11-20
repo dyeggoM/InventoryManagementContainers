@@ -6,6 +6,49 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — feat/catalogue-codes
+
+**La aplicación habla español.** Toda la interfaz está en español: el inventario, el editor de ítem, los
+conjuntos, la configuración y las cinco pestañas del panel. Un glosario fijo —Ítem, Conjunto, Pieza, Atributo,
+Constante, Grupo— para que cada pantalla no invente su palabra, y `<html lang="es">` con las pocas cadenas que
+siguen en inglés marcadas como tales, para que un lector de pantalla no cambie de idioma a mitad de frase. Las
+fechas se leen en formato español (día primero, reloj de 24 h con dos dígitos) aunque el navegador esté en otro
+idioma: `20/11/2026, 02:05:27`.
+
+**La clave de un atributo dejó de ser su etiqueta.** `Items.Attributes` guardaba `{"Brand": "Bosch"}` y un
+`Type` guardaba `"Part"`: la etiqueta *era* el dato, así que traducirla habría sido migrar el JSON de cada ítem —
+y volver a migrarlo el día del inglés. Ahora `Constants` tiene **`Code`** (identidad, no se traduce) y
+**`Label`** (texto, se traduce): el ítem sigue guardando `Brand` y `Part`, y la pantalla dice «Marca» y «Pieza».
+El relleno es `Code := Label`, así que **no se tocó ni una fila de `Items`**.
+
+**El catálogo está traducido y sigue siendo el mismo dato.** Los ocho atributos, los seis tipos y las diez
+categorías de primer nivel tienen etiqueta en español y código intacto; las marcas y el vocabulario compartido
+(`FieldType`, `AttachmentType`) no se tocan. Renombrar una etiqueta desde Configuración cambia lo que se ve y no
+rompe ningún ítem: hay un test que lo prueba renombrando `Marca`.
+
+**Escribir un ítem ahora valida contra el catálogo.** Una clave de atributo que no es un código del grupo
+`Attribute` —o una de las cuatro claves que escribe el importador— y un valor de lista que no es un código de su
+grupo devuelven `400` con el código en el mensaje, antes de escribir nada. La API responde siempre códigos; traducir
+es cosa de la interfaz, que ya tiene el catálogo.
+
+**El import resuelve por etiqueta o por código.** Un fichero histórico que dice `CASES` sigue encontrando
+«Estuches», la cabecera de marca se acepta en cualquiera de las dos formas y se guarda siempre como código, y la
+subcategoría se liga a su categoría por `ParentId` en vez de por el texto del grupo, que era lo que se rompía al
+traducir. El preview sigue enseñando lo que dice el fichero.
+
+**El catálogo es la única puerta.** Una auditoría independiente encontró que la regla se cumplía en un camino y
+no en otro, y las dos se cerraron: el import y las correcciones del preview ya no escriben una marca que el
+catálogo no conoce —la fila sale roja con el motivo, como con la profundidad—, el validador guarda el **código**
+aunque el valor llegue por etiqueta y compara como el importador, y `PUT` de un ítem sin `attributes` conserva los
+que tenía en vez de borrarlos. `Activate` valida antes de restaurar.
+
+**Borrar una constante en uso ya no es una trampa.** Antes, quitar una marca que algún ítem usaba dejaba esos
+ítems sin poder editarse ni restaurarse, con el código y la etiqueta ocupados por la fila inactiva y sin ruta para
+reactivar: un callejón sin salida por un gesto de limpieza. Ahora responde `409` diciendo cuántos ítems y cuántos
+archivados la usan. Dos altas simultáneas con el mismo código y una etiqueta repetida devuelven `409`, no `500`.
+
+**Tests:** 323 API + 288 UI. `typecheck`, `lint:check` y `build` verdes; `modern-web-guidance legacy-scan` en cero.
+
 ## Pending — fix/web-a11y-platform
 
 **Fixed — dark mode now reaches the browser's own surfaces, not just the page.** The document declared no

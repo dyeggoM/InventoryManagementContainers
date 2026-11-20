@@ -78,7 +78,7 @@ describe('api transport', () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(0);
-    expect((error as ApiError).message).toContain('Cannot reach the API');
+    expect((error as ApiError).message).toContain('No se puede conectar con la API');
   });
 
   it('returns nothing for a 204', async () => {

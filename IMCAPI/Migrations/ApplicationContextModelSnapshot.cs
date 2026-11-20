@@ -155,6 +155,11 @@ namespace IMCAPI.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -209,6 +214,10 @@ namespace IMCAPI.Migrations
 
                     b.HasIndex("ParentId", "Label")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "Group", "Code")
+                        .IsUnique()
+                        .HasFilter("\"Code\" != ''");
 
                     b.HasIndex("TenantId", "Group", "Label")
                         .IsUnique();

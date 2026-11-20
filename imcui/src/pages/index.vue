@@ -14,18 +14,18 @@
           dense
           round
           icon="menu"
-          aria-label="Toggle navigation"
+          aria-label="Abrir o cerrar el menú"
           @click="toggleLeftDrawer"
         />
 
         <q-toolbar-title>IMC · {{ currentSection.label }}</q-toolbar-title>
 
-        <!-- One button, three choices: the icon says which mode is on, the menu changes it. Both
-             the button's name and the menu it opens are Spanish; the menu is teleported, so it
-             carries its own mark. -->
-        <q-btn flat round dense :icon="themeOption.icon" :aria-label="themeAriaLabel" lang="es">
+        <!-- One button, three choices: the icon says which mode is on, the menu changes it. The
+             menu is teleported outside this root, but the document itself is Spanish now, so
+             neither the button nor the list needs a mark of its own. -->
+        <q-btn flat round dense :icon="themeOption.icon" :aria-label="themeAriaLabel">
           <q-menu anchor="bottom right" self="top right" auto-close>
-            <q-list dense style="min-width: 200px" lang="es">
+            <q-list dense style="min-width: 200px">
               <q-item
                 v-for="option in themeOptions"
                 :key="option.mode"
@@ -48,9 +48,9 @@
           </q-menu>
         </q-btn>
 
-        <q-btn flat round dense icon="account_circle" aria-label="Cuenta y sesión" lang="es">
+        <q-btn flat round dense icon="account_circle" aria-label="Cuenta y sesión">
           <q-menu anchor="bottom right" self="top right" auto-close>
-            <q-list dense style="min-width: 240px" lang="es">
+            <q-list dense style="min-width: 240px">
               <q-item>
                 <q-item-section>
                   <q-item-label class="text-weight-medium ellipsis">
@@ -74,7 +74,8 @@
 
     <q-drawer v-model="leftDrawerOpen" bordered show-if-above :width="240" :breakpoint="1023">
       <q-list padding>
-        <q-item-label header>Inventory Management</q-item-label>
+        <!-- The product name is the one string in this app that stays in English. -->
+        <q-item-label header lang="en">Inventory Management</q-item-label>
         <q-item
           v-for="section in sections"
           :key="section.to"
@@ -143,13 +144,13 @@ const themeAriaLabel = computed(() => `Tema: ${themeOption.value.label}`);
  * same rule, so nobody is sent to a page that would bounce them straight back.
  */
 const sections = computed<Section[]>(() => {
-  const items: Section[] = [{ to: '/inventory', label: 'Inventory', icon: 'inventory_2' }];
-  if (auth.isAdmin) items.push({ to: '/configuration', label: 'Configuration', icon: 'tune' });
-  if (auth.isSuperadmin) items.push({ to: '/dashboard', label: 'Dashboard', icon: 'dashboard' });
+  const items: Section[] = [{ to: '/inventory', label: 'Inventario', icon: 'inventory_2' }];
+  if (auth.isAdmin) items.push({ to: '/configuration', label: 'Configuración', icon: 'tune' });
+  if (auth.isSuperadmin) items.push({ to: '/dashboard', label: 'Panel', icon: 'dashboard' });
   return items;
 });
 
-const fallback: Section = { to: '/inventory', label: 'Inventory', icon: 'inventory_2' };
+const fallback: Section = { to: '/inventory', label: 'Inventario', icon: 'inventory_2' };
 
 const rolesText = computed(() => {
   if (auth.roles.length === 0) return 'Sin roles';

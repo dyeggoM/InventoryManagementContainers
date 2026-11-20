@@ -1,6 +1,7 @@
 <template>
-  <!-- The page is Spanish; the product name in the header is not, and it says so below. -->
-  <q-layout view="lHh Lpr lFf" lang="es">
+  <!-- The page is Spanish and the document says so; the product name in the header is not, and it
+       says so itself. -->
+  <q-layout view="lHh Lpr lFf">
     <q-page-container>
       <q-page class="flex flex-center login-page">
         <q-card class="login-card q-pa-lg" flat bordered>

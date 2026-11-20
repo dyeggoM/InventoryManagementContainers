@@ -162,7 +162,12 @@ async function send(
     });
   } catch {
     // fetch only rejects on network/CORS failures, which are otherwise invisible in the UI.
-    throw new ApiError(0, 'Network error', undefined, `Cannot reach the API at ${API_BASE_URL}`);
+    throw new ApiError(
+      0,
+      'Sin conexión',
+      undefined,
+      `No se puede conectar con la API en ${API_BASE_URL}`,
+    );
   }
 }
 

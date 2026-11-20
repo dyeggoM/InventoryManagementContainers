@@ -99,7 +99,10 @@ export default defineConfig((ctx) => {
       config: {},
 
       // iconSet: 'material-icons', // Quasar icon set
-      // lang: 'en-US', // Quasar language pack
+      // The app is written in Spanish. Quasar's language pack is also what writes
+      // `<html lang>` at startup, so leaving it at the default (en-US) overrode index.html's
+      // declaration and left the whole document in English for a screen reader.
+      lang: 'es',
 
       // For special cases outside of where the auto-import strategy can have an impact
       // (like functional components as one of the examples),

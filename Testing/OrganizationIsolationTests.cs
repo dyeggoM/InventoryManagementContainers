@@ -93,7 +93,7 @@ public sealed class OrganizationIsolationTests : ApiTestBase
         scope.ServiceProvider.GetRequiredService<TenantScope>().SelectSystemTenant(900001);
         var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
         db.Attachments.Add(new Attachment { ItemId = withFile, FileName = "foreign.txt", Type = "Photo", FilePath = "missing.txt", TenantId = 900001 });
-        db.Constants.Add(new Constants { Group = "Brand", Label = "PERSONA ONLY", TenantId = 900001 });
+        db.Constants.Add(new Constants { Group = "Brand", Label = "PERSONA ONLY", Code = "PERSONA ONLY", TenantId = 900001 });
         await db.SaveChangesAsync();
         var attachmentId = await db.Attachments.IgnoreQueryFilters().Where(row => row.FileName == "foreign.txt").Select(row => row.Id).SingleAsync();
         await Switch(Client, 900002);

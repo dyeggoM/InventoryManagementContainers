@@ -79,7 +79,7 @@ public sealed class OrganizationAuditTests : ApiTestBase
         {
             scope.ServiceProvider.GetRequiredService<TenantScope>().SelectSystemTenant(LiveRoom);
             var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-            var constant = new Constants { Group = "Brand", Label = "FOREIGN PUT CONSTANT" };
+            var constant = new Constants { Group = "Brand", Label = "FOREIGN PUT CONSTANT", Code = "FOREIGN PUT CONSTANT" };
             var item = new Item { Label = "FOREIGN PUT ITEM" };
             db.Constants.Add(constant);
             db.Items.Add(item);
@@ -247,7 +247,7 @@ public sealed class OrganizationAuditTests : ApiTestBase
         {
             scope.ServiceProvider.GetRequiredService<TenantScope>().SelectSystemTenant(LiveRoom);
             var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-            var row = new Constants { Group = "Brand", Label = "FOREIGN ORACLE" };
+            var row = new Constants { Group = "Brand", Label = "FOREIGN ORACLE", Code = "FOREIGN ORACLE" };
             db.Constants.Add(row);
             await db.SaveChangesAsync();
             foreignId = row.Id;

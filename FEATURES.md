@@ -53,6 +53,26 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   back at level thirteen.
 - Empty states everywhere: no records yet, nothing matches, and “Select an item to edit it”.
 
+## Language and the catalogue
+
+The interface is Spanish, and the catalogue separates what identifies a record from what a person reads.
+
+- **Spanish is the language of the app.** Every screen, every button and every message the app writes itself.
+  The few strings that stay in English (the product name, API routes) say so, so a screen reader does not switch
+  language mid-sentence. Dates and times are Spanish regardless of the browser's locale.
+- **An attribute has a code and a label.** The code is identity and never changes — `Brand`, `Type`, `Part` — and
+  it is what the database stores inside an item. The label is the word on screen — «Marca», «Tipo», «Pieza» — and
+  it is the only part that gets translated. Renaming a label in Configuration changes the interface and leaves
+  every stored item untouched.
+- **The catalogue is the vocabulary.** Writing an item validates its attribute keys and list values against it:
+  a code that does not exist is refused with `400` before anything is written, so a typo cannot become a new
+  attribute. Hand-written attributes are the one deliberate exception.
+- **The import understands both.** A spreadsheet header or a subcategory is matched by label or by code and stored
+  as a code, so an old file that says `CASES` still lands in «Estuches».
+- Implemented in `IMCAPI/DB/CatalogCodesSql.cs`, `IMCAPI/Controllers/ConstantsController.cs`,
+  `IMCAPI/Controllers/ItemController.cs`, `IMCAPI/Services/SubcategoryPlacement.cs` and
+  `imcui/src/services/attributes.ts`.
+
 ## Accessibility and the platform
 
 What the app guarantees whoever uses it, beyond how it looks.

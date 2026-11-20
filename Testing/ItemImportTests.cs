@@ -22,12 +22,12 @@ public sealed class ItemImportTests : ApiTestBase
         {
             Assert.That(summary.GetProperty("green").GetInt32(), Is.EqualTo(1),
                 "only the row whose subcategory the configuration spells the same way");
-            Assert.That(summary.GetProperty("yellow").GetInt32(), Is.EqualTo(5),
-                "the ambiguous BASE rows, the unknown brand, the row with no code, the case with no category "
+            Assert.That(summary.GetProperty("yellow").GetInt32(), Is.EqualTo(4),
+                "the ambiguous BASE rows, the row with no code, the case with no category "
                 + "and the description too short to identify anything");
-            Assert.That(summary.GetProperty("red").GetInt32(), Is.EqualTo(3),
-                "no description, and both rows sharing one code");
-            Assert.That(summary.GetProperty("importable").GetInt32(), Is.EqualTo(6));
+            Assert.That(summary.GetProperty("red").GetInt32(), Is.EqualTo(4),
+                "no description, both rows sharing one code, and the brand the catalogue does not know");
+            Assert.That(summary.GetProperty("importable").GetInt32(), Is.EqualTo(5));
         });
     }
 
@@ -39,7 +39,7 @@ public sealed class ItemImportTests : ApiTestBase
 
         Assert.That(items.Single(item => Label(item) == "BASE DE BRAZO DW 5000").GetProperty("reasons")
             .EnumerateArray().Select(reason => reason.GetString()).Any(text => text!.Contains("catálogo de Brand")), Is.True,
-            "a brand outside the catalogue is yellow, and says which brand");
+            "a brand outside the catalogue is refused, and says which brand");
 
         Assert.That(items.Single(item => Label(item) == "BASE SIN CODIGO").GetProperty("reasons")
             .EnumerateArray().Select(reason => reason.GetString()).Any(text => text!.Contains("Sin código")), Is.True,

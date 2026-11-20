@@ -15,8 +15,8 @@ export interface TreeEntry {
   attachmentCount?: number | undefined;
   /** The attribute rows as stored, so a search can look inside them. */
   attributes?: string | null | undefined;
-  /** Set while searching: the pair that matched, shown under the label. */
-  match?: { label: string; value: string } | null;
+  /** Set while searching: the attribute code that matched and its value, shown under the label. */
+  match?: { code: string; value: string } | null;
   /** Set while searching: this row matched on its own, so it counts as a result. */
   hit?: boolean;
 }
@@ -43,7 +43,6 @@ export interface TreeEditorOptions<T extends TreeEntry> {
   /** An editable entry with the sentinel id, used to clear the form. */
   blank: () => T;
   flatten: (nodes: T[]) => FlatEntry[];
-  entity: string;
   emptyMessage: string;
   deleteHint: string;
   splitter?: number;
@@ -139,7 +138,7 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
       tree.value = response?.tree ?? [];
       panels.value = [...(response?.panels ?? []), options.addNew()];
     } catch (error) {
-      feedback.error(error, `Could not load the ${options.entity}s`);
+      feedback.error(error, 'No se pudieron cargar los datos');
     } finally {
       loading.value = false;
       expanded.value = collectExpandable(tree.value);
@@ -211,19 +210,19 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
       let savedId = id;
       if (id > 0) {
         await options.service.update(id, treeItem.value);
-        feedback.success(`${cap(options.entity)} updated`);
+        feedback.success('Registro actualizado');
       } else {
         const created = (await options.service.create(treeItem.value)) as
           { id?: number } | undefined;
         savedId = typeof created?.id === 'number' ? created.id : 0;
-        feedback.success(`${cap(options.entity)} created`);
+        feedback.success('Registro creado');
       }
       await options.afterSave?.(savedId);
       resetTreeItem();
       await loadData();
       return true;
     } catch (error) {
-      feedback.error(error, `Could not save the ${options.entity}`);
+      feedback.error(error, 'No se pudieron guardar los cambios');
       return false;
     } finally {
       saving.value = false;
@@ -242,16 +241,16 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     const id = treeItem.value.id;
     if (id <= 0) return;
     const confirmed = await feedback.confirmDelete(
-      `Delete "${treeItem.value.label || id}"? ${options.deleteHint}`,
+      `¿Eliminar «${treeItem.value.label || id}»? ${options.deleteHint}`,
     );
     if (!confirmed) return;
     try {
       await options.service.delete(id);
-      feedback.success(`${cap(options.entity)} deleted`);
+      feedback.success('Registro eliminado');
       resetTreeItem();
       await loadData();
     } catch (error) {
-      feedback.error(error, `Could not delete the ${options.entity}`);
+      feedback.error(error, 'No se pudo eliminar el registro');
     }
   }
 
@@ -267,13 +266,14 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
       .map((entry) => ({
         // The sentinel node means "no parent"; the select emits it as null.
         value: entry.id === 0 ? null : entry.id,
-        label: entry.id === 0 ? 'No Parent' : entry.hierarchicalLabel,
+        label: entry.id === 0 ? 'Sin padre' : entry.hierarchicalLabel,
         displayLabel: `${'  '.repeat(entry.depth)}${entry.label}`,
         depth: entry.depth,
       }));
   }
 
-  const labelRule = (value: string) => (value && value.trim().length > 0) || 'Label is required';
+  const labelRule = (value: string) =>
+    (value && value.trim().length > 0) || 'El nombre es obligatorio';
 
   return {
     tree,
@@ -301,8 +301,4 @@ export function useTreeEditor<T extends TreeEntry>(options: TreeEditorOptions<T>
     deleteTreeItem,
     parentOptions,
   };
-}
-
-function cap(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
