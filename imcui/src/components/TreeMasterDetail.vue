@@ -20,6 +20,7 @@
               outlined
               clearable
               placeholder="Search"
+              :aria-label="`Search ${entityLabel.toLowerCase()}s`"
               class="col"
             >
               <template v-slot:prepend>
@@ -184,7 +185,14 @@
     <!-- Phones: the list is the page, the form opens as a full-height sheet. -->
     <div v-else class="q-pa-md tree-pane">
       <div v-if="tree.length > 0" class="q-mb-md">
-        <q-input v-model="query" dense outlined clearable placeholder="Search">
+        <q-input
+          v-model="query"
+          dense
+          outlined
+          clearable
+          placeholder="Search"
+          :aria-label="`Search ${entityLabel.toLowerCase()}s`"
+        >
           <template v-slot:prepend>
             <q-icon name="search" />
           </template>

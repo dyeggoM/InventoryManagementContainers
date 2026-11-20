@@ -14,6 +14,7 @@ const QInput = defineComponent({
     type: { type: String, default: 'text' },
     inputmode: { type: String, default: undefined },
     placeholder: { type: String, default: '' },
+    ariaLabel: { type: String, default: undefined },
     autogrow: { type: Boolean, default: false },
     inputClass: { type: String, default: '' },
     maxlength: { type: [String, Number], default: undefined },
@@ -32,6 +33,7 @@ const QSelect = defineComponent({
     options: { type: Array as PropType<unknown[]>, default: () => [] },
     displayValue: { type: String, default: '' },
     placeholder: { type: String, default: '' },
+    ariaLabel: { type: String, default: undefined },
     useInput: { type: Boolean, default: false },
     hideSelected: { type: Boolean, default: false },
     fillInput: { type: Boolean, default: true },
@@ -230,8 +232,30 @@ describe('AttributeEditor', () => {
     const wrapper = mountEditor(rowsFixture([{ label: 'Serial', value: 'SN-0042' }]));
     const custom = wrapper.findAll('.attribute-row').at(-1)!;
 
-    expect(custom.findComponent({ name: 'QInput' }).props('placeholder')).toBe('Attribute name');
+    expect(custom.findComponent({ name: 'QInput' }).props('ariaLabel')).toBe('Attribute name');
     expect(custom.classes()).toContain('attribute-row');
+  });
+
+  it('names each value field after its attribute, so the row is not just "text box"', () => {
+    const wrapper = mountEditor(rowsFixture([{ label: 'Serial', value: '' }]));
+    const rows = wrapper.findAll('.attribute-row');
+
+    // Brand comes from the catalogue; Serial was typed by hand and is named the same way.
+    expect(valueInput(wrapper, 0).props('ariaLabel')).toBe('Brand');
+    expect(valueInput(wrapper, rows.length - 1).props('ariaLabel')).toBe('Serial');
+  });
+
+  it('names a value field whose custom key is still empty', () => {
+    const wrapper = mountEditor(rowsFixture([{ label: '', value: '' }]));
+    const rows = wrapper.findAll('.attribute-row');
+
+    expect(valueInput(wrapper, rows.length - 1).props('ariaLabel')).toBe('Value');
+  });
+
+  it('hides the visual header from assistive technology', () => {
+    const wrapper = mountEditor(rowsFixture());
+
+    expect(wrapper.find('.attribute-head').attributes('aria-hidden')).toBe('true');
   });
 
   it('adds a custom row with an empty key when asked', async () => {
@@ -251,7 +275,7 @@ describe('AttributeEditor', () => {
 
     const filter = wrapper
       .findAllComponents({ name: 'QInput' })
-      .find((input) => input.props('placeholder') === 'Filter attributes')!;
+      .find((input) => input.props('ariaLabel') === 'Filter attributes')!;
     expect(filter).toBeTruthy();
 
     await filter.vm.$emit('update:modelValue', 'price');

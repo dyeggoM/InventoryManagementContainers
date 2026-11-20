@@ -1,5 +1,8 @@
 <template>
-  <div class="import-panel">
+  <!-- Every visible string in this panel is Spanish, so the whole panel declares it once instead
+       of each label carrying its own: a reader with `lang="en"` from the document would pronounce
+       all of it with English phonetics. -->
+  <div class="import-panel" lang="es">
     <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-subtitle1 text-weight-medium">Importar desde Excel</div>
       <q-space />
@@ -374,21 +377,39 @@
         <q-card-section class="editor-head row items-center no-wrap q-gutter-x-sm q-py-sm">
           <q-icon name="edit_note" size="22px" class="text-grey-7" />
           <div class="editor-heading column">
-            <span class="text-subtitle1 text-weight-medium">Corregir la fila {{ editor.row }}</span>
-            <span class="text-caption text-grey-7">
+            <span class="text-subtitle1 text-weight-medium" lang="es">
+              Corregir la fila {{ editor.row }}
+            </span>
+            <span class="text-caption text-grey-7" lang="es">
               <span v-if="editor.source">{{ editor.source }} ·</span>
               se importará en {{ editor.category }} › {{ editor.group }}
             </span>
           </div>
           <q-space />
-          <q-btn flat dense round icon="close" aria-label="Cerrar el editor" @click="closeEditor" />
+          <q-btn
+            flat
+            dense
+            round
+            icon="close"
+            aria-label="Cerrar el editor"
+            lang="es"
+            @click="closeEditor"
+          />
         </q-card-section>
 
         <div class="editor-divider" />
 
         <q-card-section class="editor-body">
-          <div class="editor-label text-caption text-grey-7">El archivo dice</div>
-          <div class="file-sheet-scroll">
+          <div class="editor-label text-caption text-grey-7" lang="es">El archivo dice</div>
+          <!-- A 390px phone cannot show every column: the row scrolls sideways, and a scroll
+               container that is not focusable cannot be scrolled without a mouse. -->
+          <div
+            class="file-sheet-scroll"
+            tabindex="0"
+            role="region"
+            aria-label="La fila tal como está en el archivo"
+            lang="es"
+          >
             <table class="file-sheet">
               <thead>
                 <tr>
@@ -407,7 +428,7 @@
             </table>
           </div>
 
-          <div class="editor-label text-caption text-grey-7 q-mt-md">
+          <div class="editor-label text-caption text-grey-7 q-mt-md" lang="es">
             Lo que se importará · editable
           </div>
           <!-- The same form the inventory uses to create an item: an imported record must be
@@ -434,7 +455,7 @@
 
         <div class="editor-divider" />
 
-        <q-card-section class="editor-actions row items-center q-gutter-x-sm q-py-sm">
+        <q-card-section class="editor-actions row items-center q-gutter-x-sm q-py-sm" lang="es">
           <q-btn
             v-if="editor.corrected"
             flat
@@ -879,7 +900,7 @@ function fileHeadersOf(item: ImportItem): string[] {
 
 /** The corrections, in a stable order, so two identical payloads look identical. */
 function sortedCorrections(list: ImportCorrection[]): ImportCorrection[] {
-  return [...list].sort(
+  return list.toSorted(
     (left, right) => (left.source ?? '').localeCompare(right.source ?? '') || left.row - right.row,
   );
 }

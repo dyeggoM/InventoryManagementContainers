@@ -20,10 +20,12 @@
 
         <q-toolbar-title>IMC · {{ currentSection.label }}</q-toolbar-title>
 
-        <!-- One button, three choices: the icon says which mode is on, the menu changes it. -->
-        <q-btn flat round dense :icon="themeOption.icon" :aria-label="themeAriaLabel">
+        <!-- One button, three choices: the icon says which mode is on, the menu changes it. Both
+             the button's name and the menu it opens are Spanish; the menu is teleported, so it
+             carries its own mark. -->
+        <q-btn flat round dense :icon="themeOption.icon" :aria-label="themeAriaLabel" lang="es">
           <q-menu anchor="bottom right" self="top right" auto-close>
-            <q-list dense style="min-width: 200px">
+            <q-list dense style="min-width: 200px" lang="es">
               <q-item
                 v-for="option in themeOptions"
                 :key="option.mode"
@@ -46,9 +48,9 @@
           </q-menu>
         </q-btn>
 
-        <q-btn flat round dense icon="account_circle" aria-label="Cuenta y sesión">
+        <q-btn flat round dense icon="account_circle" aria-label="Cuenta y sesión" lang="es">
           <q-menu anchor="bottom right" self="top right" auto-close>
-            <q-list dense style="min-width: 240px">
+            <q-list dense style="min-width: 240px" lang="es">
               <q-item>
                 <q-item-section>
                   <q-item-label class="text-weight-medium ellipsis">

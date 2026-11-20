@@ -5,7 +5,10 @@
     transition-show="fade"
     transition-hide="fade"
   >
-    <q-card class="preview-card column no-wrap">
+    <!-- The card is what the dialog shows, and it is the element that reaches the DOM inside the
+         portal: the dialog itself is a teleport, so `lang` goes here. Every string in it is Spanish
+         («Descargar», «Cerrar», «Cargando el archivo…»), the title excepted, which is a file name. -->
+    <q-card class="preview-card column no-wrap" lang="es">
       <q-toolbar class="preview-header q-px-md">
         <q-toolbar-title class="column">
           <span class="text-subtitle1 text-weight-medium ellipsis">{{ title }}</span>
@@ -26,7 +29,16 @@
 
       <q-separator />
 
-      <q-card-section class="col column no-wrap preview-body">
+      <!-- Nothing inside is focusable — an image is not — so the box takes the focus itself: a
+           viewer that cannot be reached with the keyboard is a dead end, and a zoomed view will
+           need the arrow keys. Measured with the fitted image: scrollHeight == clientHeight, so
+           today this is a reachable box, not yet a scroll. -->
+      <q-card-section
+        class="col column no-wrap preview-body"
+        tabindex="0"
+        role="region"
+        aria-label="Vista previa del archivo"
+      >
         <div v-if="loading" class="preview-state column flex-center">
           <q-spinner color="primary" size="2.5em" aria-label="Cargando" />
           <div class="text-caption text-grey-7 q-mt-sm">Cargando el archivo…</div>

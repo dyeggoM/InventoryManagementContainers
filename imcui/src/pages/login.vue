@@ -1,5 +1,6 @@
 <template>
-  <q-layout view="lHh Lpr lFf">
+  <!-- The page is Spanish; the product name in the header is not, and it says so below. -->
+  <q-layout view="lHh Lpr lFf" lang="es">
     <q-page-container>
       <q-page class="flex flex-center login-page">
         <q-card class="login-card q-pa-lg" flat bordered>
@@ -7,7 +8,7 @@
             <q-icon name="inventory_2" size="32px" color="primary" />
             <div class="column">
               <div class="text-h6">IMC</div>
-              <div class="text-caption text-grey-7">Inventory Management</div>
+              <div class="text-caption text-grey-7" lang="en">Inventory Management</div>
             </div>
           </div>
 

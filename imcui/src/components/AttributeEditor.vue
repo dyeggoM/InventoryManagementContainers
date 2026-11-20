@@ -1,6 +1,8 @@
 <template>
   <div class="attribute-editor">
-    <div v-if="rows.length" class="attribute-head">
+    <!-- Alignment only: each control below names itself, so announcing "Attribute / Value" above
+         them would say it twice. -->
+    <div v-if="rows.length" class="attribute-head" aria-hidden="true">
       <span>Attribute</span>
       <span>Value</span>
       <span aria-hidden="true"></span>
@@ -46,6 +48,7 @@
         dense
         borderless
         placeholder="Filter attributes"
+        aria-label="Filter attributes"
         class="col"
         input-class="text-caption"
         clearable
@@ -78,6 +81,7 @@
           :readonly="readonly"
           class="attribute-name attribute-name--custom"
           placeholder="Attribute name"
+          aria-label="Attribute name"
           :model-value="row.label"
           :maxlength="40"
           @update:model-value="(value: string | number | null) => setCustomLabel(index, value)"
@@ -95,6 +99,7 @@
           :readonly="readonly"
           class="attribute-name"
           placeholder="Pick an attribute"
+          aria-label="Attribute name"
           :model-value="row.label"
           :options="labelOptions(index)"
           :display-value="prettyLabel(row.label)"
@@ -122,6 +127,7 @@
           :loading="creatingIndex === index"
           :ref="(element: unknown) => bindValueSelect(index, element)"
           placeholder="—"
+          :aria-label="valueName(row)"
           v-model="row.value"
           :options="valueOptions(index)"
           @filter="
@@ -177,6 +183,7 @@
           borderless
           :readonly="readonly"
           :placeholder="isDate(row) ? '' : '—'"
+          :aria-label="valueName(row)"
           :model-value="display(row, index)"
           :type="inputType(row)"
           :inputmode="isNumeric(row) ? 'decimal' : undefined"
@@ -279,6 +286,14 @@ const availableLabels = computed(() =>
 /** A row the catalogue cannot name: typed by hand, stored on this item only. */
 function isCustom(row: Attributes): boolean {
   return !props.labels.includes(row.label);
+}
+
+/**
+ * What a value field is called. "—" is a placeholder, not a name: without this the reader says
+ * "text box" and the user has to remember which attribute the row belongs to.
+ */
+function valueName(row: Attributes): string {
+  return prettyLabel(row.label) || 'Value';
 }
 
 function labelOptions(index: number): { label: string; value: string; disable?: boolean }[] {

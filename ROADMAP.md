@@ -2,7 +2,28 @@
 
 What is deliberately not built yet, in the order it is worth doing.
 
-### Conjuntos y sus piezas (`feat/item-sets`) — `in progress`
+### Accesibilidad y plataforma (`fix/web-a11y-platform`) — `in progress`
+
+- [x] **`color-scheme` en la raíz y en el `<head>`** — `done`, medido sobre los píxeles de la barra de scroll.
+- [x] **`lang` en el documento y en las pantallas que hablan español** — `done`; sin traducir nada.
+- [x] **Contenido ancho alcanzable con teclado** — `done`: preview del Excel, JSON de auditoría y preview de
+  ficheros.
+- [x] **Cada control con nombre accesible** — `done`; ya no queda un `placeholder` usado como única etiqueta.
+- [x] **`toSorted()` en las cuatro ordenaciones** — `done`; `legacy-scan` de `modern-web-guidance` en cero.
+- [ ] **Un solo idioma en la interfaz** — `todo`, `Next`, decisión de producto pendiente. Medido: *7 componentes y
+  2 páginas en español* (~100-110 cadenas) frente a *4 componentes y 4 páginas en inglés* (~85), y
+  `pages/index.vue` y `login.vue` mezclan ambos en la misma pantalla. Hoy cada superficie declara el suyo para
+  que un lector de pantalla no cambie de idioma a mitad de frase; unificar es traducir un lado u otro.
+- [ ] **`lang` en los mensajes de error** — `todo`, `Later`. `feedback.error(...)` los pinta Quasar Notify fuera del
+  árbol, así que no heredan `lang`. La solución barata (`html: true` + `<span lang="es">`) convertiría en marcado
+  el texto que viene de datos —etiquetas de ítem, nombres de fichero—: **no se hace**. La buena es un componente
+  propio dentro del árbol; queda anotado con esa razón.
+- [ ] **Paneles con scroll sin `tabindex`** — `todo`, `Later`, y a propósito. `.imc-pane`, `.editor-body`,
+  `.picker-list` y `.dialog-body` no lo llevan porque el foco entra por los campos de dentro y una parada de
+  tabulador por panel no lleva a ninguna parte; si alguno cambia y puede desbordar sin contenido enfocable, se
+  revisa entonces.
+
+### Conjuntos y sus piezas (`feat/item-sets`) — `done`
 
 - [x] **`Type` con `Set` y `Accessory`** — `done`. Vocabulario en `Constants`; `Part` ≠ `Accessory`.
 - [x] **Adjuntar piezas en bloque** — `done`. `POST`/`DELETE /api/item/{id}/children`, atómico, con guarda

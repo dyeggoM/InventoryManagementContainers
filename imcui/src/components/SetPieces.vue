@@ -62,7 +62,15 @@
         </q-toolbar>
 
         <q-card-section class="q-pt-md q-pb-sm">
-          <q-input v-model="query" dense outlined clearable placeholder="Search" autofocus>
+          <q-input
+            v-model="query"
+            dense
+            outlined
+            clearable
+            placeholder="Search"
+            aria-label="Search pieces"
+            autofocus
+          >
             <template v-slot:prepend>
               <q-icon name="search" />
             </template>

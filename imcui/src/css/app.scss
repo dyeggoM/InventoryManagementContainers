@@ -6,6 +6,19 @@
 // in a component lives here once, and the dark half below is what keeps a card, a border or a
 // caption from surviving into dark mode as a light artefact. Values Quasar already owns are read
 // from its custom properties (`--q-dark`) instead of being copied.
+// The window's own rendering context (scrollbars, browser controls, the canvas) is decided by the
+// root element, not by `body`: Quasar flips `body--dark` and the page repaints, but the scrollbar
+// and the browser's widgets stay light unless `color-scheme` says otherwise. The selector follows
+// the mode that is actually painted, so `auto` is covered too (Quasar decides from the OS and puts
+// the class on `body` either way).
+:root {
+  color-scheme: light;
+}
+
+html:has(body.body--dark) {
+  color-scheme: dark;
+}
+
 :root {
   --imc-surface: #fff; // a sheet our own blocks sit on (dialog footer)
   --imc-surface-raised: #fafbfc; // a block tinted one step above that sheet (parent tree rows)
