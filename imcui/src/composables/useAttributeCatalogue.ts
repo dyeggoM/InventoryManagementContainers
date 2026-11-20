@@ -38,8 +38,7 @@ export function useAttributeCatalogue(
 
     nodes.value = attributeRows ?? [];
     labels.value = (attributeRows ?? [])
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .toSorted((a, b) => a.sortOrder - b.sortOrder)
       .map((row) => row.label);
 
     // How each attribute is edited comes from its definition in Configuration.

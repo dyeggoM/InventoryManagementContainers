@@ -53,6 +53,22 @@ app; the history of how it got here is in [CHANGELOG.md](CHANGELOG.md), what is 
   back at level thirteen.
 - Empty states everywhere: no records yet, nothing matches, and “Select an item to edit it”.
 
+## Accessibility and the platform
+
+What the app guarantees whoever uses it, beyond how it looks.
+
+- **The theme reaches the browser's own UI.** Dark mode is declared to the browser (`color-scheme`), so native
+  scrollbars, controls and the initial canvas follow the theme instead of staying light behind a dark page, and
+  the first paint no longer flashes white. It follows the mode actually painted, including `auto`.
+- **Each screen declares its language.** The shell is English; the panels that speak Spanish carry `lang="es"`,
+  and English text inside them says so. A screen reader switches pronunciation where the text switches.
+- **Wide content is reachable without a pointer.** The spreadsheet preview, the audit JSON viewer and the file
+  preview can be focused and scrolled from the keyboard; the spreadsheet keeps real `<table>` semantics.
+- **Every control has a name.** Attribute values are announced with their attribute («Brand»), attachment types
+  with what they select, search boxes with what they search. No field relies on a placeholder as its label.
+- Implemented across `imcui/index.html`, `imcui/src/css/app.scss` and the `aria-label`/`lang` attributes in
+  `imcui/src/components/**`; audited with `modern-web-guidance` (`legacy-scan` reports zero findings on `imcui`).
+
 ## Sets and their pieces
 
 A drum kit is not six unrelated drums: it is one set with six pieces, and the inventory says so.

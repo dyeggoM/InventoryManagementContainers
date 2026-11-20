@@ -1,6 +1,12 @@
 <template>
   <!-- Permanent: it stays while the impersonation lasts, on every page, whatever is scrolled. -->
-  <div v-if="auth.isImpersonating" class="impersonation-banner" role="status" aria-live="polite">
+  <div
+    v-if="auth.isImpersonating"
+    class="impersonation-banner"
+    role="status"
+    aria-live="polite"
+    lang="es"
+  >
     <q-icon name="switch_account" size="20px" />
     <span class="impersonation-banner__text">{{ auth.impersonationNotice }}</span>
     <q-btn

@@ -21,6 +21,7 @@
               options-dense
               :readonly="readonly"
               class="attachment-type"
+              aria-label="Attachment type"
               v-model="row.type"
               :options="types"
               :rules="[(value: string) => !!value || 'Pick a type']"

@@ -102,7 +102,7 @@ export const itemsService = {
     const result: FlattenedItem[] = [];
 
     // Sort by sortOrder if needed
-    const sortedItems = [...items].sort((a, b) => a.label.localeCompare(b.label));
+    const sortedItems = items.toSorted((a, b) => a.label.localeCompare(b.label));
 
     for (const constant of sortedItems) {
       const hierarchicalLabel = parentPath ? `${parentPath}/${constant.label}` : constant.label;

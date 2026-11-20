@@ -6,6 +6,45 @@ Every pull request, what it changed, and the commits that carried it. New entrie
 The feature list these add up to is in [FEATURES.md](FEATURES.md); what is still planned is in
 [ROADMAP.md](ROADMAP.md).
 
+## Pending — fix/web-a11y-platform
+
+**Fixed — dark mode now reaches the browser's own surfaces, not just the page.** The document declared no
+`color-scheme`, so in dark mode the native scrollbars, the browser controls and the canvas stayed light, and
+the first paint flashed white before the theme was applied. `index.html` now declares
+`<meta name="color-scheme" content="light dark">`, and `:root` carries `color-scheme`, switched by
+`html:has(body.body--dark)` so it follows the mode that is actually painted — including `auto`, where the
+operating system decides. Measured: with the system set to light and the app forced to dark, the computed
+`color-scheme` is `dark` and the scrollbar track samples `#2c2c2c` instead of `#fcfcfc`.
+
+**Fixed — the document says what language it is in.** `<html>` had no `lang`, so a screen reader pronounced
+the interface with the default language's phonetics. The shell is English; every surface that speaks Spanish —
+the import, audit, archive, users and impersonation panels, the file viewer, the impersonation banner, the login
+screen and the account menu — now carries `lang="es"` on the element that holds the text, and English strings
+sitting inside those surfaces declare `lang="en"` in turn. No wording changed: the app still speaks two
+languages, and choosing one is a product decision left for its own round.
+
+**Fixed — wide content can be reached without a pointer.** The spreadsheet preview keeps its real `<table>`, but
+its scroll wrapper now carries `tabindex="0"`, `role="region"` and a name: at 390 px it used to overflow with no
+way to scroll it from the keyboard. Measured: `scrollLeft` moves 0 → 720 with the arrow keys. The same treatment
+went to the audit JSON viewer (a long document in two `<pre>`) and the attachment preview, which had no
+focusable child at all when showing an image.
+
+**Fixed — every control in the item editor has a name.** The attribute editor is a form laid out like a table:
+the value field of each row is now announced with its attribute («Brand», «Notes»), the name field and the
+filter carry their own labels, and the visual header row is `aria-hidden` instead of pretending to be a header
+cell. The attachment type selector, which had no label at all, now says what it selects. No placeholder is a
+field's only name anywhere in `imcui/src` any more.
+
+**Changed — four sorts stopped copying the array to sort it.** `[...list].sort()` became `toSorted()` where the
+project already compiles for it (`lib: esnext`, Node ≥22), so the original list is no longer cloned for
+nothing and the intent is explicit.
+
+**Removed — `EssentialLink.vue`.** The leftover template component was referenced by nothing and deleted after
+grepping every import and route.
+
+**Tests:** 277 UI tests; `typecheck`, `lint:check` and `build` green; `modern-web-guidance legacy-scan` on
+`imcui` reports zero findings.
+
 ## Pending — feat/item-sets
 
 **Added — a set is an item with pieces under it.** A drum kit is one record with its kick, snare and toms

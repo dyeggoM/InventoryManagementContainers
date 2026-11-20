@@ -60,7 +60,7 @@ export const constantsService = {
     const result: FlattenedConstant[] = [];
 
     // Sort by sortOrder if needed
-    const sortedConstants = [...constants].sort((a, b) => a.sortOrder - b.sortOrder);
+    const sortedConstants = constants.toSorted((a, b) => a.sortOrder - b.sortOrder);
 
     for (const constant of sortedConstants) {
       const hierarchicalLabel = parentPath ? `${parentPath}/${constant.label}` : constant.label;
