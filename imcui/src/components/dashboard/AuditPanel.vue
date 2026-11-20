@@ -1,7 +1,7 @@
 <template>
-  <!-- The panel is Spanish throughout, so it declares it once: the document is `lang="en"` and
-       without this a reader pronounces «Antes», «Después» and the region names in English. -->
-  <div class="audit-panel" lang="es">
+  <!-- The panel is Spanish and inherits it from the document; not one label here needs a mark of
+       its own. -->
+  <div class="audit-panel">
     <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-subtitle1 text-weight-medium">Auditoría</div>
       <q-space />
@@ -159,11 +159,11 @@
       />
     </div>
 
-    <!-- Before / after of one change: the audit trail is only useful if it can be read. -->
-    <!-- The dialog is teleported to `<body>`, so it does not inherit the panel's `lang`: the card
-         has to declare it again or the reader pronounces «Antes» and «Después» in English. -->
+    <!-- Before / after of one change: the audit trail is only useful if it can be read. The card
+         is teleported to `<body>`, which is inside the Spanish document, so it inherits the
+         language like the panel it was opened from. -->
     <q-dialog v-model="showDetail">
-      <q-card class="detail-card" lang="es">
+      <q-card class="detail-card">
         <q-card-section class="row items-center">
           <div class="column">
             <div class="text-subtitle1">{{ selected?.action }} · {{ selected?.entity }}</div>

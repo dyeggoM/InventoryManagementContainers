@@ -19,8 +19,15 @@ export interface ItemReponse {
   panels: Item[];
 }
 
+/**
+ * One row of the attribute form.
+ *
+ * `code` is the **key the item stores** — `{"Brand": "Bosch"}` — and `value` is the stored value:
+ * a code for a list attribute (`"Part"`), free text otherwise. Neither is display text: the screen
+ * shows the label the catalogue carries for that code, so translating it moves no data.
+ */
 export interface Attributes {
-  label: string;
+  code: string;
   value: string;
 }
 

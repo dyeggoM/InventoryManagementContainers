@@ -95,6 +95,8 @@ namespace IMCAPI.DB.Entities
     public class ConstantsDTO
     {
         public int Id { get; set; }
+        /// <summary>The stable identity, keyed by stored data and the API; never translated.</summary>
+        public string Code { get; set; }
         public string Label { get; set; }
         public string Icon { get; set; }
         public string? Group { get; set; }
@@ -111,14 +113,16 @@ namespace IMCAPI.DB.Entities
         {
             Icon = "";
             Label = "";
+            Code = "";
         }
 
-        public ConstantsDTO(int id, string? group, string label, string? description, int sortOrder, int? parentId, ConstantsDTO? parent, List<ConstantsDTO> children, string? dataType = null)
+        public ConstantsDTO(int id, string? group, string label, string? description, int sortOrder, int? parentId, ConstantsDTO? parent, List<ConstantsDTO> children, string? dataType = null, string? code = null)
         {
             // CTOR for panels
             Id = id;
             Group = group;
             Label = label;
+            Code = code ?? label;
             Description = description;
             SortOrder = sortOrder;
             ParentId = parentId;
@@ -139,6 +143,9 @@ namespace IMCAPI.DB.Entities
             var alreadyVisited = !visited.Add(data.Id);
             Group = data.Group;
             Label = data.Label;
+            // code is never null in the response: a row without one falls back to the label it was
+            // seeded with, which is exactly the backfill the migration applies.
+            Code = string.IsNullOrWhiteSpace(data.Code) ? data.Label : data.Code;
             Description = data.Description;
             DataType = data.DataType;
             SortOrder = data.SortOrder;

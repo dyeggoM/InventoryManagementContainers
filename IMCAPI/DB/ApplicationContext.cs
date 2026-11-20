@@ -207,6 +207,13 @@ namespace IMCAPI.DB
                 entity.Property(e => e.Label)
                       .HasMaxLength(1000)
                       .IsRequired();
+
+                // The identity side of the code/label contract: the label is display text, the code
+                // is what stored data and the API key on. Unique per (TenantId, Group), the same
+                // boundary the label's own uniqueness uses.
+                entity.Property(e => e.Code)
+                      .HasMaxLength(1000)
+                      .IsRequired();
                 entity.Property(e => e.Icon)
                       .HasMaxLength(50)
                       .IsRequired();
@@ -223,6 +230,13 @@ namespace IMCAPI.DB
                 // ── Indexes ──
                 entity.HasIndex(e => e.Group);
                 entity.HasIndex(e => new { e.TenantId, e.Group, e.Label }).IsUnique();
+                entity.HasIndex(e => new { e.TenantId, e.Group, e.Code }).IsUnique()
+                    // Partial on purpose: seed.sql and CopySql write rows before the backfill has
+                    // given them their codes, and a plain unique index would reject the whole seed
+                    // on the empty strings. Every row ends up with a code — the backfill, the
+                    // controller's generation and the PUT preservation guarantee it — so among real
+                    // codes the uniqueness the contract asks for holds.
+                    .HasFilter("\"Code\" != ''");
                 entity.HasIndex(e => new { e.ParentId, e.Label }).IsUnique();
                 entity.HasIndex(e => e.ParentId);
             });

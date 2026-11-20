@@ -196,7 +196,7 @@ function button(wrapper: VueWrapper, label: string) {
 
 /** The add button: its label is the only one the section shows while the dialog is closed. */
 function addButton(wrapper: VueWrapper) {
-  return button(wrapper, 'Add pieces');
+  return button(wrapper, 'Añadir piezas');
 }
 
 async function openPicker(wrapper: VueWrapper): Promise<void> {
@@ -233,14 +233,14 @@ describe('SetPieces', () => {
     const wrapper = mountSection({ pieces: [] });
 
     expect(wrapper.find('.set-pieces__row').exists()).toBe(false);
-    expect(wrapper.text()).toContain('No pieces yet');
+    expect(wrapper.text()).toContain('Todavía no hay piezas');
   });
 
   it('offers the add and remove actions to a session that may write', () => {
     const wrapper = mountSection();
 
     expect(addButton(wrapper).exists()).toBe(true);
-    expect(wrapper.findAll('button[aria-label^="Remove "]')).toHaveLength(2);
+    expect(wrapper.findAll('button[aria-label^="Quitar "]')).toHaveLength(2);
   });
 
   it('hides both actions for a lector, who may still read the pieces', () => {
@@ -256,7 +256,7 @@ describe('SetPieces', () => {
     const wrapper = mountSection({ busy: true });
 
     expect(addButton(wrapper).props('disable')).toBe(true);
-    for (const remove of wrapper.findAll('button[aria-label^="Remove "]')) {
+    for (const remove of wrapper.findAll('button[aria-label^="Quitar "]')) {
       expect(remove.attributes('disabled')).toBeDefined();
     }
   });
@@ -264,7 +264,7 @@ describe('SetPieces', () => {
   it('detaches a piece through the event the page owns, never deleting it', async () => {
     const wrapper = mountSection();
 
-    await wrapper.find('button[aria-label="Remove Clamp from the set"]').trigger('click');
+    await wrapper.find('button[aria-label="Quitar Clamp del conjunto"]').trigger('click');
 
     expect(wrapper.emitted('remove')).toEqual([[12]]);
   });
@@ -292,10 +292,10 @@ describe('SetPieces', () => {
     await searchInput(wrapper).vm.$emit('update:modelValue', 'pearl');
     // One match by brand, and the row says which attribute matched, as the tree does.
     expect(rowLabels(wrapper)).toEqual(['Snare drumBrand · Pearl']);
-    expect(wrapper.text()).toContain('1 match');
+    expect(wrapper.text()).toContain('1 coincidencia');
 
     await searchInput(wrapper).vm.$emit('update:modelValue', 'zzz');
-    expect(wrapper.text()).toContain('Nothing matches');
+    expect(wrapper.text()).toContain('Nada coincide');
     expect(rows(wrapper)).toHaveLength(0);
   });
 
@@ -303,13 +303,13 @@ describe('SetPieces', () => {
     const wrapper = mountSection();
     await openPicker(wrapper);
 
-    expect(button(wrapper, 'Add 0 pieces').props('disable')).toBe(true);
+    expect(button(wrapper, 'Añadir 0 piezas').props('disable')).toBe(true);
 
     await wrapper.find('input[data-val="21"]').trigger('change');
     await wrapper.find('input[data-val="23"]').trigger('change');
 
-    expect(wrapper.text()).toContain('2 selected');
-    const confirm = button(wrapper, 'Add 2 pieces');
+    expect(wrapper.text()).toContain('2 seleccionadas');
+    const confirm = button(wrapper, 'Añadir 2 piezas');
     expect(confirm.props('disable')).toBe(false);
 
     await confirm.trigger('click');
@@ -325,7 +325,7 @@ describe('SetPieces', () => {
 
     await wrapper.find('input[data-val="22"]').trigger('change');
 
-    expect(button(wrapper, 'Add 1 piece').exists()).toBe(true);
+    expect(button(wrapper, 'Añadir 1 pieza').exists()).toBe(true);
   });
 
   it('says so when every item already belongs to a set', async () => {
@@ -333,7 +333,7 @@ describe('SetPieces', () => {
     await openPicker(wrapper);
 
     expect(rows(wrapper)).toHaveLength(0);
-    expect(wrapper.text()).toContain('every item already belongs to a set');
+    expect(wrapper.text()).toContain('todos los ítems pertenecen ya a un conjunto');
   });
 
   it('starts every opening from a clean search and an empty selection', async () => {
@@ -343,11 +343,11 @@ describe('SetPieces', () => {
     await wrapper.find('input[data-val="23"]').trigger('change');
 
     // Cancel, then open again: the previous question must not come back answered.
-    await button(wrapper, 'Cancel').trigger('click');
+    await button(wrapper, 'Cancelar').trigger('click');
     await openPicker(wrapper);
 
     expect(searchInput(wrapper).props('modelValue')).toBe('');
     expect(rowLabels(wrapper)).toHaveLength(3);
-    expect(wrapper.text()).toContain('0 selected');
+    expect(wrapper.text()).toContain('0 seleccionadas');
   });
 });

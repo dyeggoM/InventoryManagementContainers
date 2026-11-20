@@ -4,7 +4,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ArchivePanel from './ArchivePanel.vue';
 import { ApiError } from '@services/api';
 import type { ArchiveEntry } from '@services/archive';
-import { asText } from '@services/utilities';
+import { asText, formatTimestamp } from '@services/utilities';
 
 // The panel talks to the API and to Quasar's notifications; both are replaced so the test sees the
 // filtered call shape and the copy the user reads, not a network or a toast queue.
@@ -266,7 +266,7 @@ describe('ArchivePanel', () => {
     const [archived, restored] = [rowAt(wrapper, 0), rowAt(wrapper, 1)];
 
     expect(archived.text()).toContain('Taladro');
-    expect(archived.text()).toContain(new Date('2026-11-10T12:30:00Z').toLocaleString());
+    expect(archived.text()).toContain(formatTimestamp('2026-11-10T12:30:00Z'));
     expect(archived.text()).toContain('root@imc.test');
     expect(archived.find('.cell-state').text()).toBe('En archivo');
     expect(restored.find('.cell-state').text()).toBe('Restaurado');
@@ -390,7 +390,7 @@ describe('ArchivePanel', () => {
     expect(card.classes()).toContain('full-width');
     expect(card.text()).toContain('Taladro');
     expect(card.text()).toContain('#7');
-    expect(card.text()).toContain(new Date('2026-11-10T12:30:00Z').toLocaleString());
+    expect(card.text()).toContain(formatTimestamp('2026-11-10T12:30:00Z'));
     expect(card.text()).toContain('root@imc.test');
     expect(card.text()).toContain('En archivo');
     expect(card.find('[aria-label="Tenía adjuntos"]').exists()).toBe(true);

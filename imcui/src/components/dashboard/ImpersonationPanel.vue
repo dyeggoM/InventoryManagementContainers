@@ -1,5 +1,5 @@
 <template>
-  <div class="impersonation-panel" lang="es">
+  <div class="impersonation-panel">
     <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-subtitle1 text-weight-medium">Suplantación</div>
     </div>

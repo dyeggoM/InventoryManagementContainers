@@ -71,6 +71,13 @@ namespace IMCAPI.DB.Entities
     {
         public override int Id { get; set; }
         public string Label { get; set; }
+        /// <summary>
+        /// The stable identity of this constant: it never changes, while <see cref="Label"/> is the
+        /// text the interface shows and may be renamed or translated. Item attributes and list values
+        /// are stored by this code, so renaming a label never rewrites stored data. Unique per
+        /// (TenantId, Group). Rows seeded before the column existed carry their former label here.
+        /// </summary>
+        public string Code { get; set; }
         public string Icon { get; set; }
         public string? Group { get; set; }
         public string? Description { get; set; }
@@ -89,6 +96,7 @@ namespace IMCAPI.DB.Entities
         public Constants()
         {
             Label = "";
+            Code = "";
             Icon = "";
             IsActive = true;
             UpdatedAt = DateTime.UtcNow;

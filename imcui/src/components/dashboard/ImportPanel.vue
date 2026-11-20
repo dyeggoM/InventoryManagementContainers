@@ -1,8 +1,7 @@
 <template>
-  <!-- Every visible string in this panel is Spanish, so the whole panel declares it once instead
-       of each label carrying its own: a reader with `lang="en"` from the document would pronounce
-       all of it with English phonetics. -->
-  <div class="import-panel" lang="es">
+  <!-- Every visible string in this panel is Spanish, which it inherits from the document: neither
+       the panel nor the dialog it opens needs a language mark of its own. -->
+  <div class="import-panel">
     <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-subtitle1 text-weight-medium">Importar desde Excel</div>
       <q-space />
@@ -377,30 +376,22 @@
         <q-card-section class="editor-head row items-center no-wrap q-gutter-x-sm q-py-sm">
           <q-icon name="edit_note" size="22px" class="text-grey-7" />
           <div class="editor-heading column">
-            <span class="text-subtitle1 text-weight-medium" lang="es">
+            <span class="text-subtitle1 text-weight-medium">
               Corregir la fila {{ editor.row }}
             </span>
-            <span class="text-caption text-grey-7" lang="es">
+            <span class="text-caption text-grey-7">
               <span v-if="editor.source">{{ editor.source }} ·</span>
               se importará en {{ editor.category }} › {{ editor.group }}
             </span>
           </div>
           <q-space />
-          <q-btn
-            flat
-            dense
-            round
-            icon="close"
-            aria-label="Cerrar el editor"
-            lang="es"
-            @click="closeEditor"
-          />
+          <q-btn flat dense round icon="close" aria-label="Cerrar el editor" @click="closeEditor" />
         </q-card-section>
 
         <div class="editor-divider" />
 
         <q-card-section class="editor-body">
-          <div class="editor-label text-caption text-grey-7" lang="es">El archivo dice</div>
+          <div class="editor-label text-caption text-grey-7">El archivo dice</div>
           <!-- A 390px phone cannot show every column: the row scrolls sideways, and a scroll
                container that is not focusable cannot be scrolled without a mouse. -->
           <div
@@ -408,7 +399,6 @@
             tabindex="0"
             role="region"
             aria-label="La fila tal como está en el archivo"
-            lang="es"
           >
             <table class="file-sheet">
               <thead>
@@ -428,7 +418,7 @@
             </table>
           </div>
 
-          <div class="editor-label text-caption text-grey-7 q-mt-md" lang="es">
+          <div class="editor-label text-caption text-grey-7 q-mt-md">
             Lo que se importará · editable
           </div>
           <!-- The same form the inventory uses to create an item: an imported record must be
@@ -444,7 +434,7 @@
               :parent-options="groupOptions"
               :label-rule="descriptionRule"
               :copy="editorCopy"
-              :attribute-labels="attributeLabels"
+              :attribute-entries="attributeEntries"
               :attribute-lists="attributeLists"
               :attribute-types="attributeTypes"
               :readonly="false"
@@ -455,7 +445,7 @@
 
         <div class="editor-divider" />
 
-        <q-card-section class="editor-actions row items-center q-gutter-x-sm q-py-sm" lang="es">
+        <q-card-section class="editor-actions row items-center q-gutter-x-sm q-py-sm">
           <q-btn
             v-if="editor.corrected"
             flat
@@ -531,24 +521,27 @@ const STATUS_LABELS: Record<ImportStatus, string> = {
 };
 
 /**
- * The label whose value the name field above the form carries. It is also one of the seven the
+ * The attribute whose value the name field above the form carries. It is also one of the seven the
  * importer derives, and the two are the same cell on the wire, so its attribute row is left out:
  * two fields for one value can only end up disagreeing.
+ *
+ * It is a **code**, like every other key of the attribute map: Configuration may call it
+ * «Descripción» and this constant does not move.
  */
-const DESCRIPTION_LABEL = 'Description';
+const DESCRIPTION_CODE = 'Description';
 
 /**
- * The label governed by the correction's `code` property — the one the uniqueness check validates.
- * A disagreeing `attributes.Code` is reported by the API instead of written, so this row edits
- * `code`, never the attribute map.
+ * The attribute governed by the correction's `code` property — the one the uniqueness check
+ * validates. A disagreeing `attributes.Code` is reported by the API instead of written, so this row
+ * edits `code`, never the attribute map.
  */
-const CODE_LABEL = 'Code';
+const CODE_CODE = 'Code';
 
-/** The seven fields the importer derives from a row, as attribute labels. */
-const DERIVED_LABELS = [
-  DESCRIPTION_LABEL,
+/** The seven fields the importer derives from a row, as attribute codes. */
+const DERIVED_CODES = [
+  DESCRIPTION_CODE,
   'Brand',
-  CODE_LABEL,
+  'Code',
   'Reference',
   'Serial',
   'Notes',
@@ -662,11 +655,12 @@ const editor = ref<Editor | null>(null);
  * form over an item, so an attribute the app can create must be an attribute the import can correct.
  */
 const {
-  labels: attributeLabels,
+  attributes: attributeEntries,
   lists: attributeLists,
   types: attributeTypes,
   load: loadCatalogue,
   createValue: createAttributeValue,
+  labelOf: labelOfCode,
 } = useAttributeCatalogue({
   onRefreshError: (error) => feedback.error(error, 'No se pudieron recargar los atributos.'),
 });
@@ -675,12 +669,9 @@ const auth = useAuthStore();
 // Adding a value to Configuration is an admin's write, and never while impersonating.
 const canManageConfiguration = computed(() => auth.canManageConfiguration);
 
-/**
- * The copy of the form. The component defaults to the inventory's English; this dialog speaks
- * Spanish, and the two fields it renames are the two whose meaning changes with `mode`.
- */
+/** The copy of the form. This dialog words the two fields whose meaning changes with `mode`. */
 const editorCopy: Partial<ItemEditorCopy> = {
-  details: 'El item',
+  details: 'El ítem',
   name: 'Descripción',
   nameHint: 'Obligatoria: sin descripción la fila no se puede importar.',
   parent: 'Subcategoría',
@@ -918,40 +909,40 @@ function fileLabelOf(item: ImportItem): string {
 }
 
 /**
- * The attribute labels the dialog shows. Configuration's own labels come first, in its order; the
- * seven fields the importer derives are added even when Configuration does not define them, because
- * a value the import writes into an attribute the form cannot reach is a value nobody can fix.
- * `Description` is left out on purpose: the name field above **is** the row's description.
+ * The attribute rows the dialog shows, as **codes**. Configuration's own attributes come first, in
+ * its order; the seven fields the importer derives are added even when Configuration does not
+ * define them, because a value the import writes into an attribute the form cannot reach is a value
+ * nobody can fix. `Description` is left out on purpose: the name field above **is** that value.
  */
-function attributeLabelsFor(item: ImportItem, saved: Record<string, string>): string[] {
-  const labels: string[] = [];
-  const seen = new Set<string>([DESCRIPTION_LABEL]);
-  const add = (label: string) => {
-    if (!label || seen.has(label)) return;
-    seen.add(label);
-    labels.push(label);
+function attributeCodesFor(item: ImportItem, saved: Record<string, string>): string[] {
+  const codes: string[] = [];
+  const seen = new Set<string>([DESCRIPTION_CODE]);
+  const add = (code: string) => {
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    codes.push(code);
   };
-  for (const label of attributeLabels.value) add(label);
-  for (const label of DERIVED_LABELS) add(label);
-  // A correction can carry a label Configuration has stopped defining; it must still be visible.
-  for (const label of Object.keys(saved)) add(label);
-  return labels;
+  for (const entry of attributeEntries.value) add(entry.code);
+  for (const code of DERIVED_CODES) add(code);
+  // A correction can carry an attribute Configuration has stopped defining; it must still be seen.
+  for (const code of Object.keys(saved)) add(code);
+  return codes;
 }
 
-/** One attribute value: the field the importer derives it into, or the row's own cell of that name. */
-function valueFromRow(item: ImportItem, cells: Record<string, string>, label: string): string {
-  const derived = derivedValue(item, label);
+/** One attribute value: the field the importer derives it into, or the row's own cell for it. */
+function valueFromRow(item: ImportItem, cells: Record<string, string>, code: string): string {
+  const derived = derivedValue(item, code);
   if (derived) return derived;
-  const cell = cellForHeader(cells, label);
+  const cell = cellForHeader(cells, code, labelOfCode(code));
   return cell || derived || '';
 }
 
-/** The seven the importer derives, keyed by the attribute label the item is created with. */
-function derivedValue(item: ImportItem, label: string): string | null {
-  switch (label) {
-    case 'Description':
+/** The seven the importer derives, keyed by the attribute code the item is created with. */
+function derivedValue(item: ImportItem, code: string): string | null {
+  switch (code) {
+    case DESCRIPTION_CODE:
       return fileLabelOf(item);
-    case 'Code':
+    case CODE_CODE:
       return item.code ?? '';
     case 'Brand':
       return item.brand ?? '';
@@ -968,12 +959,15 @@ function derivedValue(item: ImportItem, label: string): string | null {
   }
 }
 
-/** A cell by its header, tolerant of case and accents: a file writes `MARCA`, Configuration `Marca`. */
-function cellForHeader(cells: Record<string, string>, label: string): string {
-  if (label in cells) return cells[label] ?? '';
-  const wanted = fold(label);
+/**
+ * A cell by its header: a file writes `MARCA`, Configuration calls it «Marca» and the code is
+ * `Brand`. The contract resolves a header by label **or** code, so both are tried, folded so case
+ * and accents do not matter.
+ */
+function cellForHeader(cells: Record<string, string>, code: string, label: string): string {
+  const wanted = new Set([fold(code), fold(label)]);
   for (const [header, value] of Object.entries(cells)) {
-    if (fold(header) === wanted) return value;
+    if (wanted.has(fold(header))) return value;
   }
   return '';
 }
@@ -989,9 +983,9 @@ function fold(text: string): string {
 /** The attribute rows of the row being edited, with whatever this session already corrected. */
 function attributeRowsOf(item: ImportItem, saved: Record<string, string> = {}): Attributes[] {
   const cells = item.raw ?? {};
-  return attributeLabelsFor(item, saved).map((label) => ({
-    label,
-    value: saved[label] ?? valueFromRow(item, cells, label),
+  return attributeCodesFor(item, saved).map((code) => ({
+    code,
+    value: saved[code] ?? valueFromRow(item, cells, code),
   }));
 }
 
@@ -1003,7 +997,7 @@ function baselineOf(item: ImportItem): Baseline {
     subcategory: subcategoryFromRaw(item),
     attributes: {},
   };
-  for (const row of attributeRowsOf(item)) baseline.attributes[row.label] = row.value;
+  for (const row of attributeRowsOf(item)) baseline.attributes[row.code] = row.value;
   return baseline;
 }
 
@@ -1132,15 +1126,15 @@ async function saveEditor(): Promise<void> {
 }
 
 /** The value of one attribute row, trimmed; an absent row reads as empty. */
-function attributeValue(rows: Attributes[], label: string): string {
-  return (rows.find((row) => row.label.trim() === label)?.value ?? '').trim();
+function attributeValue(rows: Attributes[], code: string): string {
+  return (rows.find((row) => row.code.trim() === code)?.value ?? '').trim();
 }
 
 /**
- * The attribute map of a correction: **only the rows the user changed**, keyed by Configuration's
- * label. An untouched attribute is absent, so the file keeps its own value; a cleared one goes out
- * as `""`, which is how the API removes it. Sending every row would turn the file into a correction
- * of itself and the import's count of applied corrections would stop meaning anything.
+ * The attribute map of a correction: **only the rows the user changed**, keyed by the attribute
+ * code the API stores. An untouched attribute is absent, so the file keeps its own value; a cleared
+ * one goes out as `""`, which is how the API removes it. Sending every row would turn the file into
+ * a correction of itself and the import's count of applied corrections would stop meaning anything.
  *
  * `Description` and `Code` never appear here: they have their own properties (`label` and `code`),
  * and a second copy could only disagree with the one that decides.
@@ -1148,11 +1142,11 @@ function attributeValue(rows: Attributes[], label: string): string {
 function changedAttributes(current: Editor): Record<string, string> {
   const changed: Record<string, string> = {};
   for (const row of current.draft.attributes) {
-    const label = row.label.trim();
-    if (!label || label === DESCRIPTION_LABEL || label === CODE_LABEL) continue;
+    const code = row.code.trim();
+    if (!code || code === DESCRIPTION_CODE || code === CODE_CODE) continue;
     const value = (row.value ?? '').trim();
-    if (value === (current.baseline.attributes[label] ?? '').trim()) continue;
-    changed[label] = value;
+    if (value === (current.baseline.attributes[code] ?? '').trim()) continue;
+    changed[code] = value;
   }
   return changed;
 }
@@ -1170,7 +1164,7 @@ function correctionOf(current: Editor): ImportCorrection | null {
   const label = current.draft.label.trim();
   if (label !== current.baseline.label.trim()) correction.label = label;
 
-  const code = attributeValue(current.draft.attributes, CODE_LABEL);
+  const code = attributeValue(current.draft.attributes, CODE_CODE);
   if (code !== current.baseline.code.trim()) correction.code = code;
 
   const subcategory = current.draft.subcategory.trim();

@@ -295,7 +295,7 @@ public sealed class ItemImporter
             Item = row.Item with
             {
                 Raw = row.Item.Status == Green ? null : row.Item.Raw,
-                Attributes = row.Item.Status == Red ? row.Item.Attributes : ItemAttributes(row.Item)
+                Attributes = row.Item.Status == Red ? row.Item.Attributes : ItemAttributes(row.Item, brands)
             }
         }).ToList();
 
@@ -405,6 +405,7 @@ public sealed class ItemImporter
             .ToList();
 
         var existingCodes = await ExistingCodesAsync(organizationId, cancellationToken);
+        var brands = await KnownBrandsAsync(organizationId, cancellationToken);
         // The pairs that already exist today, so a codeless row is not created twice across runs.
         // Rows created *during* this run are not added to this set on purpose: thirty identical
         // rows in one file are thirty units, not thirty duplicates.
@@ -471,7 +472,7 @@ public sealed class ItemImporter
                         continue;
                     }
 
-                    _context.Items.Add(NewItem(item.Label, parent.Id, organizationId, item));
+                    _context.Items.Add(NewItem(item.Label, parent.Id, organizationId, item, brands));
                     createdItems++;
                     if (item.Code is not null) existingCodes.Add(item.Code);
                 }
@@ -495,9 +496,10 @@ public sealed class ItemImporter
             includeYellow, corrected, rejected), auditJson);
     }
 
-    private static Item NewItem(string label, int? parentId, int organizationId, ImportItem? source = null)
+    private static Item NewItem(string label, int? parentId, int organizationId, ImportItem? source = null,
+        IReadOnlyDictionary<string, string>? brandCodes = null)
     {
-        var attributes = source is null ? new Dictionary<string, string>(StringComparer.Ordinal) : ItemAttributes(source);
+        var attributes = source is null ? new Dictionary<string, string>(StringComparer.Ordinal) : ItemAttributes(source, brandCodes);
 
         return new Item
         {
@@ -510,7 +512,13 @@ public sealed class ItemImporter
         };
     }
 
-    private static Dictionary<string, string> ItemAttributes(ImportItem source)
+    /// <summary>
+    /// The attribute bag an item stores: keys are the attribute codes and list values resolve to
+    /// the code of the catalog value they name — the file may spell a brand as code or label, and
+    /// both become the code. The preview keeps the file's own spelling in <see cref="ImportItem.Brand"/>.
+    /// </summary>
+    private static Dictionary<string, string> ItemAttributes(ImportItem source,
+        IReadOnlyDictionary<string, string>? brandCodes = null)
     {
         var attributes = new Dictionary<string, string>(StringComparer.Ordinal);
         void Put(string key, string? value)
@@ -518,7 +526,9 @@ public sealed class ItemImporter
             if (!string.IsNullOrWhiteSpace(value)) attributes[key] = value;
         }
         Put("Description", source.Label);
-        Put("Brand", source.Brand);
+        // Stored by code; the label is only another spelling of the same catalog value.
+        Put("Brand", source.Brand is not null && brandCodes is not null
+            && brandCodes.TryGetValue(Clean(source.Brand), out var brandCode) ? brandCode : source.Brand);
         Put("Code", source.Code);
         Put("Reference", source.Reference);
         Put("Serial", source.Serial);
@@ -550,7 +560,7 @@ public sealed class ItemImporter
     /// whose name the configuration does not know is marked for review instead of being guessed.
     /// </summary>
     private (List<(Placement Placement, ImportItem Item)> Rows, int SkippedSections) BuildSheet(
-        string name, IEnumerable<RawRow> rows, CategoryMap categories, HashSet<string> brands,
+        string name, IEnumerable<RawRow> rows, CategoryMap categories, IReadOnlyDictionary<string, string> brands,
         HashSet<string> takenCodes, Dictionary<string, int> seenCodes, HashSet<string> duplicates,
         List<ImportIssue> issues, SortedSet<string> normalizations)
     {
@@ -602,7 +612,7 @@ public sealed class ItemImporter
         return (built, skippedSections);
     }
 
-    private ImportItem Judge(string sheet, RawRow row, string description, HashSet<string> brands,
+    private ImportItem Judge(string sheet, RawRow row, string description, IReadOnlyDictionary<string, string> brands,
         HashSet<string> takenCodes, Dictionary<string, int> seenCodes, HashSet<string> duplicates,
         List<ImportIssue> issues)
     {
@@ -648,11 +658,13 @@ public sealed class ItemImporter
         {
             Flag("Sin marca.");
         }
-        else if (!brands.Contains(Clean(brand)))
+        else if (!brands.ContainsKey(Clean(brand)))
         {
+            // Red, not yellow: the import would otherwise store a brand the catalogue does not
+            // know, an item the attribute validation refuses to save again. It stays out.
             Flag(brand.Any(char.IsDigit)
                 ? $"La marca «{brand}» parece una referencia mal puesta, no una marca."
-                : $"La marca «{brand}» no está en el catálogo de Brand.");
+                : $"La marca «{brand}» no está en el catálogo de Brand.", Red);
         }
 
         if (description.Length < 4)
@@ -826,17 +838,26 @@ public sealed class ItemImporter
         return normalized.Length == 0 ? null : normalized;
     }
 
-    private async Task<HashSet<string>> KnownBrandsAsync(int organizationId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyDictionary<string, string>> KnownBrandsAsync(int organizationId, CancellationToken cancellationToken)
     {
-        var root = await _context.Constants.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(row => row.TenantId == organizationId && row.IsActive
-                && row.ParentId == null && row.Label == "Brand", cancellationToken);
-        if (root is null) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var children = await _context.Constants.IgnoreQueryFilters()
-            .Where(row => row.TenantId == organizationId && row.IsActive && row.ParentId == root.Id)
+        // One brand catalogue, the same rows the item validator accepts: every active constant of
+        // the Brand group in this organization, whether it hangs from the seed root or from the
+        // Brand attribute the interface creates values under. The group's root itself is not a
+        // value — it is the shelf the values sit on, and it is the one row whose code names the
+        // group. Keys are the code and the label, both normalized the way Clean normalizes file
+        // values, and both resolve to the code stored data carries.
+        var rows = await _context.Constants.IgnoreQueryFilters().AsNoTracking()
+            .Where(row => row.TenantId == organizationId && row.IsActive && row.Group == "Brand")
+            .Select(row => new { row.Code, row.Label })
             .ToListAsync(cancellationToken);
-        return children.Select(child => Normalize(child.Label)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.Code) || row.Code == "Brand") continue;
+            map[row.Code] = row.Code;
+            if (!string.IsNullOrWhiteSpace(row.Label)) map[Normalize(row.Label)] = row.Code;
+        }
+        return map;
     }
 
     /// <summary>

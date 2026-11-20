@@ -178,9 +178,9 @@ public sealed class OrganizationImportTests : ApiTestBase
             var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
             db.Items.Add(new Item { Label = "EXISTING PERSONA", Attributes = "{\"Code\":\"ORG-TEST-001\"}" });
             await db.SaveChangesAsync();
-            db.Constants.Add(new Constants { TenantId = Persona, Group = "Category", Label = "SPECIAL CONFIG" });
+            db.Constants.Add(new Constants { TenantId = Persona, Group = "Category", Label = "SPECIAL CONFIG", Code = "SPECIAL CONFIG" });
             await db.SaveChangesAsync();
-            db.Constants.Add(new Constants { TenantId = Persona, Group = "SPECIAL CONFIG", Label = "UNIQUE GROUP" });
+            db.Constants.Add(new Constants { TenantId = Persona, Group = "SPECIAL CONFIG", Label = "UNIQUE GROUP", Code = "UNIQUE GROUP" });
             await db.SaveChangesAsync();
         }
         const string csv = "DESCRIPCION,SUB CATEGORIA,MARCA,CODIGO\nTARGET IMPORT,UNIQUE GROUP,YAMAHA,ORG-TEST-001\n";

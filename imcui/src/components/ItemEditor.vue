@@ -36,7 +36,7 @@
     <div class="imc-section__title">{{ copy.attributes }}</div>
     <attribute-editor
       v-model="attributes"
-      :labels="attributeLabels"
+      :attributes="attributeEntries"
       :lists="attributeLists"
       :types="attributeTypes"
       :readonly="readonly"
@@ -78,6 +78,7 @@ export type ItemEditorCopy = {
 import { computed } from 'vue';
 import AttributeEditor from './AttributeEditor.vue';
 import type { Attributes } from '@services/items';
+import type { CatalogueEntry } from '@services/constants';
 
 /**
  * The item form: its name, its parent and its attribute rows. It is what the inventory screen edits
@@ -96,16 +97,17 @@ const props = withDefaults(
     parentOptions?: ItemEditorOption[];
     /** The name's validation, exactly the one the host screen applies. */
     labelRule?: (value: string) => boolean | string;
-    /** Attribute labels from Configuration, in its order. */
-    attributeLabels: string[];
-    /** label -> allowed values. A label with a list is a choice control, the rest is free text. */
-    attributeLists?: Record<string, string[]>;
-    /** label -> how its value is edited (Text, Number, Money, Date, LongText). */
+    /** The attributes Configuration defines, in its order: code for the data, label for the screen. */
+    attributeEntries: CatalogueEntry[];
+    /** attribute code -> allowed values, each a code with the label the select shows. */
+    attributeLists?: Record<string, CatalogueEntry[]>;
+    /** attribute code -> how its value is edited (Text, Number, Money, Date, LongText). */
     attributeTypes?: Record<string, string | null | undefined>;
     /** The session cannot write: the fields render read-only and the row buttons are gone. */
     readonly?: boolean;
     /** Present only for an admin or a superadmin; the API enforces the same rule. */
-    createValue?: ((label: string, value: string) => Promise<boolean>) | undefined;
+    createValue?:
+      ((attributeCode: string, label: string) => Promise<CatalogueEntry | null>) | undefined;
     /** Fields the host wants worded differently; anything left out keeps the default below. */
     copy?: Partial<ItemEditorCopy>;
   }>(),
@@ -123,13 +125,13 @@ const parent = defineModel<string | number | null | undefined>('parent', { defau
 const attributes = defineModel<Attributes[]>('attributes', { required: true });
 
 const copy = computed<ItemEditorCopy>(() => ({
-  details: props.copy?.details ?? 'Details',
-  name: props.copy?.name ?? 'Name',
+  details: props.copy?.details ?? 'Detalles',
+  name: props.copy?.name ?? 'Nombre',
   nameHint: props.copy?.nameHint,
-  parent: props.copy?.parent ?? 'Parent item',
+  parent: props.copy?.parent ?? 'Ítem padre',
   parentHint: props.copy?.parentHint,
-  parentEmpty: props.copy?.parentEmpty ?? 'No parent',
-  attributes: props.copy?.attributes ?? 'Attributes',
+  parentEmpty: props.copy?.parentEmpty ?? 'Sin padre',
+  attributes: props.copy?.attributes ?? 'Atributos',
 }));
 
 /** The tree's sentinel is `null`; a group mode row with no group yet is the empty string. */

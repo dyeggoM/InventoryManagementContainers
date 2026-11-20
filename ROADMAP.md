@@ -2,7 +2,23 @@
 
 What is deliberately not built yet, in the order it is worth doing.
 
-### Accesibilidad y plataforma (`fix/web-a11y-platform`) — `in progress`
+### Idioma y catálogo (`feat/catalogue-codes`) — `in progress`
+
+- [x] **La interfaz, en español** — `done`, con glosario fijo y fechas en formato español.
+- [x] **Clave estable / etiqueta traducible** — `done`: `Constants.Code` + `Label`, `Code := Label` en la
+  migración, cero cambios en `Items`.
+- [x] **Validación de escritura contra el catálogo** — `done`; código desconocido → `400`.
+- [x] **Import por etiqueta o código** — `done`; resuelve al código y liga subcategoría por `ParentId`.
+- [ ] **Traducciones al inglés** — `siguiente`, cuando Diego lo pida. Con esto montado es traducir etiquetas y
+  añadir el catálogo inglés: `Code` no cambia, los datos no se tocan. Lo que habrá que decidir es *dónde* vive el
+  catálogo de textos de interfaz (hoy está donde se usa) y si se quiere un selector de idioma.
+- [ ] **`Attachment.Type` tiene la misma enfermedad** — `todo`, `Later`. `AttachmentType` se sembró en inglés a
+  propósito y `Attachment.Type` guarda `"Photo"` como dato: la misma separación clave/etiqueta, en otra tabla.
+- [ ] **`inventory.py sync` se cuelga en este entorno** — `todo`, `Next`. Dos intentos (5 y 13 minutos) sin
+  escribir nada. Es la herramienta de indexación, no el repositorio; el inventario quedó sin regenerar en la
+  ronda del catálogo y hay que investigarlo antes de confiar en el mapa.
+
+### Accesibilidad y plataforma (`fix/web-a11y-platform`) — `done`
 
 - [x] **`color-scheme` en la raíz y en el `<head>`** — `done`, medido sobre los píxeles de la barra de scroll.
 - [x] **`lang` en el documento y en las pantallas que hablan español** — `done`; sin traducir nada.

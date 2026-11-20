@@ -13,9 +13,11 @@
     :empty-message="emptyMessage"
     :dirty="isDirty"
     :readonly="!canWrite"
-    entity-label="Item"
+    entity-label="Ítem"
     :entry-label="treeItem.label"
-    secondary-action-label="New set"
+    secondary-action-label="Nuevo conjunto"
+    create-label="Nuevo ítem"
+    :attribute-label="labelOfCode"
     @select="selectData"
     @create="createEntry"
     @secondary-action="createSet"
@@ -31,7 +33,7 @@
       :parent-options="parentOptions()"
       :label-rule="labelRule"
       :readonly="!canWrite"
-      :attribute-labels="attributeLabels"
+      :attribute-entries="attributeEntries"
       :attribute-lists="attributeLists"
       :attribute-types="attributeTypes"
       :create-value="canManageConfiguration ? createAttributeValue : undefined"
@@ -42,7 +44,7 @@
           flat
           no-caps
           icon="add"
-          label="Add child item"
+          label="Añadir ítem hijo"
           color="primary"
           class="q-mb-xs"
           @click="createChildEntry"
@@ -53,7 +55,7 @@
     <!--
       A set's pieces are its children: the tree already counts them, this is where they are chosen.
       Shown only for a set, because on any other item a child is a sub-item and the action for that
-      is "Add child item" in the details header.
+      is "Añadir ítem hijo" in the details header.
     -->
     <set-pieces
       v-if="isSet && treeItem.id > 0"
@@ -61,12 +63,13 @@
       :candidates="candidates"
       :readonly="!canWrite"
       :busy="piecesBusy"
+      :attribute-label="labelOfCode"
       @add="attachPieces"
       @remove="removePiece"
     />
 
     <div class="imc-section">
-      <div class="imc-section__title">Attachments</div>
+      <div class="imc-section__title">Adjuntos</div>
       <attachment-editor
         v-model="attachments"
         :types="attachmentTypes"
@@ -90,7 +93,8 @@ import { useFeedback } from '../../composables/useFeedback';
 import { useAuthStore } from '../../stores/auth-store';
 import { itemsService, type Item, type Attributes } from '@services/items';
 import { attachmentsService } from '@services/attachment';
-import { constantsService } from '@services/constants';
+import { constantsService, entryOf, type CatalogueEntry } from '@services/constants';
+import { attributeRows, attributesJson, blankRows, readAttributeMap } from '@services/attributes';
 
 const feedback = useFeedback();
 const auth = useAuthStore();
@@ -102,15 +106,22 @@ const attributes = ref<Attributes[]>([]);
 // The attribute half of Configuration is shared with the import's row correction, so it is read
 // through one composable instead of two copies of the same rules.
 const {
-  labels: attributeLabels,
+  attributes: attributeEntries,
   lists: attributeLists,
   types: attributeTypes,
   load: loadCatalogue,
   createValue: createAttributeValue,
+  labelOf: labelOfCode,
+  labelOfValue,
 } = useAttributeCatalogue({
-  onRefreshError: (error) => feedback.error(error, 'Could not load the constants'),
+  onRefreshError: (error) => feedback.error(error, 'No se pudieron cargar las constantes'),
 });
-const attachmentTypes = ref<string[]>([]);
+/** The keys an item stores, in Configuration's order. The labels never reach the payload. */
+const attributeCodes = computed(() => attributeEntries.value.map((entry) => entry.code));
+/** The attachment types, code + label: the select shows a label and the record keeps the code. */
+const attachmentTypes = ref<CatalogueEntry[]>([]);
+/** The type that opens the camera, by code: its label in Configuration can read «Foto». */
+const PHOTO_TYPE_CODE = 'Photo';
 const attachments = ref<AttachmentRow[]>([]);
 
 // Only an admin and a superadmin may write Configuration, and never while impersonating.
@@ -128,18 +139,20 @@ const blank = (): Item => ({
 });
 
 function blankAttributes(): Attributes[] {
-  return attributeLabels.value.map((label) => ({ label, value: '' }));
+  return blankRows(attributeCodes.value);
 }
 
 /**
- * The rows an entry produces: every catalogue attribute, plus any key the record carries that the
- * catalogue does not define (a value typed on this item alone must survive a reload).
+ * The rows an entry produces, keyed by the codes it stores: the round trip through the form cannot
+ * touch a key, so a label translated in Configuration leaves the record exactly as it was.
  */
 function rowsFrom(raw: string | null | undefined): Attributes[] {
-  const parsed = parseAttributes(raw);
-  const rows = attributeLabels.value.map((label) => ({ label, value: parsed[label] ?? '' }));
-  const extra = Object.keys(parsed).filter((key) => !attributeLabels.value.includes(key));
-  return [...rows, ...extra.map((key) => ({ label: key, value: parsed[key] ?? '' }))];
+  const { rows, malformed } = attributeRows(raw, attributeCodes.value);
+  if (malformed) {
+    // Rows written before the serializer existed can hold invalid JSON; the form must still open.
+    feedback.error('Este ítem tiene atributos mal formados; se reiniciaron en el formulario.');
+  }
+  return rows;
 }
 
 const {
@@ -167,12 +180,11 @@ const {
   parentOptions,
 } = useTreeEditor<Item>({
   service: itemsService,
-  addNew: () => ({ ...blank(), label: 'Add New' }),
+  addNew: () => ({ ...blank(), label: 'Nuevo ítem' }),
   blank,
   flatten: (nodes) => itemsService.flattenItems(nodes),
-  entity: 'item',
-  emptyMessage: 'No items yet',
-  deleteHint: 'Its attachments are deleted with it.',
+  emptyMessage: 'Todavía no hay ítems',
+  deleteHint: 'Sus adjuntos se eliminan con él.',
   splitter: 34,
   // The entry alone does not describe the form: the attributes and the attachment rows live here.
   dirtySnapshot: (entry) =>
@@ -205,14 +217,14 @@ const {
     attachments.value = [];
   },
   validate: () => {
-    if (attributes.value.some((row) => !row.label.trim() && row.value.trim())) {
-      return 'Give every attribute a name';
+    if (attributes.value.some((row) => !row.code.trim() && row.value.trim())) {
+      return 'Ponle nombre a todos los atributos';
     }
-    const keys = attributes.value.map((row) => row.label.trim().toLowerCase()).filter(Boolean);
-    if (new Set(keys).size !== keys.length) return 'Two attributes have the same name';
+    const keys = attributes.value.map((row) => row.code.trim().toLowerCase()).filter(Boolean);
+    if (new Set(keys).size !== keys.length) return 'Dos atributos tienen el mismo nombre';
     for (const attachment of attachments.value.filter((row) => row.id === 0)) {
-      if (!attachment.fileName) return 'Every new attachment needs a file';
-      if (!attachment.type) return 'Every new attachment needs a type';
+      if (!attachment.fileName) return 'Todo adjunto nuevo necesita un archivo';
+      if (!attachment.type) return 'Todo adjunto nuevo necesita un tipo';
     }
     return null;
   },
@@ -232,18 +244,24 @@ const {
         await attachmentsService.upload(id, file, row.type ?? null);
       } catch (error) {
         // One bad file must not lose the record that was just saved.
-        feedback.error(error, `Could not upload ${row.fileName || 'the file'}`);
+        feedback.error(error, `No se pudo subir ${row.fileName || 'el archivo'}`);
       }
     }
   },
 });
 
-/** The attribute value that makes an item a set; its values come from the `Type` group. */
-const SET_TYPE = 'Set';
+/**
+ * The attribute that makes an item a set, and the value that says so. Both are **codes**: the
+ * labels in Configuration can read «Tipo» and «Conjunto» and nothing here notices.
+ */
+const TYPE_ATTRIBUTE_CODE = 'Type';
+const SET_VALUE_CODE = 'Set';
 
 /** The Type attribute of the record in the form, which is what tells a set from any other item. */
 const isSet = computed(
-  () => attributeValue(treeItem.value.attributes, 'Type').trim().toLowerCase() === 'set',
+  () =>
+    attributeValue(treeItem.value.attributes, TYPE_ATTRIBUTE_CODE).trim().toLowerCase() ===
+    SET_VALUE_CODE.toLowerCase(),
 );
 
 /**
@@ -268,9 +286,12 @@ const piecesBusy = ref(false);
  */
 async function createSet() {
   const label = await feedback.prompt(
-    'New set',
-    'Set name',
-    `It is created with the attribute Type = ${SET_TYPE}. Add its pieces once it is open.`,
+    'Nuevo conjunto',
+    'Nombre del conjunto',
+    `Se crea con «${labelOfCode(TYPE_ATTRIBUTE_CODE)}» = «${labelOfValue(
+      TYPE_ATTRIBUTE_CODE,
+      SET_VALUE_CODE,
+    )}». Añade sus piezas cuando esté abierto.`,
   );
   if (!label) return;
 
@@ -278,7 +299,8 @@ async function createSet() {
     const created = await itemsService.create({
       ...blank(),
       label,
-      attributes: JSON.stringify({ Type: SET_TYPE }),
+      // The record stores the code of the value, never its label.
+      attributes: JSON.stringify({ [TYPE_ATTRIBUTE_CODE]: SET_VALUE_CODE }),
     });
     await loadData();
     // The list and the panels are the server's answer, so the new node is found there, not here.
@@ -286,14 +308,14 @@ async function createSet() {
       (created?.id ? itemsService.findItem(tree.value, created.id) : undefined) ??
       tree.value.find((candidate) => candidate.label === label);
     if (!node) {
-      feedback.error('The set was created but the tree did not return it; reload to see it.');
+      feedback.error('El conjunto se creó, pero el árbol no lo devolvió; recarga para verlo.');
       return;
     }
     selected.value = node.id;
     await selectData(node.id);
-    feedback.success('Set created');
+    feedback.success('Conjunto creado');
   } catch (error) {
-    feedback.error(error, 'Could not create the set');
+    feedback.error(error, 'No se pudo crear el conjunto');
   }
 }
 
@@ -305,10 +327,10 @@ async function attachPieces(ids: number[]) {
   piecesBusy.value = true;
   try {
     const result = await itemsService.attachChildren(setId, ids);
-    feedback.success(`${result.moved} ${result.moved === 1 ? 'piece' : 'pieces'} added`);
+    feedback.success(`${result.moved} ${result.moved === 1 ? 'pieza añadida' : 'piezas añadidas'}`);
     await loadData();
   } catch (error) {
-    feedback.error(error, 'Could not add the pieces');
+    feedback.error(error, 'No se pudieron añadir las piezas');
   } finally {
     piecesBusy.value = false;
   }
@@ -322,10 +344,10 @@ async function removePiece(childId: number) {
   piecesBusy.value = true;
   try {
     await itemsService.detachChild(setId, childId);
-    feedback.success('Piece removed from the set');
+    feedback.success('Pieza quitada del conjunto');
     await loadData();
   } catch (error) {
-    feedback.error(error, 'Could not remove the piece');
+    feedback.error(error, 'No se pudo quitar la pieza');
   } finally {
     piecesBusy.value = false;
   }
@@ -342,12 +364,12 @@ async function loadConstants() {
       loadCatalogue(),
       constantsService.getByGroup('AttachmentType'),
     ]);
-    attachmentTypes.value = (attachmentTypeRows ?? []).map((row) => row.label);
+    attachmentTypes.value = (attachmentTypeRows ?? []).map(entryOf);
     // The catalogue names the rows of a blank item; a later refresh (a value added from the form)
     // must not go through here, or it would wipe what the user already typed.
     attributes.value = blankAttributes();
   } catch (error) {
-    feedback.error(error, 'Could not load the constants');
+    feedback.error(error, 'No se pudieron cargar las constantes');
   }
 }
 
@@ -361,40 +383,24 @@ async function loadAttachments(id: number) {
   try {
     attachments.value = (await attachmentsService.getAllByItemId(id)) ?? [];
   } catch (error) {
-    feedback.error(error, 'Could not load the attachments');
+    feedback.error(error, 'No se pudieron cargar los adjuntos');
   }
 }
 
-/** The stored attributes as a map, or null when the stored value is not a JSON object. */
-function readAttributes(raw: string | null | undefined): Record<string, string> | null {
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : null;
-  } catch {
-    return null;
-  }
-}
-
-/** One attribute of a record, for the decisions this page makes outside the form (is it a set?). */
-function attributeValue(raw: string | null | undefined, label: string): string {
-  return readAttributes(raw)?.[label] ?? '';
-}
-
-function parseAttributes(raw: string | null | undefined): Record<string, string> {
-  const parsed = readAttributes(raw);
-  if (parsed) return parsed;
-  // Rows written before the serializer existed can hold invalid JSON; the form must still open.
-  feedback.error('This item has malformed attributes; they were reset in the form.');
-  return {};
+/** One attribute of a record, by code, for the decisions this page makes outside the form. */
+function attributeValue(raw: string | null | undefined, code: string): string {
+  return readAttributeMap(raw)?.[code] ?? '';
 }
 
 function addAttachment() {
   attachments.value.push({
     id: 0,
     itemId: treeItem.value.id,
-    // Photos are the common case on a phone, and the type decides which picker opens.
-    type: attachmentTypes.value.includes('Photo') ? 'Photo' : null,
+    // Photos are the common case on a phone, and the type decides which picker opens. The default
+    // is the type's code: «Foto» in Configuration would still store `Photo`.
+    type: attachmentTypes.value.some((entry) => entry.code === PHOTO_TYPE_CODE)
+      ? PHOTO_TYPE_CODE
+      : null,
     fileName: null,
     file: null,
     previewUrl: null,
@@ -410,28 +416,23 @@ async function removeAttachment(index: number) {
     return;
   }
   const confirmed = await feedback.confirmDelete(
-    `Delete attachment "${row.fileName || row.id}"? This cannot be undone.`,
+    `¿Eliminar el adjunto «${row.fileName || row.id}»? No se puede deshacer.`,
   );
   if (!confirmed) return;
   try {
     await attachmentsService.delete(row.id);
-    feedback.success('Attachment deleted');
+    feedback.success('Adjunto eliminado');
     await loadAttachments(row.itemId);
   } catch (error) {
-    feedback.error(error, 'Could not delete the attachment');
+    feedback.error(error, 'No se pudo eliminar el adjunto');
   }
 }
 
 watch(
   attributes,
   () => {
-    // Build the payload with a serializer, never by string concatenation: a value containing a
-    // quote, backslash or newline used to produce invalid JSON that the API stored verbatim.
-    const record: Record<string, string> = {};
-    for (const attribute of attributes.value) {
-      if (attribute.label) record[attribute.label] = attribute.value ?? '';
-    }
-    treeItem.value.attributes = JSON.stringify(record);
+    // The payload is built from codes, so a label translated in Configuration moves nothing here.
+    treeItem.value.attributes = attributesJson(attributes.value);
   },
   { deep: true },
 );

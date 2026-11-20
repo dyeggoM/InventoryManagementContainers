@@ -274,14 +274,20 @@ public class ApiTests : ApiTestBase
         {
             Assert.That(attributes.Count, Is.GreaterThan(0));
             Assert.That(attributes.Select(a => a.GetProperty("label").GetString()).Distinct().Count(), Is.EqualTo(attributes.Count));
-            Assert.That(
-                attributes.Single(a => a.GetProperty("label").GetString() == "BuyPrice")
-                    .GetProperty("dataType").GetString(),
-                Is.EqualTo("Money"));
-            Assert.That(
-                attributes.Single(a => a.GetProperty("label").GetString() == "Description")
-                    .GetProperty("dataType").GetString(),
-                Is.EqualTo("LongText"));
+            // The API answers code and label: the code is the identity the stored data keys on,
+            // the label is the Spanish display text. They differ exactly where the seed translated.
+            var buyPrice = attributes.Single(a => a.GetProperty("code").GetString() == "BuyPrice");
+            Assert.Multiple(() =>
+            {
+                Assert.That(buyPrice.GetProperty("label").GetString(), Is.EqualTo("Precio de compra"));
+                Assert.That(buyPrice.GetProperty("dataType").GetString(), Is.EqualTo("Money"));
+            });
+            var description = attributes.Single(a => a.GetProperty("code").GetString() == "Description");
+            Assert.Multiple(() =>
+            {
+                Assert.That(description.GetProperty("label").GetString(), Is.EqualTo("Descripción"));
+                Assert.That(description.GetProperty("dataType").GetString(), Is.EqualTo("LongText"));
+            });
         });
     }
 

@@ -12,7 +12,7 @@ export function useFeedback() {
     $q.notify({ type: 'positive', message, timeout: 2000 });
   }
 
-  function error(err: unknown, fallback = 'Something went wrong') {
+  function error(err: unknown, fallback = 'Algo ha salido mal') {
     const message = getErrorMessage(err) || fallback;
     $q.notify({
       type: 'negative',
@@ -37,10 +37,10 @@ export function useFeedback() {
         }
       };
       $q.dialog({
-        title: 'Confirm deletion',
+        title: 'Confirmar eliminación',
         message,
-        cancel: { label: 'Cancel', flat: true },
-        ok: { label: 'Delete', color: 'negative', unelevated: true },
+        cancel: { label: 'Cancelar', flat: true },
+        ok: { label: 'Eliminar', color: 'negative', unelevated: true },
         persistent: true,
       })
         .onOk(() => done(true))
@@ -65,8 +65,8 @@ export function useFeedback() {
       const options: QDialogOptions = {
         title,
         prompt: { model: '', type: 'text', label },
-        cancel: { label: 'Cancel', flat: true },
-        ok: { label: 'Create', color: 'primary', unelevated: true },
+        cancel: { label: 'Cancelar', flat: true },
+        ok: { label: 'Crear', color: 'primary', unelevated: true },
         persistent: true,
       };
       if (message) options.message = message;
@@ -78,7 +78,7 @@ export function useFeedback() {
   }
 
   /** Resolves true when the user chooses to throw unsaved edits away. */
-  function confirmDiscard(message = 'Your edits were not saved.'): Promise<boolean> {
+  function confirmDiscard(message = 'Tus cambios no se guardaron.'): Promise<boolean> {
     return new Promise((resolve) => {
       let settled = false;
       const done = (value: boolean) => {
@@ -88,10 +88,10 @@ export function useFeedback() {
         }
       };
       $q.dialog({
-        title: 'Discard changes?',
+        title: '¿Descartar los cambios?',
         message,
-        cancel: { label: 'Keep editing', flat: true },
-        ok: { label: 'Discard', color: 'negative', unelevated: true },
+        cancel: { label: 'Seguir editando', flat: true },
+        ok: { label: 'Descartar', color: 'negative', unelevated: true },
         persistent: true,
       })
         .onOk(() => done(true))

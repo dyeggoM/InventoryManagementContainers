@@ -79,6 +79,13 @@ public static class DatabaseSeeder
         context.Database.ExecuteSqlRaw(File.ReadAllText(seedPath));
         context.Database.ExecuteSqlRaw($"UPDATE Constants SET TenantId = {OrganizationConfiguration.DefaultTenantId} WHERE \"Group\" NOT IN ('Organization', 'FieldType', 'AttachmentType')");
         context.Database.ExecuteSqlRaw(OrganizationConfiguration.CopySql);
+        // Same script the ConstantCodes migration runs on a database seeded before Code existed —
+        // it runs after the copy so the organizations CopySql creates go through it too. One source
+        // of truth, so a fresh database and an upgraded one end up with identical rows. A database
+        // still short of the Code column (a migration test seeding at an older revision) skips it:
+        // its migration carries the script and does the work there.
+        if (context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('Constants') WHERE name = 'Code'").Single() > 0)
+            context.Database.ExecuteSqlRaw(CatalogCodesSql.BackfillAndTranslate);
         return true;
     }
 
@@ -86,7 +93,9 @@ public static class DatabaseSeeder
     {
         var pending = await context.Constants.Where(c => c.Group == "Attribute" && c.ParentId != null && c.DataType == null).ToListAsync(cancellationToken);
         foreach (var attribute in pending)
-            attribute.DataType = attribute.Label switch { "BuyPrice" or "RentPrice" => "Money", "Description" or "Notes" => "LongText", _ => "Text" };
+            // The rule keys on the code, never on the label: labels are display text and this round
+            // made them Spanish ("Precio de compra"), while the code is the stable identity.
+            attribute.DataType = attribute.Code switch { "BuyPrice" or "RentPrice" => "Money", "Description" or "Notes" => "LongText", _ => "Text" };
         if (pending.Count > 0) await context.SaveChangesAsync(cancellationToken);
         return pending.Count;
     }

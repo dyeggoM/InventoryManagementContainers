@@ -87,38 +87,60 @@ public sealed class SubcategoryPlacement
     /// <summary>
     /// Reads the configuration so the importer can put a row where the application would have put it:
     /// the categories (`Group = Category`) and, under each one, the subcategories the workshop
-    /// actually uses. `Other` catches what the file has and the configuration does not.
+    /// actually uses. A subcategory belongs to the category its <c>ParentId</c> names — the seed
+    /// hangs every value from its category constant — with the row's <c>Group</c> spelling the
+    /// category's name as a fallback, because older rows may carry the parent link in that column
+    /// only. `Other` catches what the file has and the configuration does not; it is found by
+    /// code, so translating its label cannot lose the fallback.
     /// </summary>
     internal async Task<CategoryMap> LoadAsync(int organizationId, CancellationToken cancellationToken)
     {
         var rows = await _context.Constants.IgnoreQueryFilters().AsNoTracking()
             .Where(row => row.TenantId == organizationId && row.IsActive && row.Group != null)
-            .Select(row => new { row.Group, row.Label })
+            .Select(row => new { row.Id, row.Group, row.Label, row.Code, row.ParentId })
             .ToListAsync(cancellationToken);
 
-        var categoryLabels = rows
+        var categories = rows
             .Where(row => string.Equals(row.Group, "Category", StringComparison.OrdinalIgnoreCase))
-            .Select(row => row.Label)
-            .Where(label => !string.IsNullOrWhiteSpace(label))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(row => !string.IsNullOrWhiteSpace(row.Label))
             .ToList();
+        var categoryById = categories.ToDictionary(row => row.Id);
 
-        var byLabel = categoryLabels.ToDictionary(MatchKey, label => label, StringComparer.Ordinal);
+        // The file may name the category by its label ("Estuches") or by its code ("Cases" — the
+        // spelling historical sheets use): both keys resolve to the label the tree carries.
+        var byLabel = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in categories)
+        {
+            byLabel.TryAdd(MatchKey(row.Label), row.Label);
+            if (!string.IsNullOrWhiteSpace(row.Code)) byLabel.TryAdd(MatchKey(row.Code), row.Label);
+        }
 
-        // A subcategory row belongs to the category its Group names ("Hardware", "Sonido", …). The
-        // Category rows themselves are not values: they are the level above.
-        var subcategories = rows
-            .Where(row => !string.Equals(row.Group, "Category", StringComparison.OrdinalIgnoreCase))
-            .Where(row => byLabel.ContainsKey(MatchKey(row.Group)))
-            .Select(row => new CategoryValue(byLabel[MatchKey(row.Group)], Clean(row.Label), MatchKey(row.Label)))
-            .Where(value => value.Normalized.Length > 0)
-            .ToList();
-
+        // A subcategory row belongs to the category it hangs from (or, failing that, the category
+        // its Group names). The Category rows themselves are not values: they are the level above.
+        // The same subcategory is reachable by its label and by its code, since the file may spell
+        // either.
         var subs = new Dictionary<string, CategoryValue>(StringComparer.Ordinal);
-        foreach (var value in subcategories) subs.TryAdd(value.Normalized, value);
+        foreach (var row in rows.Where(row => !string.Equals(row.Group, "Category", StringComparison.OrdinalIgnoreCase)))
+        {
+            var category = row.ParentId is int parentId && categoryById.TryGetValue(parentId, out var parent)
+                ? parent.Label
+                : byLabel.TryGetValue(MatchKey(row.Group), out var named) ? named : null;
+            if (category is null) continue;
 
-        var fallback = categoryLabels.FirstOrDefault(label => MatchKey(label) == "OTHER")
-            ?? categoryLabels.FirstOrDefault()
+            var value = new CategoryValue(category, Clean(row.Label), MatchKey(row.Label));
+            if (value.Normalized.Length > 0) subs.TryAdd(value.Normalized, value);
+            if (!string.IsNullOrWhiteSpace(row.Code))
+            {
+                var codeKey = MatchKey(row.Code);
+                if (codeKey.Length > 0) subs.TryAdd(codeKey, value);
+            }
+        }
+
+        // The catch-all is named like its configuration row: the label the tree carries, found by
+        // code so translating it cannot lose the fallback.
+        var fallback = categories.Where(row => row.Code == "Other").Select(row => row.Label).FirstOrDefault()
+            ?? categories.Select(row => row.Label).FirstOrDefault(label => MatchKey(label) == "OTHER")
+            ?? categories.Select(row => row.Label).FirstOrDefault()
             ?? "Other";
 
         return new CategoryMap(subs, byLabel, fallback);

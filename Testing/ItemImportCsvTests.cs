@@ -49,11 +49,11 @@ public sealed class ItemImportCsvTests : ApiTestBase
                 "eight records, not nine: HARDWARE is a section title");
             Assert.That(summary.GetProperty("sections").GetInt32(), Is.EqualTo(1));
             Assert.That(summary.GetProperty("green").GetInt32(), Is.EqualTo(1));
-            Assert.That(summary.GetProperty("yellow").GetInt32(), Is.EqualTo(4),
-                "the ambiguous BASE rows, the unknown brand, no code and a description too short");
-            Assert.That(summary.GetProperty("red").GetInt32(), Is.EqualTo(3),
-                "no description, and both rows sharing one code");
-            Assert.That(summary.GetProperty("importable").GetInt32(), Is.EqualTo(5));
+            Assert.That(summary.GetProperty("yellow").GetInt32(), Is.EqualTo(3),
+                "the ambiguous BASE rows, no code and a description too short");
+            Assert.That(summary.GetProperty("red").GetInt32(), Is.EqualTo(4),
+                "no description, both rows sharing one code, and the brand the catalogue does not know");
+            Assert.That(summary.GetProperty("importable").GetInt32(), Is.EqualTo(4));
         });
     }
 
@@ -119,7 +119,7 @@ public sealed class ItemImportCsvTests : ApiTestBase
             "a CSV has no sheet names, and its file name is not a category either");
         Assert.That(sheets, Has.Count.EqualTo(1),
             "the row's subcategory is not in the configuration, so it lands in the one category that catches those");
-        Assert.That(sheets[0].GetProperty("name").GetString(), Is.EqualTo("Other"));
+        Assert.That(sheets[0].GetProperty("name").GetString(), Is.EqualTo("Otros"));
         Assert.That(sheets[0].GetProperty("groups").EnumerateArray().Single().GetProperty("note").GetString(),
             Does.Contain("no está en la configuración"), "and the preview says why it went there");
     }
@@ -185,23 +185,23 @@ public sealed class ItemImportCsvWriteTests : ApiTestBase
         Assert.Multiple(() =>
         {
             Assert.That(result.GetProperty("createdSheets").GetInt32(), Is.EqualTo(3),
-                "Hardware, Amplifiers and Cymbals — the categories the rows belong to");
+                "Herrajes, Amplificadores and Platillos — the categories the rows belong to");
             Assert.That(result.GetProperty("createdGroups").GetInt32(), Is.EqualTo(3),
                 "BASE, GTR-COMBO and HIHAT: ATRIL only held rows that were red");
-            Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(5),
-                "one green and four yellow");
-            Assert.That(result.GetProperty("skippedRed").GetInt32(), Is.EqualTo(3));
+            Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(4),
+                "one green and three yellow");
+            Assert.That(result.GetProperty("skippedRed").GetInt32(), Is.EqualTo(4));
         });
 
         var tree = await Client.GetFromJsonAsync<JsonElement>("/api/item", Json);
         var roots = tree.GetProperty("tree").EnumerateArray()
             .Select(node => node.GetProperty("label").GetString()!)
             .ToList();
-        Assert.That(roots, Is.EquivalentTo(new[] { "Hardware", "Amplifiers", "Cymbals" }),
+        Assert.That(roots, Is.EquivalentTo(new[] { "Herrajes", "Amplificadores", "Platillos" }),
             "the roots are the categories, not the file name");
 
         Assert.That(tree.GetProperty("tree").EnumerateArray()
-                .Single(node => node.GetProperty("label").GetString() == "Amplifiers")
+                .Single(node => node.GetProperty("label").GetString() == "Amplificadores")
                 .GetProperty("children").EnumerateArray()
                 .Select(child => child.GetProperty("label").GetString()),
             Is.EqualTo(new[] { "GTR-COMBO" }),

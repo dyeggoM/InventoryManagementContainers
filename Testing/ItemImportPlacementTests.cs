@@ -34,20 +34,20 @@ public sealed class ItemImportPlacementTests : ApiTestBase
 
         Assert.Multiple(() =>
         {
-            Assert.That(tree.Keys, Is.EquivalentTo(new[] { "Hardware", "Sonido", "Cases", "Other" }),
+            Assert.That(tree.Keys, Is.EquivalentTo(new[] { "Herrajes", "Sonido", "Estuches", "Otros" }),
                 "the sheet names are gone: the categories of the configuration are the roots");
 
-            Assert.That(tree["Hardware"].Keys, Is.EquivalentTo(new[] { "BASE TECLADO SENCILLA", "BASE CONGA DOBLE" }),
+            Assert.That(tree["Herrajes"].Keys, Is.EquivalentTo(new[] { "BASE TECLADO SENCILLA", "BASE CONGA DOBLE" }),
                 "an exact subcategory keeps its name; a truncated one is completed from Constants");
-            Assert.That(tree["Hardware"]["BASE TECLADO SENCILLA"], Is.EqualTo(new[] { "BASE TECLADO YAMAHA P45" }));
+            Assert.That(tree["Herrajes"]["BASE TECLADO SENCILLA"], Is.EqualTo(new[] { "BASE TECLADO YAMAHA P45" }));
 
             Assert.That(tree["Sonido"].Keys, Is.EqualTo(new[] { "MICROFONOS" }),
                 "«MICROFONO» is the singular of the configuration's MICROFONOS");
 
-            Assert.That(tree["Cases"].Keys, Is.EqualTo(new[] { "Cases" }),
+            Assert.That(tree["Estuches"].Keys, Is.EqualTo(new[] { "Estuches" }),
                 "a subcategory that is itself a category hangs the element directly off it");
 
-            Assert.That(tree["Other"].Keys, Is.EquivalentTo(new[] { "UPS", "INVENTO NUEVO" }),
+            Assert.That(tree["Otros"].Keys, Is.EquivalentTo(new[] { "UPS", "INVENTO NUEVO" }),
                 "an extended name lands on the configuration's UPS; an unknown one lands in Other, named as it came");
         });
     }
@@ -102,11 +102,11 @@ public sealed class ItemImportPlacementTests : ApiTestBase
         Assert.Multiple(() =>
         {
             Assert.That(tree.ContainsKey("Other"), Is.False, "nothing here belongs in the catch-all");
-            Assert.That(tree["Hardware"].ContainsKey("SILLA BATERIA"), Is.True,
+            Assert.That(tree["Herrajes"].ContainsKey("SILLA BATERIA"), Is.True,
                 "SILLA BATERÍA is the same shelf as SILLA BATERIA");
-            Assert.That(tree["Hardware"].ContainsKey("PEDAL DOBLE BATERIA"), Is.True,
+            Assert.That(tree["Herrajes"].ContainsKey("PEDAL DOBLE BATERIA"), Is.True,
                 "and the accented pedal is the configured pedal");
-            Assert.That(tree["Hardware"].ContainsKey("BASE TECLADO SENCILLA"), Is.True,
+            Assert.That(tree["Herrajes"].ContainsKey("BASE TECLADO SENCILLA"), Is.True,
                 "the file's TECALDO is still corrected to the configured label");
         });
     }
@@ -123,10 +123,10 @@ public sealed class ItemImportPlacementTests : ApiTestBase
 
         foreach (var (source, label, category) in new[]
         {
-            ("CONGA03", "CONGA", "Percusion"),
-            ("TUMBADORA03", "TUMBADORA", "Percusion"),
-            ("TRIGER", "TRIGGER", "Instruments"),
-            ("BAJO ELECTROACUSTICO", "BAJO ELECTRO-ACUSTICO", "Instruments"),
+            ("CONGA03", "CONGA", "Percusión"),
+            ("TUMBADORA03", "TUMBADORA", "Percusión"),
+            ("TRIGER", "TRIGGER", "Instrumentos"),
+            ("BAJO ELECTROACUSTICO", "BAJO ELECTRO-ACUSTICO", "Instrumentos"),
         })
         {
             var (destination, group) = groups[label];
@@ -151,7 +151,7 @@ public sealed class ItemImportPlacementTests : ApiTestBase
         {
             Assert.Multiple(() =>
             {
-                Assert.That(groups[source].Category, Is.EqualTo("Other"));
+                Assert.That(groups[source].Category, Is.EqualTo("Otros"));
                 Assert.That(groups[source].Group.TryGetProperty("suggestion", out var suggestion)
                     ? suggestion.ValueKind == JsonValueKind.Null : true, Is.True);
             });
@@ -163,7 +163,7 @@ public sealed class ItemImportPlacementTests : ApiTestBase
             Assert.That(atril.Group.TryGetProperty("suggestion", out var atrilSuggestion)
                 ? atrilSuggestion.ValueKind == JsonValueKind.Null : true, Is.True,
                 "the competing whole-word candidates ATRIL and CONGA do not justify a proposal");
-            Assert.That(groups["BASE TECLADO SENCILLA"].Category, Is.EqualTo("Hardware"));
+            Assert.That(groups["BASE TECLADO SENCILLA"].Category, Is.EqualTo("Herrajes"));
             Assert.That(groups["BASE TECLADO SENCILLA"].Group.GetProperty("status").GetString(), Is.EqualTo("green"));
             Assert.That(groups["BASE TECLADO SENCILLA"].Group.TryGetProperty("suggestion", out var suggestion)
                 ? suggestion.ValueKind == JsonValueKind.Null : true, Is.True);
@@ -182,10 +182,10 @@ public sealed class ItemImportPlacementTests : ApiTestBase
         var items = await context.Items.IgnoreQueryFilters().ToListAsync();
         foreach (var (label, group, category) in new[]
         {
-            ("CONGA DE PRUEBA", "CONGA", "Percusion"),
-            ("TUMBADORA DE PRUEBA", "TUMBADORA", "Percusion"),
-            ("TRIGGER DE PRUEBA", "TRIGGER", "Instruments"),
-            ("BAJO DE PRUEBA", "BAJO ELECTRO-ACUSTICO", "Instruments"),
+            ("CONGA DE PRUEBA", "CONGA", "Percusión"),
+            ("TUMBADORA DE PRUEBA", "TUMBADORA", "Percusión"),
+            ("TRIGGER DE PRUEBA", "TRIGGER", "Instrumentos"),
+            ("BAJO DE PRUEBA", "BAJO ELECTRO-ACUSTICO", "Instrumentos"),
         })
         {
             var item = items.Single(row => row.Label == label);
@@ -221,20 +221,20 @@ public sealed class ItemImportPlacementTests : ApiTestBase
 
         Assert.Multiple(() =>
         {
-            Assert.That(items.Any(item => item.Label == "Hardware" && item.ParentId == null), Is.True,
+            Assert.That(items.Any(item => item.Label == "Herrajes" && item.ParentId == null), Is.True,
                 "the category is a root");
-            Assert.That(items.Any(item => item.Label == "BASE TECLADO SENCILLA" && ParentOf("BASE TECLADO SENCILLA") == "Hardware"),
+            Assert.That(items.Any(item => item.Label == "BASE TECLADO SENCILLA" && ParentOf("BASE TECLADO SENCILLA") == "Herrajes"),
                 Is.True, "the subcategory hangs off its category");
             Assert.That(ParentOf("BASE TECLADO YAMAHA P45"), Is.EqualTo("BASE TECLADO SENCILLA"),
                 "and the element off the subcategory");
             Assert.That(ParentOf("TORRE CONGA DOBLE"), Is.EqualTo("BASE CONGA DOBLE"));
             Assert.That(ParentOf("MICROFONO DE MANO"), Is.EqualTo("MICROFONOS"));
-            Assert.That(items.Any(item => item.Label == "Cases" && item.ParentId == null), Is.True);
+            Assert.That(items.Any(item => item.Label == "Estuches" && item.ParentId == null), Is.True);
             // A case's category has no subcategories of its own: the record hangs off the root, not off
             // a group named like its parent.
-            Assert.That(ParentOf("ESTUCHE GRANDE"), Is.EqualTo("Cases"),
+            Assert.That(ParentOf("ESTUCHE GRANDE"), Is.EqualTo("Estuches"),
                 "a subcategory that is the category itself is not created twice");
-            Assert.That(items.Count(item => item.Label == "Cases"), Is.EqualTo(1));
+            Assert.That(items.Count(item => item.Label == "Estuches"), Is.EqualTo(1));
 
             Assert.That(items.Any(item => item.Label is "BACKLINE" or "SONIDO" or "OTROS"), Is.False,
                 "the spreadsheet's sheets never become roots");

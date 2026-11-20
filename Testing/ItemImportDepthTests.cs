@@ -80,7 +80,7 @@ public sealed class ItemImportDepthBoundTests : ApiTestBase
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(6));
+            Assert.That(result.GetProperty("createdItems").GetInt32(), Is.EqualTo(5));
             Assert.That(result.GetProperty("createdSheets").GetInt32(), Is.EqualTo(4));
             Assert.That(result.GetProperty("createdGroups").GetInt32(), Is.EqualTo(4));
         });

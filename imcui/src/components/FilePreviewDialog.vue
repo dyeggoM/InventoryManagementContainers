@@ -6,9 +6,9 @@
     transition-hide="fade"
   >
     <!-- The card is what the dialog shows, and it is the element that reaches the DOM inside the
-         portal: the dialog itself is a teleport, so `lang` goes here. Every string in it is Spanish
-         («Descargar», «Cerrar», «Cargando el archivo…»), the title excepted, which is a file name. -->
-    <q-card class="preview-card column no-wrap" lang="es">
+         portal. Every string in it is Spanish («Descargar», «Cerrar», «Cargando el archivo…»), the
+         title excepted, which is a file name; the document's own language covers it. -->
+    <q-card class="preview-card column no-wrap">
       <q-toolbar class="preview-header q-px-md">
         <q-toolbar-title class="column">
           <span class="text-subtitle1 text-weight-medium ellipsis">{{ title }}</span>

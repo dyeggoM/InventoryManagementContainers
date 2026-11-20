@@ -295,7 +295,7 @@ public sealed class SecurityRegressionTests : ApiTestBase
         {
             live.ServiceProvider.GetRequiredService<TenantScope>().SelectSystemTenant(900002);
             var liveContext = live.ServiceProvider.GetRequiredService<ApplicationContext>();
-            var foreign = new Constants { Group = "Brand", Label = foreignLabel, TenantId = 900002 };
+            var foreign = new Constants { Group = "Brand", Label = foreignLabel, Code = foreignLabel, TenantId = 900002 };
             liveContext.Constants.Add(foreign);
             await liveContext.SaveChangesAsync();
             foreignId = foreign.Id;
@@ -371,7 +371,7 @@ public sealed class SecurityRegressionTests : ApiTestBase
         using (var scope = PersonaScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-            context.Constants.Add(new Constants { Group = "AttachmentType", Label = label, TenantId = 0 });
+            context.Constants.Add(new Constants { Group = "AttachmentType", Label = label, Code = label, TenantId = 0 });
             await context.SaveChangesAsync();
             id = await context.Constants.IgnoreQueryFilters().Where(row => row.Label == label).Select(row => row.Id).SingleAsync();
         }

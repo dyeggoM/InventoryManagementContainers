@@ -357,14 +357,14 @@ public sealed class ItemSetTests : ApiTestBase
     {
         using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-        var roots = await db.Constants.IgnoreQueryFilters().Where(row => row.Group == "Type" && row.Label == "Type")
+        var roots = await db.Constants.IgnoreQueryFilters().Where(row => row.Group == "Type" && row.Code == "Type")
             .ToDictionaryAsync(row => row.TenantId, row => row.Id);
         var kinds = await db.Constants.IgnoreQueryFilters().Where(row => row.Group == "Type"
-            && (row.Label == "Set" || row.Label == "Accessory"))
+            && (row.Code == "Set" || row.Code == "Accessory"))
             .OrderBy(row => row.TenantId).ThenBy(row => row.Label).ToListAsync();
         foreach (var tenant in new[] { Persona, LiveRoom, 900003 })
         {
-            Assert.That(kinds.Where(row => row.TenantId == tenant).Select(row => row.Label),
+            Assert.That(kinds.Where(row => row.TenantId == tenant).Select(row => row.Code),
                 Is.EquivalentTo(new[] { "Set", "Accessory" }));
             Assert.That(kinds.Where(row => row.TenantId == tenant).Select(row => row.ParentId),
                 Is.All.EqualTo(roots[tenant]));
@@ -396,7 +396,7 @@ public sealed class ItemSetTests : ApiTestBase
             Assert.That(DatabaseSeeder.SeedConfiguration(db, contentRoot), Is.True);
             foreach (var tenant in new[] { Persona, LiveRoom, 900003 })
                 Assert.That(db.Constants.IgnoreQueryFilters().Count(row => row.TenantId == tenant
-                    && row.Group == "Type" && (row.Label == "Set" || row.Label == "Accessory")), Is.EqualTo(2));
+                    && row.Group == "Type" && (row.Code == "Set" || row.Code == "Accessory")), Is.EqualTo(2));
             Assert.That(DatabaseSeeder.SeedConfiguration(db, contentRoot), Is.False);
         }
         finally
@@ -428,11 +428,11 @@ public sealed class ItemSetTests : ApiTestBase
             foreach (var tenant in new[] { Persona, LiveRoom, 900003 })
             {
                 var labels = db.Constants.IgnoreQueryFilters().Where(row => row.TenantId == tenant
-                    && row.Group == "Type" && (row.Label == "Set" || row.Label == "Accessory"))
+                    && row.Group == "Type" && (row.Code == "Set" || row.Code == "Accessory"))
                     .OrderBy(row => row.Label).Select(row => row.Label).ToArray();
                 TestContext.Out.WriteLine($"existing catalog + migration SELECT Label FROM Constants WHERE \"Group\"='Type' AND TenantId={tenant} AND Label IN ('Set','Accessory'): " + JsonSerializer.Serialize(labels));
                 Assert.That(db.Constants.IgnoreQueryFilters().Count(row => row.TenantId == tenant
-                    && row.Group == "Type" && (row.Label == "Set" || row.Label == "Accessory")), Is.EqualTo(2));
+                    && row.Group == "Type" && (row.Code == "Set" || row.Code == "Accessory")), Is.EqualTo(2));
             }
             var duplicates = db.Database.SqlQueryRaw<int>("""
                 SELECT COUNT(*) AS Value FROM Constants WHERE "Group" = 'Type'

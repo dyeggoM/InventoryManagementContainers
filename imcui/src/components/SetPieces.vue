@@ -1,14 +1,14 @@
 <template>
   <div class="imc-section set-pieces">
     <div class="row items-center justify-between q-mb-xs">
-      <div class="imc-section__title q-mb-none">Pieces</div>
+      <div class="imc-section__title q-mb-none">Piezas</div>
       <q-btn
         v-if="!readonly"
         flat
         no-caps
         dense
         icon="playlist_add"
-        label="Add pieces"
+        label="Añadir piezas"
         color="primary"
         type="button"
         :disable="busy"
@@ -17,7 +17,8 @@
     </div>
 
     <div v-if="pieces.length === 0" class="text-caption text-grey-7">
-      No pieces yet — this set is an item like any other, and its pieces are the items below it.
+      Todavía no hay piezas: un conjunto es un ítem como cualquier otro, y sus piezas son los ítems
+      que cuelgan de él.
     </div>
 
     <div v-else class="set-pieces__list">
@@ -37,7 +38,7 @@
           icon="remove_circle_outline"
           color="grey-6"
           type="button"
-          :aria-label="`Remove ${piece.label} from the set`"
+          :aria-label="`Quitar ${piece.label} del conjunto`"
           :disable="busy"
           @click="emit('remove', piece.id)"
         />
@@ -57,8 +58,8 @@
     >
       <q-card class="picker-card column no-wrap">
         <q-toolbar class="picker-header q-px-md">
-          <q-toolbar-title class="text-subtitle1 text-weight-medium">Add pieces</q-toolbar-title>
-          <q-btn icon="close" flat round dense aria-label="Close" @click="picker = false" />
+          <q-toolbar-title class="text-subtitle1 text-weight-medium">Añadir piezas</q-toolbar-title>
+          <q-btn icon="close" flat round dense aria-label="Cerrar" @click="picker = false" />
         </q-toolbar>
 
         <q-card-section class="q-pt-md q-pb-sm">
@@ -67,8 +68,8 @@
             dense
             outlined
             clearable
-            placeholder="Search"
-            aria-label="Search pieces"
+            placeholder="Buscar"
+            aria-label="Buscar piezas"
             autofocus
           >
             <template v-slot:prepend>
@@ -76,16 +77,17 @@
             </template>
           </q-input>
           <div v-if="query" class="text-caption text-grey-7 q-mt-xs">
-            {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
+            {{ matchCount }} {{ matchCount === 1 ? 'coincidencia' : 'coincidencias' }}
           </div>
         </q-card-section>
 
         <q-card-section class="col picker-list">
           <div v-if="candidates.length === 0" class="text-grey-7 q-pa-sm">
-            Nothing left to add: every item already belongs to a set. Remove one from its set first.
+            No queda nada que añadir: todos los ítems pertenecen ya a un conjunto. Quita alguno de
+            su conjunto primero.
           </div>
           <div v-else-if="visible.length === 0" class="text-grey-7 q-pa-sm">
-            Nothing matches “{{ query }}”.
+            Nada coincide con «{{ query }}».
           </div>
           <q-item v-for="node in visible" :key="node.id" tag="label" clickable class="picker-row">
             <q-item-section side top>
@@ -94,7 +96,7 @@
             <q-item-section>
               <q-item-label class="ellipsis">{{ node.label }}</q-item-label>
               <q-item-label v-if="node.match" caption class="ellipsis">
-                {{ prettyLabel(node.match.label) }} · {{ shortValue(node.match.value) }}
+                {{ labelFor(node.match.code) }} · {{ shortValue(node.match.value) }}
               </q-item-label>
               <q-item-label v-else-if="detail(node)" caption class="ellipsis">
                 {{ detail(node) }}
@@ -104,9 +106,11 @@
         </q-card-section>
 
         <div class="picker-actions row items-center q-px-md q-py-sm">
-          <span class="text-caption text-grey-7">{{ chosen.length }} selected</span>
+          <span class="text-caption text-grey-7"
+            >{{ chosen.length }} {{ chosen.length === 1 ? 'seleccionada' : 'seleccionadas' }}</span
+          >
           <q-space />
-          <q-btn flat no-caps label="Cancel" @click="picker = false" />
+          <q-btn flat no-caps label="Cancelar" @click="picker = false" />
           <q-btn
             unelevated
             no-caps
@@ -149,8 +153,13 @@ const props = withDefaults(
     readonly?: boolean;
     /** A request is in flight: the two writes wait for it instead of racing. */
     busy?: boolean;
+    /**
+     * Turns an attribute code into the text the picker shows under a candidate («Brand» → «Marca»).
+     * The page passes its catalogue's; without one the code is read as words.
+     */
+    attributeLabel?: ((code: string) => string) | undefined;
   }>(),
-  { readonly: false, busy: false },
+  { readonly: false, busy: false, attributeLabel: undefined },
 );
 
 const emit = defineEmits<{
@@ -173,15 +182,20 @@ const searchable = computed<TreeEntry[]>(() =>
   })),
 );
 
+/** The label of an attribute code; see the `attributeLabel` prop. */
+function labelFor(code: string): string {
+  return props.attributeLabel ? props.attributeLabel(code) : prettyLabel(code);
+}
+
 const visible = computed<TreeEntry[]>(() => {
   const needle = query.value.trim().toLowerCase();
-  return needle ? filterTree(searchable.value, needle) : searchable.value;
+  return needle ? filterTree(searchable.value, needle, labelFor) : searchable.value;
 });
 
 const matchCount = computed(() => countMatches(visible.value));
 
 const confirmLabel = computed(() =>
-  chosen.value.length === 1 ? 'Add 1 piece' : `Add ${chosen.value.length} pieces`,
+  chosen.value.length === 1 ? 'Añadir 1 pieza' : `Añadir ${chosen.value.length} piezas`,
 );
 
 function openPicker() {

@@ -13,8 +13,9 @@
     :empty-message="emptyMessage"
     :dirty="isDirty"
     :readonly="!canWrite"
-    entity-label="Constant"
+    entity-label="Constante"
     :entry-label="treeItem.label"
+    create-label="Nueva constante"
     @select="selectData"
     @create="createEntry"
     @submit="submitDialog"
@@ -24,24 +25,24 @@
   >
     <div class="imc-section">
       <div class="row items-center justify-between q-mb-xs">
-        <div class="imc-section__title q-mb-none">Details</div>
+        <div class="imc-section__title q-mb-none">Detalles</div>
         <q-btn
           v-if="treeItem.id > 0 && canWrite"
           flat
           no-caps
           icon="add"
-          label="Add child constant"
+          label="Añadir constante hija"
           color="primary"
           class="q-mb-xs"
           @click="createChildEntry"
         />
       </div>
-      <q-input label="Name" v-model="treeItem.label" :readonly="!canWrite" :rules="[labelRule]" />
+      <q-input label="Nombre" v-model="treeItem.label" :readonly="!canWrite" :rules="[labelRule]" />
       <q-select
-        label="Parent"
+        label="Padre"
         v-model="treeItem.parentId"
         :options="parentOptions()"
-        :display-value="treeItem.parentId == null ? 'No parent' : undefined"
+        :display-value="treeItem.parentId == null ? 'Sin padre' : undefined"
         :readonly="!canWrite"
         map-options
         emit-value
@@ -50,11 +51,11 @@
     </div>
 
     <div class="imc-section">
-      <div class="imc-section__title">Definition</div>
-      <q-input label="Group" v-model="treeItem.group" :readonly="!canWrite" />
+      <div class="imc-section__title">Definición</div>
+      <q-input label="Grupo" v-model="treeItem.group" :readonly="!canWrite" />
       <q-input
         dense
-        label="Description"
+        label="Descripción"
         v-model="treeItem.description"
         :readonly="!canWrite"
         type="textarea"
@@ -64,19 +65,16 @@
       <q-select
         v-if="isAttributeDefinition"
         dense
-        label="Data type"
+        label="Tipo de dato"
         v-model="treeItem.dataType"
         :options="dataTypes"
         :hint="typeHint"
         :readonly="!canWrite"
+        map-options
+        emit-value
         class="q-mt-md"
       />
-      <q-input
-        label="Sort order"
-        v-model="treeItem.sortOrder"
-        :readonly="!canWrite"
-        class="q-mt-md"
-      />
+      <q-input label="Orden" v-model="treeItem.sortOrder" :readonly="!canWrite" class="q-mt-md" />
     </div>
   </tree-master-detail>
 </template>
@@ -105,25 +103,37 @@ const blank = (): Constants => ({
   parent: undefined,
 });
 
-const dataTypes = ['Text', 'Number', 'Money', 'Date', 'LongText'];
+/** The stored values are the API's vocabulary; only what the user reads is Spanish. */
+const dataTypes = [
+  { label: 'Texto', value: 'Text' },
+  { label: 'Número', value: 'Number' },
+  { label: 'Importe', value: 'Money' },
+  { label: 'Fecha', value: 'Date' },
+  { label: 'Texto largo', value: 'LongText' },
+];
 
-/** Only a child of the Attribute group describes an item field, so only it has a data type. */
+/**
+ * Only a child of the Attribute group describes an item field, so only it has a data type. The
+ * group is an identity, not a word on the screen: Configuration can call that node «Atributo».
+ */
+const ATTRIBUTE_GROUP_CODE = 'Attribute';
 const isAttributeDefinition = computed(
-  () => treeItem.value.group === 'Attribute' && (treeItem.value.parentId ?? 0) > 0,
+  () => treeItem.value.group === ATTRIBUTE_GROUP_CODE && (treeItem.value.parentId ?? 0) > 0,
 );
 
+/** The stored data type, not its label: the select shows «Importe» and the value is `Money`. */
 const typeHint = computed(() => {
   switch (treeItem.value.dataType) {
     case 'Money':
-      return 'Whole numbers, shown with separators and a decimal keypad on phones.';
+      return 'Números enteros, con separadores y teclado decimal en el móvil.';
     case 'Number':
-      return 'Digits and one decimal separator.';
+      return 'Dígitos y un separador decimal.';
     case 'Date':
-      return 'Picked from the calendar instead of typed.';
+      return 'Se elige en el calendario en vez de escribirse.';
     case 'LongText':
-      return 'A paragraph, edited in a text box.';
+      return 'Un párrafo, editado en un cuadro de texto.';
     default:
-      return 'Any text, exactly as typed.';
+      return 'Cualquier texto, tal cual se escribe.';
   }
 });
 
@@ -152,12 +162,11 @@ const {
   parentOptions,
 } = useTreeEditor<Constants>({
   service: constantsService,
-  addNew: () => ({ ...blank(), label: 'Add New' }),
+  addNew: () => ({ ...blank(), label: 'Nueva constante' }),
   blank,
   flatten: (nodes) => constantsService.flattenConstants(nodes),
-  entity: 'constant',
-  emptyMessage: 'No constants yet',
-  deleteHint: 'Its children are deleted with it.',
+  emptyMessage: 'Todavía no hay constantes',
+  deleteHint: 'Sus constantes hijas se eliminan con ella.',
   splitter: 30,
   // Only the entry: a constant is a name, an icon and a parent.
   dirtySnapshot: (entry) => JSON.stringify(entry),

@@ -1,21 +1,38 @@
 import type { TreeEntry } from '../composables/useTreeEditor';
 
-/** The attribute that made a record match, shown under its name. */
+/**
+ * The attribute that made a record match, shown under its name. `code` is what the item stores;
+ * the row displays the label the caller resolves for it.
+ */
 export interface MatchedPair {
-  label: string;
+  code: string;
   value: string;
 }
 
-/** Keys are compared with punctuation removed, so "buy price" finds BuyPrice. */
+/**
+ * Keys are compared with accents and punctuation removed, so "buy price" finds BuyPrice and
+ * "numero de serie" finds «Número de serie»: a person does not type the accent either.
+ */
 function normalizeKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
 /**
- * The first attribute whose key or value contains the needle. Values match as plain substrings; a
- * key matches with punctuation and spacing ignored, because a person types "buy price" for BuyPrice.
+ * The first attribute whose key or label, or whose value, contains the needle.
+ *
+ * Values match as plain substrings. A key matches with punctuation and spacing ignored, because a
+ * person types "buy price" for BuyPrice — and the **label** matches too, which is what makes the
+ * search work in the language of the screen: «marca» finds `Brand` when the caller resolves labels.
  */
-export function attributeMatch(node: TreeEntry, needle: string): MatchedPair | null {
+export function attributeMatch(
+  node: TreeEntry,
+  needle: string,
+  attributeLabel?: (code: string) => string,
+): MatchedPair | null {
   if (!node.attributes) return null;
 
   let parsed: unknown;
@@ -30,7 +47,7 @@ export function attributeMatch(node: TreeEntry, needle: string): MatchedPair | n
 
   const needleKey = normalizeKey(needle);
   const needleValue = needle.toLowerCase();
-  for (const [key, raw] of Object.entries(parsed as Record<string, unknown>)) {
+  for (const [code, raw] of Object.entries(parsed as Record<string, unknown>)) {
     // Only scalars are searchable: an object would stringify to "[object Object]".
     const value =
       typeof raw === 'string'
@@ -39,9 +56,12 @@ export function attributeMatch(node: TreeEntry, needle: string): MatchedPair | n
           ? String(raw)
           : '';
 
-    const keyHit = needleKey.length > 0 && normalizeKey(key).includes(needleKey);
+    const label = attributeLabel?.(code) ?? '';
+    const keyHit =
+      needleKey.length > 0 &&
+      (normalizeKey(code).includes(needleKey) || normalizeKey(label).includes(needleKey));
     if (keyHit || value.toLowerCase().includes(needleValue)) {
-      return { label: key, value };
+      return { code, value };
     }
   }
 
@@ -52,14 +72,18 @@ export function attributeMatch(node: TreeEntry, needle: string): MatchedPair | n
  * Keeps the records that match and the parents needed to reach them. A node that only survives
  * because a child matched is flagged `hit: false`, so the count does not inflate.
  */
-export function filterTree(nodes: TreeEntry[], needle: string): TreeEntry[] {
+export function filterTree(
+  nodes: TreeEntry[],
+  needle: string,
+  attributeLabel?: (code: string) => string,
+): TreeEntry[] {
   const result: TreeEntry[] = [];
   const needleValue = needle.toLowerCase();
 
   for (const node of nodes) {
-    const children = filterTree(node.children ?? [], needle);
+    const children = filterTree(node.children ?? [], needle, attributeLabel);
     const byLabel = node.label.toLowerCase().includes(needleValue);
-    const match = byLabel ? null : attributeMatch(node, needle);
+    const match = byLabel ? null : attributeMatch(node, needle, attributeLabel);
 
     if (byLabel || children.length > 0 || match) {
       result.push({ ...node, children, match, hit: byLabel || match !== null });

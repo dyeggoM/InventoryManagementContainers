@@ -7,6 +7,7 @@ import ImportPanel from './ImportPanel.vue';
 import AttributeEditor from '../AttributeEditor.vue';
 import { ApiError } from '@services/api';
 import type { Attributes } from '@services/items';
+import type * as ConstantsModule from '@services/constants';
 import type {
   ImportCorrection,
   ImportOutcome,
@@ -35,13 +36,19 @@ vi.mock('@services/import', async (importOriginal) => {
   return { ...actual, importService: { preview: mocks.preview, run: mocks.run } };
 });
 
-vi.mock('@services/constants', () => ({
-  constantsService: {
-    getByGroup: mocks.getByGroup,
-    getAll: mocks.getAll,
-    create: mocks.createConstant,
-  },
-}));
+vi.mock('@services/constants', async (importOriginal) => {
+  // `codeOf`/`entryOf` stay real: they are the rule that reads a code out of a constant, and
+  // mocking them would test the mock instead of the panel.
+  const actual = await importOriginal<typeof ConstantsModule>();
+  return {
+    ...actual,
+    constantsService: {
+      getByGroup: mocks.getByGroup,
+      getAll: mocks.getAll,
+      create: mocks.createConstant,
+    },
+  };
+});
 
 vi.mock('../../composables/useFeedback', () => ({
   useFeedback: () => ({
@@ -541,9 +548,9 @@ function attributeRows(wrapper: VueWrapper): Attributes[] {
     .modelValue;
 }
 
-/** One attribute row's value, by its label. */
-function attributeRow(rows: Attributes[], label: string): string | undefined {
-  return rows.find((row) => row.label === label)?.value;
+/** One attribute row's value, by the code the item stores. */
+function attributeRow(rows: Attributes[], code: string): string | undefined {
+  return rows.find((row) => row.code === code)?.value;
 }
 
 /** Replaces the attribute rows the way the editor does: it emits the model it was given. */
@@ -553,8 +560,8 @@ async function setAttributeRows(wrapper: VueWrapper, rows: Attributes[]): Promis
 }
 
 /** Types one attribute's value, leaving the rest of the rows as they were. */
-async function setAttribute(wrapper: VueWrapper, label: string, value: string): Promise<void> {
-  const rows = attributeRows(wrapper).map((row) => (row.label === label ? { ...row, value } : row));
+async function setAttribute(wrapper: VueWrapper, code: string, value: string): Promise<void> {
+  const rows = attributeRows(wrapper).map((row) => (row.code === code ? { ...row, value } : row));
   await setAttributeRows(wrapper, rows);
 }
 
@@ -1443,7 +1450,7 @@ describe('ImportPanel — correcting a row', () => {
     // Configuration's labels first, then the seven the importer derives — a code the file writes is
     // an attribute the form has to be able to reach. `Description` is absent because the name field
     // above the form already is it: two fields for one cell can only disagree.
-    expect(attributeRows(wrapper).map((row) => row.label)).toEqual([
+    expect(attributeRows(wrapper).map((row) => row.code)).toEqual([
       'Brand',
       'Notes',
       'Category',
@@ -1486,7 +1493,7 @@ describe('ImportPanel — correcting a row', () => {
 
     await setAttributeRows(wrapper, [
       ...attributeRows(wrapper),
-      { label: 'Estado', value: 'Bueno' },
+      { code: 'Estado', value: 'Bueno' },
     ]);
     await button(wrapper, 'Guardar').trigger('click');
     await flushPromises();

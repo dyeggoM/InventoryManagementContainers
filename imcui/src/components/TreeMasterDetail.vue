@@ -19,8 +19,8 @@
               dense
               outlined
               clearable
-              placeholder="Search"
-              :aria-label="`Search ${entityLabel.toLowerCase()}s`"
+              placeholder="Buscar"
+              :aria-label="`Buscar ${entityLabel.toLowerCase()}s`"
               class="col"
             >
               <template v-slot:prepend>
@@ -32,7 +32,7 @@
               outline
               no-caps
               icon="add"
-              :label="`New ${entityLabel.toLowerCase()}`"
+              :label="newLabel"
               color="primary"
               @click="emit('create')"
             />
@@ -53,11 +53,11 @@
           </div>
           <template v-else>
             <div v-if="!visibleTree.length" class="text-grey-7 q-pa-sm">
-              Nothing matches “{{ query }}”.
+              Nada coincide con «{{ query }}».
             </div>
             <template v-else>
               <div v-if="query" class="text-caption text-grey-7 q-mb-sm">
-                {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
+                {{ matchCount }} {{ matchCount === 1 ? 'coincidencia' : 'coincidencias' }}
               </div>
 
               <q-tree
@@ -87,7 +87,7 @@
                         >{{ prop.node.label }}</span
                       >
                       <span v-if="prop.node.match" class="ellipsis imc-tree__match">
-                        {{ prettyLabel(prop.node.match.label) }} ·
+                        {{ labelFor(prop.node.match.code) }} ·
                         {{ shortValue(prop.node.match.value) }}
                       </span>
                     </div>
@@ -96,7 +96,7 @@
                       name="attach_file"
                       size="16px"
                       class="imc-attach"
-                      aria-label="Has attachments"
+                      aria-label="Tiene adjuntos"
                     />
                     <q-space />
                     <span
@@ -118,8 +118,8 @@
         <div ref="detailPane" class="imc-pane imc-pane--detail" :style="paneStyle">
           <div v-if="selected < 0" class="imc-empty">
             <q-icon name="touch_app" />
-            <div class="text-subtitle1 q-mt-sm">Select an item to edit it</div>
-            <div class="text-caption q-mt-xs">or start a new one</div>
+            <div class="text-subtitle1 q-mt-sm">Selecciona un registro de la lista</div>
+            <div class="text-caption q-mt-xs">o crea uno nuevo</div>
           </div>
           <q-tab-panels
             v-model="selected"
@@ -131,15 +131,11 @@
               <div class="row items-center justify-between q-mb-md">
                 <div class="column">
                   <div class="text-h6">
-                    {{
-                      panel.id > 0
-                        ? entryLabel || `${entityLabel} #${panel.id}`
-                        : `New ${entityLabel.toLowerCase()}`
-                    }}
+                    {{ panel.id > 0 ? entryLabel || `${entityLabel} #${panel.id}` : newLabel }}
                   </div>
                   <div v-if="panel.id > 0" class="text-caption">
                     <span class="text-grey-7">{{ entityLabel }} #{{ panel.id }}</span>
-                    <span v-if="dirty" class="text-orange-8 q-ml-sm">· unsaved changes</span>
+                    <span v-if="dirty" class="text-orange-8 q-ml-sm">· cambios sin guardar</span>
                   </div>
                 </div>
                 <q-btn
@@ -148,7 +144,7 @@
                   round
                   dense
                   icon="more_vert"
-                  aria-label="More actions"
+                  aria-label="Más acciones"
                 >
                   <q-menu anchor="bottom right" self="top right" auto-close>
                     <q-list dense style="min-width: 200px">
@@ -156,14 +152,14 @@
                         <q-item-section avatar>
                           <q-icon name="content_copy" />
                         </q-item-section>
-                        <q-item-section>Duplicate {{ entityLabel.toLowerCase() }}</q-item-section>
+                        <q-item-section>Duplicar {{ entityLabel.toLowerCase() }}</q-item-section>
                       </q-item>
                       <q-separator />
                       <q-item clickable v-close-popup @click="emit('delete')">
                         <q-item-section avatar>
                           <q-icon name="delete_outline" color="negative" />
                         </q-item-section>
-                        <q-item-section>Delete {{ entityLabel.toLowerCase() }}</q-item-section>
+                        <q-item-section>Eliminar {{ entityLabel.toLowerCase() }}</q-item-section>
                       </q-item>
                     </q-list>
                   </q-menu>
@@ -172,8 +168,8 @@
               <q-form @submit="emit('submit')" @reset="emit('reset')" class="q-gutter-md">
                 <slot />
                 <div v-if="!readonly" class="row q-gutter-sm q-mt-md">
-                  <q-btn label="Save" type="submit" color="primary" :loading="saving" />
-                  <q-btn label="Reset" type="reset" color="grey-9" flat />
+                  <q-btn label="Guardar" type="submit" color="primary" :loading="saving" />
+                  <q-btn label="Descartar" type="reset" color="grey-9" flat />
                 </div>
               </q-form>
             </q-tab-panel>
@@ -190,8 +186,8 @@
           dense
           outlined
           clearable
-          placeholder="Search"
-          :aria-label="`Search ${entityLabel.toLowerCase()}s`"
+          placeholder="Buscar"
+          :aria-label="`Buscar ${entityLabel.toLowerCase()}s`"
         >
           <template v-slot:prepend>
             <q-icon name="search" />
@@ -207,16 +203,16 @@
           unelevated
           no-caps
           color="primary"
-          label="Create the first one"
+          label="Crear el primer registro"
           icon="add"
           @click="emit('create')"
         />
       </div>
       <template v-else>
-        <div v-if="!visibleTree.length" class="text-grey-7">Nothing matches “{{ query }}”.</div>
+        <div v-if="!visibleTree.length" class="text-grey-7">Nada coincide con «{{ query }}».</div>
         <template v-else>
           <div v-if="query" class="text-caption text-grey-7 q-mb-sm">
-            {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
+            {{ matchCount }} {{ matchCount === 1 ? 'coincidencia' : 'coincidencias' }}
           </div>
 
           <q-tree
@@ -240,7 +236,7 @@
                     >{{ prop.node.label }}</span
                   >
                   <span v-if="prop.node.match" class="ellipsis imc-tree__match">
-                    {{ prettyLabel(prop.node.match.label) }} ·
+                    {{ labelFor(prop.node.match.code) }} ·
                     {{ shortValue(prop.node.match.value) }}
                   </span>
                 </div>
@@ -249,7 +245,7 @@
                   name="attach_file"
                   size="16px"
                   class="imc-attach"
-                  aria-label="Has attachments"
+                  aria-label="Tiene adjuntos"
                 />
                 <q-space />
                 <span
@@ -285,10 +281,10 @@
             unelevated
             no-caps
             icon="add"
-            :label="`New ${entityLabel.toLowerCase()}`"
+            :label="newLabel"
             color="primary"
             class="imc-fab"
-            aria-label="New item"
+            :aria-label="newLabel"
             @click="emit('create')"
           />
         </div>
@@ -305,11 +301,7 @@
       <q-card class="dialog-card column no-wrap">
         <q-toolbar class="dialog-header q-px-md">
           <q-toolbar-title class="text-subtitle1 text-weight-medium ellipsis">
-            {{
-              entryId > 0
-                ? entryLabel || `${entityLabel} #${entryId}`
-                : `New ${entityLabel.toLowerCase()}`
-            }}
+            {{ entryId > 0 ? entryLabel || `${entityLabel} #${entryId}` : newLabel }}
           </q-toolbar-title>
           <q-btn
             v-if="entryId > 0 && !readonly"
@@ -317,7 +309,7 @@
             flat
             round
             dense
-            aria-label="More actions"
+            aria-label="Más acciones"
             class="q-mr-xs"
           >
             <q-menu anchor="bottom right" self="top right" auto-close>
@@ -326,19 +318,19 @@
                   <q-item-section avatar>
                     <q-icon name="content_copy" />
                   </q-item-section>
-                  <q-item-section>Duplicate {{ entityLabel.toLowerCase() }}</q-item-section>
+                  <q-item-section>Duplicar {{ entityLabel.toLowerCase() }}</q-item-section>
                 </q-item>
                 <q-separator />
                 <q-item clickable v-close-popup @click="emit('delete')">
                   <q-item-section avatar>
                     <q-icon name="delete_outline" color="negative" />
                   </q-item-section>
-                  <q-item-section>Delete {{ entityLabel.toLowerCase() }}</q-item-section>
+                  <q-item-section>Eliminar {{ entityLabel.toLowerCase() }}</q-item-section>
                 </q-item>
               </q-list>
             </q-menu>
           </q-btn>
-          <q-btn icon="close" flat round dense aria-label="Close" @click="requestClose" />
+          <q-btn icon="close" flat round dense aria-label="Cerrar" @click="requestClose" />
         </q-toolbar>
 
         <q-form @submit="emit('submit')" @reset="emit('reset')" class="col column no-wrap">
@@ -347,13 +339,13 @@
           </q-card-section>
 
           <div class="dialog-actions row items-center q-px-md q-py-sm">
-            <span v-if="dirty" class="text-caption imc-unsaved">Unsaved changes</span>
+            <span v-if="dirty" class="text-caption imc-unsaved">Cambios sin guardar</span>
             <q-space />
             <div class="row items-center q-gutter-x-sm">
-              <q-btn v-if="!readonly" label="Reset" color="grey-9" flat type="reset" />
+              <q-btn v-if="!readonly" label="Descartar" color="grey-9" flat type="reset" />
               <q-btn
                 v-if="!readonly"
-                label="Save"
+                label="Guardar"
                 color="primary"
                 type="submit"
                 :loading="saving"
@@ -404,12 +396,30 @@ const props = withDefaults(
     readonly?: boolean;
     /**
      * A second create action beside the first, for a record the page can create in one step: the
-     * inventory opens "New set" here, because a set is created with its Type attribute already set.
-     * Left empty (the configuration page), only the one create button exists.
+     * inventory opens "Nuevo conjunto" here, because a set is created with its Type attribute
+     * already set. Left empty (the configuration page), only the one create button exists.
      */
     secondaryActionLabel?: string;
+    /**
+     * Turns an attribute code into the text the list shows under a matched row («Brand» → «Marca»).
+     * The page with a catalogue passes its own; without one the code is read as words.
+     */
+    attributeLabel?: ((code: string) => string) | undefined;
+    /**
+     * The primary create action's text. The page words it because the noun carries its own gender
+     * ("Nuevo ítem" / "Nueva constante") and a component cannot guess it from the label.
+     */
+    createLabel?: string;
   }>(),
-  { entityLabel: 'Item', entryLabel: '', dirty: false, readonly: false, secondaryActionLabel: '' },
+  {
+    entityLabel: 'Ítem',
+    entryLabel: '',
+    dirty: false,
+    readonly: false,
+    secondaryActionLabel: '',
+    createLabel: '',
+    attributeLabel: undefined,
+  },
 );
 
 const emit = defineEmits<{
@@ -473,6 +483,9 @@ const dialog = defineModel<boolean>('dialog', { default: false });
 
 const query = ref('');
 
+/** The create button's text: the page's own wording, or the noun with the only gender that fits. */
+const newLabel = computed(() => props.createLabel || `Nuevo ${props.entityLabel.toLowerCase()}`);
+
 function collectIds(nodes: TreeEntry[], acc: number[] = []): number[] {
   for (const node of nodes) {
     if ((node.children ?? []).length > 0) {
@@ -483,9 +496,17 @@ function collectIds(nodes: TreeEntry[], acc: number[] = []): number[] {
   return acc;
 }
 
+/**
+ * The label of an attribute code. The inventory passes the catalogue's, so the line under a matched
+ * row reads «Marca · Bosch» and typing «marca» finds it; Configuration has no attributes to name.
+ */
+function labelFor(code: string): string {
+  return props.attributeLabel ? props.attributeLabel(code) : prettyLabel(code);
+}
+
 const visibleTree = computed(() => {
   const needle = query.value.trim().toLowerCase();
-  return needle ? filterTree(props.tree, needle) : props.tree;
+  return needle ? filterTree(props.tree, needle, labelFor) : props.tree;
 });
 
 const matchCount = computed(() => countMatches(visibleTree.value));
@@ -500,7 +521,7 @@ watch(visibleTree, (nodes) => {
 async function onSelect(id: number | null) {
   if (typeof id !== 'number') return;
   if (id !== props.entryId && props.dirty) {
-    const discard = await feedback.confirmDiscard('This record has edits that are not saved.');
+    const discard = await feedback.confirmDiscard('Este registro tiene cambios sin guardar.');
     if (!discard) {
       selected.value = props.entryId; // put the highlight back on the record that still holds them
       return;
@@ -514,7 +535,7 @@ async function onSelect(id: number | null) {
 /** The sheet is the only exit on a phone, so it asks before dropping edits. */
 async function requestClose() {
   if (props.dirty) {
-    const discard = await feedback.confirmDiscard('This record has edits that are not saved.');
+    const discard = await feedback.confirmDiscard('Este registro tiene cambios sin guardar.');
     if (!discard) return;
     emit('reset');
   }
